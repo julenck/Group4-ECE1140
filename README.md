@@ -1,3 +1,6 @@
 Group 4
 Wunmi Salami
-Coca Julen
+Julen Coca
+James Struyk
+Mari Inglese
+Ledi Zhao
