@@ -29,7 +29,7 @@ class SWTrackControllerUI(tk.Tk):
             self.grid_columnconfigure(i, weight=1, uniform="col")
         for i in range(2):
             self.grid_rowconfigure(i, weight=1, uniform="row")
-            
+
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=1)
@@ -48,11 +48,31 @@ class SWTrackControllerUI(tk.Tk):
         toggleMaintenance.pack(padx=10, pady=10)
 
         #switch selection dropdown
-        ttk.Label(MaintenanceFrame, text="Select Switch").pack(padx=10, pady=10)
+        ttk.Label(MaintenanceFrame, text="Select Switch").pack(padx=10, pady=(10,0))
         self.selectedSwitch = tk.StringVar()
         switchOptions = ["SW1", "SW2", "SW3", "SW4", "SW5"]
         self.SwitchMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectedSwitch, values=switchOptions, state="disabled")
-        self.SwitchMenu.pack(padx=10, pady=10)
+        self.SwitchMenu.pack(padx=0, pady=0)
+
+        #Switch state dictionary
+        self.switchStatesDictionary = {switch: "Straight" for switch in switchOptions}#initialize all switches to "Straight"
+
+
+        #display current switch state
+        self.switchStateLabel = ttk.Label(MaintenanceFrame, text="Selected Switch State: N/A")
+        self.switchStateLabel.pack(padx=10, pady=10)
+        self.SwitchMenu.bind("<<ComboboxSelected>>", self.Update_Switch_State)
+
+        #select State
+        self.selectState = tk.StringVar()
+        self.selectStateMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectState, values=["Straight", "Diverging"], state="disabled")
+        self.selectStateMenu.pack(padx=0, pady=(40,0))
+
+        #apply Change
+        self.applyChangeButton = ttk.Button(MaintenanceFrame, text="Apply Change", command=self.Apply_Switch_Change, state="disabled")
+        self.applyChangeButton.pack(padx=10, pady=10)
+
+        
 
     #Input Frame
         InputFrame = ttk.LabelFrame(self, text="Input Data:")
@@ -77,17 +97,35 @@ class SWTrackControllerUI(tk.Tk):
         
 
 
-
+    #only let everything in maintenance frame be editable if maintenance mode is on
     def Toggle_Maintenance_Mode(self):
 
-        #only let everything in maintenance frame be editable if maintenance mode is on
-        widgets = [self.SwitchMenu]
+       
+        widgets = [self.SwitchMenu, self.selectStateMenu, self.applyChangeButton]
         if self.maintenanceMode.get():
             s="readonly"
         else:
             s="disabled"
         for widget in widgets:
             widget.config(state=s)
+
+    #apply switch change to dictionary and update label
+    def Apply_Switch_Change(self):
+        switch = self.selectedSwitch.get()
+        newState = self.selectState.get()
+        if switch and newState:
+            self.switchStatesDictionary[switch] = newState
+            self.switchStateLabel.config(text="Selected Switch State: " + newState)
+
+
+    #update switch state label when a new switch is selected
+    def Update_Switch_State(self,event):
+        switch = self.selectedSwitch.get()
+        if switch in self.switchStatesDictionary:
+            currentState = self.switchStatesDictionary[switch]
+            self.switchStateLabel.config(text="Selected Switch State: " +currentState)
+        else:
+            self.switchStateLabel.config(text="Selected Switch State: N/A")
 
 
 
