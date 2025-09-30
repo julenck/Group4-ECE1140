@@ -1,4 +1,5 @@
 {
+  "suggested_speed": 40,
   "switches": [
     "SW1",
     "switch2",
@@ -9,7 +10,4 @@
   "switch_states": [
     "Straight"
   ],
-  "suggested_speed": 39,
-  "suggested_authority": 300,
-  "passengers_disembarking": 15
 }
