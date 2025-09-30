@@ -13,7 +13,7 @@ import os
 
 
 #variables for window size
-WindowWidth = 1000
+WindowWidth = 1200
 WindowHeight = 700
 
 class SWTrackControllerUI(tk.Tk):
@@ -24,7 +24,8 @@ class SWTrackControllerUI(tk.Tk):
 
         #set window title and size
         self.title("Track Controller Software Module")
-        self.geometry(f"{WindowWidth}x{WindowHeight}")
+        self.geometry(str(WindowWidth)+"x"+str(WindowHeight))
+       # self.geometry(f"{WindowWidth}x{WindowHeight}")
 
         #initialize loaded inputs
         switchOptions = []#default empty list of switches
@@ -45,7 +46,7 @@ class SWTrackControllerUI(tk.Tk):
         toggleMaintenance.pack(padx=WindowHeight/70, pady=WindowWidth/120)
 
         #switch selection dropdown
-        ttk.Label(MaintenanceFrame, text="Select Switch").pack(padx=WindowHeight/70, pady=(WindowWidth/20,0))
+        ttk.Label(MaintenanceFrame, text="Select Switch").pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
         self.selectedSwitch = tk.StringVar()
         #switchOptions = self.WaysideInputs.get("switches",[])
         self.SwitchMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectedSwitch, values=switchOptions, state="disabled")
@@ -60,10 +61,13 @@ class SWTrackControllerUI(tk.Tk):
         self.switchStateLabel.pack(padx=WindowHeight/70, pady=(0,WindowWidth/120))
         self.SwitchMenu.bind("<<ComboboxSelected>>", self.Update_Switch_State)
 
-        #select State
+        #select State label
+        self.selectStateLabel = ttk.Label(MaintenanceFrame, text="Select Desired State")
+        self.selectStateLabel.pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
+        #select State combobox
         self.selectState = tk.StringVar()
         self.selectStateMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectState, values=["Straight", "Diverging"], state="disabled")
-        self.selectStateMenu.pack(padx=0, pady=(WindowWidth/20,0))
+        self.selectStateMenu.pack(padx=0, pady=(WindowWidth/120,0))
 
         #apply Change
         self.applyChangeButton = ttk.Button(MaintenanceFrame, text="Apply Change", command=self.Apply_Switch_Change, state="disabled")
@@ -73,6 +77,18 @@ class SWTrackControllerUI(tk.Tk):
         #------Start Input Frame------#
         InputFrame = ttk.LabelFrame(self, text="Input Data:")
         InputFrame.grid(row=0, column=1, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+
+        #label and display for suggested speed
+        self.suggestedSpeedLabel = ttk.Label(InputFrame, text="Suggested Speed: N/A")
+        self.suggestedSpeedLabel.pack(padx=WindowHeight/70, pady=WindowWidth/120)
+
+        #label and display for authority
+        self.suggestedAuthorityLabel = ttk.Label(InputFrame, text="Suggested Authority: N/A")
+        self.suggestedAuthorityLabel.pack(padx=WindowHeight/70, pady=WindowWidth/120)
+
+        #label and display for passengers disembarking
+        self.passengersDisembarkingLabel = ttk.Label(InputFrame, text="Passengers Disembarking: N/A")
+        self.passengersDisembarkingLabel.pack(padx=WindowHeight/70, pady=WindowWidth/120)
         #------End Input Frame------#
 
         #------Start Output Frame------#
@@ -95,7 +111,7 @@ class SWTrackControllerUI(tk.Tk):
         StatusFrame.grid(row=1, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
         #---End Status Frame---#
 
-        self.WaysideInputs = self.Load_inputs()#load wayside inputs from JSON file
+        self.WaysideInputs = self.Load_Inputs_Outputs()#load wayside inputs from JSON file
 
 
 
@@ -131,8 +147,8 @@ class SWTrackControllerUI(tk.Tk):
             self.switchStateLabel.config(text="Selected Switch State: N/A") 
 #-------------------------------------#
 
-#----Input Loading Function----#
-    def Load_inputs(self):
+#----Input/Outut Loading Function----#
+    def Load_Inputs_Outputs(self):
 
         #load wayside inputs from JSON file
         if os.path.exists("WaysideInputs_testUI.json"):
@@ -144,16 +160,31 @@ class SWTrackControllerUI(tk.Tk):
         #get switch options
         switchOptions = waysideInputs.get("switches",[])
         self.SwitchMenu.config(values=switchOptions)
-        #update switch states dictionary to include any new switches, defaulting to "Straight"
-        for switch in switchOptions:
-            if switch not in self.switchStatesDictionary:
-                self.switchStatesDictionary[switch] = "Straight"
+        #get switch states
+        switchStates = waysideInputs.get("switch_states",[])
+        #update switch states dictionary with loaded states
+        for index in range(len(switchOptions)):
+            switch = switchOptions[index]
+            if index < len(switchStates):
+                state = switchStates[index]
+            else:
+                state = "Straight"
+            self.switchStatesDictionary[switch] = state
+
+        #Get suggested speed
+        suggestedSpeed = waysideInputs.get("suggested_speed",0)
+        self.suggestedSpeedLabel.config(text="Suggested Speed: " + str(suggestedSpeed) + " mph")
+
+        #Get suggested authority
+        suggestedAuthority = waysideInputs.get("suggested_authority",0)
+        self.suggestedAuthorityLabel.config(text="Suggested Authority: " + str(suggestedAuthority) + " ft")
+
+        #Get passengers disembarking
+        passengersDisembarking = waysideInputs.get("passengers_disembarking",0)
+        self.passengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(passengersDisembarking))
 
 
-
-                
-
-        self.after(500, self.Load_inputs)#reload inputs every 500ms
+        self.after(500, self.Load_Inputs_Outputs)#reload inputs every 500ms
 #-------------------------------------#
 
 
