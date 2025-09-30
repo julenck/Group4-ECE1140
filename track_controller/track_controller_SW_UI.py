@@ -13,7 +13,7 @@ import os
 
 
 #variables for window size
-WindowWidth = 1000
+WindowWidth = 1200
 WindowHeight = 700
 
 class SWTrackControllerUI(tk.Tk):
@@ -45,7 +45,7 @@ class SWTrackControllerUI(tk.Tk):
         toggleMaintenance.pack(padx=WindowHeight/70, pady=WindowWidth/120)
 
         #switch selection dropdown
-        ttk.Label(MaintenanceFrame, text="Select Switch").pack(padx=WindowHeight/70, pady=(WindowWidth/20,0))
+        ttk.Label(MaintenanceFrame, text="Select Switch").pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
         self.selectedSwitch = tk.StringVar()
         #switchOptions = self.WaysideInputs.get("switches",[])
         self.SwitchMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectedSwitch, values=switchOptions, state="disabled")
@@ -60,10 +60,13 @@ class SWTrackControllerUI(tk.Tk):
         self.switchStateLabel.pack(padx=WindowHeight/70, pady=(0,WindowWidth/120))
         self.SwitchMenu.bind("<<ComboboxSelected>>", self.Update_Switch_State)
 
-        #select State
+        #select State label
+        self.selectStateLabel = ttk.Label(MaintenanceFrame, text="Select Desired State")
+        self.selectStateLabel.pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
+        #select State combobox
         self.selectState = tk.StringVar()
         self.selectStateMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectState, values=["Straight", "Diverging"], state="disabled")
-        self.selectStateMenu.pack(padx=0, pady=(WindowWidth/20,0))
+        self.selectStateMenu.pack(padx=0, pady=(WindowWidth/120,0))
 
         #apply Change
         self.applyChangeButton = ttk.Button(MaintenanceFrame, text="Apply Change", command=self.Apply_Switch_Change, state="disabled")
@@ -151,7 +154,7 @@ class SWTrackControllerUI(tk.Tk):
 
 
 
-                
+
 
         self.after(500, self.Load_inputs)#reload inputs every 500ms
 #-------------------------------------#
