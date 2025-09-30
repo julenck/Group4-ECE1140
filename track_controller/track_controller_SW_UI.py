@@ -94,6 +94,19 @@ class SWTrackControllerUI(tk.Tk):
         #------Start Output Frame------#
         OutputFrame = ttk.LabelFrame(self, text="Output Data:")
         OutputFrame.grid(row=1, column=1, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+
+        #label and display for commanded speed
+        self.commandedSpeedLabel = ttk.Label(OutputFrame, text="Commanded Speed: N/A")
+        self.commandedSpeedLabel.pack(padx=WindowHeight/70, pady=WindowWidth/120)
+
+        #label and display for commanded authority
+        self.commandedAuthorityLabel = ttk.Label(OutputFrame, text="Commanded Authority: N/A")
+        self.commandedAuthorityLabel.pack(padx=WindowHeight/70, pady=WindowWidth/120)
+
+        #label and display for passengers disembarking
+        self.commandedPassengersDisembarkingLabel = ttk.Label(OutputFrame, text="Passengers Disembarking: N/A")
+        self.commandedPassengersDisembarkingLabel.pack(padx=WindowHeight/70, pady=WindowWidth/120)
+
         #------End Output Frame------#
 
         #------ Start PLC Upload Frame------#
@@ -195,6 +208,11 @@ class SWTrackControllerUI(tk.Tk):
                     "passengers_disembarking": passengersDisembarking#forward information
                 }
                 json.dump(waysideOutputs, file, indent=4)
+
+            #update output labels
+            self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
+            self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
+            self.commandedPassengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(waysideOutputs["passengers_disembarking"]))
             
                 
 
