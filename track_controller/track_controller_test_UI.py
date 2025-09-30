@@ -2,11 +2,13 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import json
 
+from track_controller_SW_UI import SWTrackControllerUI
+
 WindowWidth = 900
 WindowHeight = 600
 
 
-class TestUI(ttk.Frame):
+class TestUI(tk.Frame):
     def __init__(self, master):
         super().__init__(master)
         self.master = master
@@ -129,10 +131,13 @@ class TestUI(ttk.Frame):
             "passengers_disembarking": int(passengers) if passengers.isdigit() else 0,
         }
 
-        with open("WaysideInputs_testUI.json", "w") as f:
-            json.dump(data, f, indent=2)
-
-        messagebox.showinfo("Simulation", "Simulation results saved to WaysideInputs_testUI.json")
+        try:
+            with open("WaysideInputs_testUI.json", "w") as f:
+                json.dump(data, f, indent=2)
+            print(f"Saved simulation data: {data}")  # Debug output
+            messagebox.showinfo("Simulation", "Simulation results saved to WaysideInputs_testUI.json")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save data: {e}")
 
     def stop_simulation(self):
         for var in self.output_vars.values():
@@ -140,8 +145,8 @@ class TestUI(ttk.Frame):
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Wayside Controller Test UI")
-    root.geometry(f"{WindowWidth}x{WindowHeight}")
-    TestUI(root)
-    root.mainloop()
+   root = tk.Tk()
+   root.title("Wayside Controller Test UI")
+   root.geometry(f"{WindowWidth}x{WindowHeight}")
+   TestUI(root)
+   root.mainloop()
