@@ -10,6 +10,8 @@ from tkinter import filedialog
 import json
 import os
 
+import track_controller.track_controller_test_UI as testUI
+
 
 
 #variables for window size
@@ -18,9 +20,9 @@ WindowHeight = 700
 
 class SWTrackControllerUI(tk.Tk):
 
-    def __init__(self):
+    def __init__(self,testUI):
 
-        super().__init__()#initialize the tk.Tk class
+        super().__init__(testUI)#initialize the tk.Tk class
 
         #set window title and size
         self.title("Track Controller Software Module")
@@ -224,8 +226,7 @@ class SWTrackControllerUI(tk.Tk):
 
 
 
-if __name__ == "__main__":
-    SWTrackControllerUI().mainloop()
+
 
 
 
