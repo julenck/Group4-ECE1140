@@ -10,19 +10,19 @@ from tkinter import filedialog
 import json
 import os
 
-import track_controller.track_controller_test_UI as testUI
-
-
-
 #variables for window size
 WindowWidth = 1200
 WindowHeight = 700
 
 class SWTrackControllerUI(tk.Tk):
 
-    def __init__(self,testUI):
-
-        super().__init__(testUI)#initialize the tk.Tk class
+    def __init__(self, master=None):
+        if master is None:
+            super().__init__()#initialize the tk.Tk class
+        else:
+            # If a master is provided, this is being used as a toplevel window
+            super().__init__()
+            self.master = master
 
         #set window title and size
         self.title("Track Controller Software Module")
@@ -126,6 +126,9 @@ class SWTrackControllerUI(tk.Tk):
         StatusFrame.grid(row=1, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
         #---End Status Frame---#
 
+        # Initialize file modification time tracking
+        self.last_mod_time = 0
+        
         self.WaysideInputs = self.Load_Inputs_Outputs()#load wayside inputs from JSON file
 
 
@@ -167,8 +170,22 @@ class SWTrackControllerUI(tk.Tk):
 
         #load wayside inputs from JSON file
         if os.path.exists("WaysideInputs_testUI.json"):
-            with open("WaysideInputs_testUI.json", "r") as file:
-                waysideInputs = json.load(file)
+            # Check if file has been modified since last read
+            current_mod_time = os.path.getmtime("WaysideInputs_testUI.json")
+            if current_mod_time <= self.last_mod_time:
+                # File hasn't changed, just schedule next check
+                self.after(500, self.Load_Inputs_Outputs)
+                return self.WaysideInputs if hasattr(self, 'WaysideInputs') else {}
+            
+            self.last_mod_time = current_mod_time
+            
+            try:
+                with open("WaysideInputs_testUI.json", "r") as file:
+                    waysideInputs = json.load(file)
+                print(f"Loaded new inputs: {waysideInputs}")  # Debug output
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                print(f"Error reading input file: {e}")
+                waysideInputs = {}
         else:
             waysideInputs = {}
 
@@ -200,26 +217,31 @@ class SWTrackControllerUI(tk.Tk):
 
 
         #begin generating outputs
-        if os.path.exists("WaysideOutputs_testUI.json"):
+        waysideOutputs = {
+            "switches": list(self.switchStatesDictionary.keys()),
+            "switch_states": list(self.switchStatesDictionary.values()),
+            "commanded_speed": max(0, suggestedSpeed - 5),#simple logic to reduce speed by 5 mph
+            "commanded_authority": max(0, suggestedAuthority - 50),#simple logic to reduce authority by 50 ft
+            "passengers_disembarking": passengersDisembarking#forward information
+        }
+        
+        # Always write outputs when inputs change
+        try:
             with open("WaysideOutputs_testUI.json", "w") as file:
-                waysideOutputs = {
-                    "switches": list(self.switchStatesDictionary.keys()),
-                    "switch_states": list(self.switchStatesDictionary.values()),
-                    "commanded_speed": max(0, suggestedSpeed - 5),#simple logic to reduce speed by 5 mph
-                    "commanded_authority": max(0, suggestedAuthority - 50),#simple logic to reduce authority by 50 ft
-                    "passengers_disembarking": passengersDisembarking#forward information
-                }
                 json.dump(waysideOutputs, file, indent=4)
+        except Exception as e:
+            print(f"Error writing output file: {e}")
 
-            #update output labels
-            self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
-            self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
-            self.commandedPassengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(waysideOutputs["passengers_disembarking"]))
+        #update output labels
+        self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
+        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
+        self.commandedPassengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(waysideOutputs["passengers_disembarking"]))
             
-                
-
+        # Store the loaded inputs for next comparison
+        self.WaysideInputs = waysideInputs
 
         self.after(500, self.Load_Inputs_Outputs)#reload inputs every 500ms
+        return waysideInputs
 #-------------------------------------#
 
 

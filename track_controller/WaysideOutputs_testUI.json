@@ -7,13 +7,13 @@
         "switch6"
     ],
     "switch_states": [
-        "Straight",
         "Diverging",
         "Straight",
-        "Diverging",
+        "Straight",
+        "Straight",
         "Straight"
     ],
-    "commanded_speed": 35,
-    "commanded_authority": 250,
-    "passengers_disembarking": 30
+    "commanded_speed": 18,
+    "commanded_authority": 650,
+    "passengers_disembarking": 15
 }

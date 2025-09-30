@@ -7,9 +7,9 @@
     "switch6"
   ],
   "switch_states": [
-    "Straight"
+    "Diverging"
   ],
-  "suggested_speed": 22,
-  "suggested_authority": 300,
+  "suggested_speed": 23,
+  "suggested_authority": 700,
   "passengers_disembarking": 15
 }
