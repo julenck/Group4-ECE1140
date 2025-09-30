@@ -1,6 +1,3 @@
-# test_UI.py
-# Wayside Controller Test UI (JSON Save Only)
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import json
@@ -134,6 +131,8 @@ class TestUI(ttk.Frame):
 
         with open("WaysideInputs_testUI.json", "w") as f:
             json.dump(data, f, indent=2)
+
+        messagebox.showinfo("Simulation", "Simulation results saved to WaysideInputs_testUI.json")
 
     def stop_simulation(self):
         for var in self.output_vars.values():
