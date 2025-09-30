@@ -132,7 +132,7 @@ class TestUI(ttk.Frame):
             "passengers_disembarking": int(passengers) if passengers.isdigit() else 0,
         }
 
-        with open("WaysideInputs_test_UI.json", "w") as f:
+        with open("WaysideInputs_testUI.json", "w") as f:
             json.dump(data, f, indent=2)
 
     def stop_simulation(self):
