@@ -37,19 +37,19 @@ class SWTrackControllerUI(tk.Tk):
             self.grid_rowconfigure(i, weight=1, uniform="row")
 
         #------Start Maintenance Frame------#
-        MaintenanceFrame = ttk.LabelFrame(self, text="Maintenance Mode:")
-        MaintenanceFrame.grid(row=0, column=0, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+        maintenance_frame = ttk.LabelFrame(self, text="Maintenance Mode:")
+        maintenance_frame.grid(row=0, column=0, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
 
         #toggle maintenance mode button
         self.maintenanceMode = tk.BooleanVar(value=False)
-        toggleMaintenance = ttk.Checkbutton(MaintenanceFrame, text="Toggle Maintenance", variable = self.maintenanceMode,command=self.Toggle_Maintenance_Mode)
+        toggleMaintenance = ttk.Checkbutton(maintenance_frame, text="Toggle Maintenance", variable = self.maintenanceMode,command=self.Toggle_Maintenance_Mode)
         toggleMaintenance.pack(padx=WindowHeight/70, pady=WindowWidth/120)
 
         #switch selection dropdown
-        ttk.Label(MaintenanceFrame, text="Select Switch").pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
+        ttk.Label(maintenance_frame, text="Select Switch").pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
         self.selectedSwitch = tk.StringVar()
         #switchOptions = self.WaysideInputs.get("switches",[])
-        self.SwitchMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectedSwitch, values=switchOptions, state="disabled")
+        self.SwitchMenu = ttk.Combobox(maintenance_frame, textvariable=self.selectedSwitch, values=switchOptions, state="disabled")
         self.SwitchMenu.pack(padx=0, pady=0)
 
         #Switch state dictionary
@@ -57,20 +57,20 @@ class SWTrackControllerUI(tk.Tk):
 
 
         #display current switch state
-        self.switchStateLabel = ttk.Label(MaintenanceFrame, text="Selected Switch State: N/A")
+        self.switchStateLabel = ttk.Label(maintenance_frame, text="Selected Switch State: N/A")
         self.switchStateLabel.pack(padx=WindowHeight/70, pady=(0,WindowWidth/120))
         self.SwitchMenu.bind("<<ComboboxSelected>>", self.Update_Switch_State)
 
         #select State label
-        self.selectStateLabel = ttk.Label(MaintenanceFrame, text="Select Desired State")
+        self.selectStateLabel = ttk.Label(maintenance_frame, text="Select Desired State")
         self.selectStateLabel.pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
         #select State combobox
         self.selectState = tk.StringVar()
-        self.selectStateMenu = ttk.Combobox(MaintenanceFrame, textvariable=self.selectState, values=["Straight", "Diverging"], state="disabled")
+        self.selectStateMenu = ttk.Combobox(maintenance_frame, textvariable=self.selectState, values=["Straight", "Diverging"], state="disabled")
         self.selectStateMenu.pack(padx=0, pady=(WindowWidth/120,0))
 
         #apply Change
-        self.applyChangeButton = ttk.Button(MaintenanceFrame, text="Apply Change", command=self.Apply_Switch_Change, state="disabled")
+        self.applyChangeButton = ttk.Button(maintenance_frame, text="Apply Change", command=self.Apply_Switch_Change, state="disabled")
         self.applyChangeButton.pack(padx=WindowHeight/70, pady=WindowWidth/120)
         #------End Maintenance Frame------#
 
@@ -182,6 +182,21 @@ class SWTrackControllerUI(tk.Tk):
         #Get passengers disembarking
         passengersDisembarking = waysideInputs.get("passengers_disembarking",0)
         self.passengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(passengersDisembarking))
+
+
+        #begin generating outputs
+        if os.path.exists("WaysideOutputs_testUI.json"):
+            with open("WaysideOutputs_testUI.json", "w") as file:
+                waysideOutputs = {
+                    "switches": list(self.switchStatesDictionary.keys()),
+                    "switch_states": list(self.switchStatesDictionary.values()),
+                    "commanded_speed": max(0, suggestedSpeed - 5),#simple logic to reduce speed by 5 mph
+                    "commanded_authority": max(0, suggestedAuthority - 50),#simple logic to reduce authority by 50 ft
+                    "passengers_disembarking": passengersDisembarking#forward information
+                }
+                json.dump(waysideOutputs, file, indent=4)
+            
+                
 
 
         self.after(500, self.Load_Inputs_Outputs)#reload inputs every 500ms
