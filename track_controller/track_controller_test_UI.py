@@ -1,124 +1,111 @@
+# Wayside Controller Test UI
+# Reformatted to match style of SWTrackControllerUI
+
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import ttk, filedialog
 
-# --- Functions ---
+WindowWidth = 1200
+WindowHeight = 700
 
-def simulate():
+class WaysideControllerUI(tk.Tk):
 
-    # Read force input values
-    suggested_speed = speed_entry.get()
-    authority = authority_entry.get()
-    track_closures = track_closures_entry.get()
-    route = route_entry.get()
-    failure_alerts = failure_entry.get()
-    train_positions = train_positions_entry.get()
-    passengers = passengers_entry.get()
-    switch_positions = switch_entry.get()
+    def __init__(self):
+        super().__init__()
 
-    # Simple output logic (can be expanded later)
-    beacon_value.set("128B")
-    switch_output.set(switch_positions)
-    commanded_speed.set(f"{int(suggested_speed.replace('mph','')) - 2}mph")
-    authority_output.set(authority)
-    lights_output.set("Green")                                  #Light logic needs to be implemented    
-    gates_output.set("Closed")                                  #Gate logic needs to be implemented
-    state_of_track.set("2 Trains Active")                       #State of track logic needs to be implemented
-    train_positions_output.set(train_positions)
-    passengers_output.set(passengers)
+        # Window setup
+        self.title("Wayside Controller Test UI")
+        self.geometry(f"{WindowWidth}x{WindowHeight}")
 
-def stop_simulation():
-    # Reset outputs
-    beacon_value.set("")
-    switch_output.set("")
-    commanded_speed.set("")
-    authority_output.set("")
-    lights_output.set("")
-    gates_output.set("")
-    state_of_track.set("")
-    train_positions_output.set("")
-    passengers_output.set("")
+        # Grid layout
+        for i in range(2):
+            self.grid_columnconfigure(i, weight=1, uniform="col")
+        self.grid_rowconfigure(0, weight=1)
 
-def upload_schedule():
-    filedialog.askopenfilename(title="Select Schedule File")        #Do we get this from CTC?
+        # ---- Left Frame: Force Input ----
+        inputFrame = ttk.LabelFrame(self, text="Force Input")
+        inputFrame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
+
+        # Input fields
+        self.speed_entry = self.make_entry(inputFrame, "Suggested Speed", 0, "22mph")
+        self.authority_entry = self.make_entry(inputFrame, "Authority", 1, "Block C1")
+        self.track_closures_entry = self.make_entry(inputFrame, "Track Closures", 2, "None")
+        self.route_entry = self.make_entry(inputFrame, "Route", 3, "Red")
+        self.failure_entry = self.make_entry(inputFrame, "Failure Alerts", 4, "None")
+        self.train_positions_entry = self.make_entry(inputFrame, "Train Positions", 5, "Block(s) A1")
+        self.passengers_entry = self.make_entry(inputFrame, "Passengers Disembarking", 6, "15")
+
+        ttk.Label(inputFrame, text="Schedule").grid(row=7, column=0, sticky="w", padx=5, pady=5)
+        ttk.Button(inputFrame, text="File Upload", command=self.upload_schedule).grid(row=7, column=1, padx=5, pady=5)
+
+        self.switch_entry = self.make_entry(inputFrame, "Switch Positions", 8, "0")
+
+        # Buttons
+        ttk.Button(inputFrame, text="Simulate", command=self.simulate).grid(row=9, column=0, pady=10)
+        ttk.Button(inputFrame, text="Stop Simulation", command=self.stop_simulation).grid(row=9, column=1, pady=10)
+
+        # ---- Right Frame: Generated Output ----
+        outputFrame = ttk.LabelFrame(self, text="Generated Output")
+        outputFrame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
+
+        self.beacon_value = self.make_output(outputFrame, "Beacon", 0)
+        self.switch_output = self.make_output(outputFrame, "Switch Positions", 1)
+        self.commanded_speed = self.make_output(outputFrame, "Commanded Speed", 2)
+        self.authority_output = self.make_output(outputFrame, "Authority", 3)
+        self.lights_output = self.make_output(outputFrame, "Lights", 4)
+        self.gates_output = self.make_output(outputFrame, "Gates", 5)
+        self.state_of_track = self.make_output(outputFrame, "State of Track", 6)
+        self.train_positions_output = self.make_output(outputFrame, "Train Positions", 7)
+        self.passengers_output = self.make_output(outputFrame, "Passengers Disembarking", 8)
+
+    # --- Utility: make entry row ---
+    def make_entry(self, parent, label, row, default=""):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        entry = ttk.Entry(parent)
+        entry.insert(0, default)
+        entry.grid(row=row, column=1, padx=5, pady=5)
+        return entry
+
+    # --- Utility: make output row ---
+    def make_output(self, parent, label, row):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        var = tk.StringVar()
+        ttk.Label(parent, textvariable=var).grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        return var
+
+    # --- Functional logic ---
+    def simulate(self):
+        suggested_speed = self.speed_entry.get()
+        authority = self.authority_entry.get()
+        track_closures = self.track_closures_entry.get()
+        route = self.route_entry.get()
+        failure_alerts = self.failure_entry.get()
+        train_positions = self.train_positions_entry.get()
+        passengers = self.passengers_entry.get()
+        switch_positions = self.switch_entry.get()
+
+        # Example simple logic (expand later)
+        self.beacon_value.set("128B")
+        self.switch_output.set(switch_positions)
+        self.commanded_speed.set(f"{int(suggested_speed.replace('mph','')) - 2}mph")
+        self.authority_output.set(authority)
+        self.lights_output.set("Green")
+        self.gates_output.set("Closed")
+        self.state_of_track.set("2 Trains Active")
+        self.train_positions_output.set(train_positions)
+        self.passengers_output.set(passengers)
+
+    def stop_simulation(self):
+        # Reset outputs
+        for var in [
+            self.beacon_value, self.switch_output, self.commanded_speed,
+            self.authority_output, self.lights_output, self.gates_output,
+            self.state_of_track, self.train_positions_output, self.passengers_output
+        ]:
+            var.set("")
+
+    def upload_schedule(self):
+        filedialog.askopenfilename(title="Select Schedule File")
 
 
-# --- Main Window ---
-root = tk.Tk()
-root.title("Wayside Controller Test UI")
-
-# Left Frame (Force Input)
-frame_left = tk.Frame(root, padx=10, pady=10)
-frame_left.grid(row=0, column=0, sticky="n")
-
-tk.Label(frame_left, text="Force Input", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=2)
-
-tk.Label(frame_left, text="Suggested Speed").grid(row=1, column=0, sticky="w")
-speed_entry = tk.Entry(frame_left)
-speed_entry.insert(0, "22mph")
-speed_entry.grid(row=1, column=1)
-
-tk.Label(frame_left, text="Authority").grid(row=2, column=0, sticky="w")
-authority_entry = tk.Entry(frame_left)
-authority_entry.insert(0, "Block C1")
-authority_entry.grid(row=2, column=1)
-
-tk.Label(frame_left, text="Track Closures").grid(row=3, column=0, sticky="w")
-track_closures_entry = tk.Entry(frame_left)
-track_closures_entry.insert(0, "None")
-track_closures_entry.grid(row=3, column=1)
-
-tk.Label(frame_left, text="Route").grid(row=4, column=0, sticky="w")
-route_entry = tk.Entry(frame_left)
-route_entry.insert(0, "Red")
-route_entry.grid(row=4, column=1)
-
-tk.Label(frame_left, text="Failure Alerts").grid(row=5, column=0, sticky="w")
-failure_entry = tk.Entry(frame_left)
-failure_entry.insert(0, "None")
-failure_entry.grid(row=5, column=1)
-
-tk.Label(frame_left, text="Train Positions").grid(row=6, column=0, sticky="w")
-train_positions_entry = tk.Entry(frame_left)
-train_positions_entry.insert(0, "Block(s) A1")
-train_positions_entry.grid(row=6, column=1)
-
-tk.Label(frame_left, text="Passengers Disembarking").grid(row=7, column=0, sticky="w")
-passengers_entry = tk.Entry(frame_left)
-passengers_entry.insert(0, "15")
-passengers_entry.grid(row=7, column=1)
-
-tk.Label(frame_left, text="Schedule").grid(row=8, column=0, sticky="w")
-tk.Button(frame_left, text="File Upload", command=upload_schedule).grid(row=8, column=1)
-
-tk.Label(frame_left, text="Switch Positions").grid(row=9, column=0, sticky="w")
-switch_entry = tk.Entry(frame_left)
-switch_entry.insert(0, "0")
-switch_entry.grid(row=9, column=1)
-
-# Buttons
-tk.Button(frame_left, text="Simulate", command=simulate).grid(row=10, column=0, pady=10)
-tk.Button(frame_left, text="Stop Simulation", command=stop_simulation).grid(row=10, column=1, pady=10)
-
-# Right Frame (Generated Output)
-frame_right = tk.Frame(root, padx=10, pady=10)
-frame_right.grid(row=0, column=1, sticky="n")
-
-tk.Label(frame_right, text="Generated Output", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=2)
-
-def make_output(label, row):
-    tk.Label(frame_right, text=label).grid(row=row, column=0, sticky="w")
-    var = tk.StringVar()
-    tk.Label(frame_right, textvariable=var).grid(row=row, column=1, sticky="w")
-    return var
-
-beacon_value = make_output("Beacon", 1)
-switch_output = make_output("Switch Positions", 2)
-commanded_speed = make_output("Commanded Speed", 3)
-authority_output = make_output("Authority", 4)
-lights_output = make_output("Lights", 5)
-gates_output = make_output("Gates", 6)
-state_of_track = make_output("State of Track", 7)
-train_positions_output = make_output("Train Positions", 8)
-passengers_output = make_output("Passengers Disembarking", 9)
-
-root.mainloop()
+if __name__ == "__main__":
+    WaysideControllerUI().mainloop()
