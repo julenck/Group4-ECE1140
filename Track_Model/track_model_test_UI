@@ -1,0 +1,176 @@
+# Track Builder Test UI with Guard Rails
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+
+WindowWidth = 1200
+WindowHeight = 700
+
+class TrackBuilder(tk.Tk):
+
+    def __init__(self):
+        super().__init__()
+
+        # Window setup
+        self.title("Track Model Test UI")
+        self.geometry(f"{WindowWidth}x{WindowHeight}")
+
+        # Grid layout
+        for i in range(2):
+            self.grid_columnconfigure(i, weight=1, uniform="col")
+        self.grid_rowconfigure(0, weight=1)
+
+        # ---- Left Frame: Force Input ----
+        inputFrame = ttk.LabelFrame(self, text="Force Input")
+        inputFrame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
+
+        # Input fields with guard rails
+        self.speed_entry = self.make_entry(inputFrame, "Commanded Speed (mph)", 0, "22")
+        self.authority_entry = self.make_entry(inputFrame, "Commanded Authority (yrds)", 1, "10")
+        self.track_closures_entry = self.make_entry(inputFrame, "Environmental Temperature (°F)", 2, "77")
+
+        # Dropdown fields
+        self.route_entry = self.make_dropdown(inputFrame, "Switch Positions", 3, ["Straight", "Diverging"], "Diverging")
+        self.failure_entry = self.make_dropdown(inputFrame, "Traffic Lights", 4, ["Red", "Yellow", "Green"], "Red")
+        self.train_positions_entry = self.make_dropdown(inputFrame, "Gate", 5, ["Open", "Closed"], "Closed")
+
+        # Normal entries
+        self.passengers_disembark_entry = self.make_entry(inputFrame, "Passengers Disembarking", 6, "31")
+        self.passengers_board_entry = self.make_entry(inputFrame, "Passengers Boarding", 7, "45")
+        self.speed_limit_entry = self.make_entry(inputFrame, "Speed Limit (mph)", 8, "25")
+        self.block_num_entry = self.make_entry(inputFrame, "Block #", 9, "4")
+        self.block_len_entry = self.make_entry(inputFrame, "Block length (miles)", 10, "15")
+
+        # Dropdowns
+        self.section_entry = self.make_dropdown(inputFrame, "Section", 11, ["A","B","C","D","E","F","G","H","I","J","K"], "D")
+        self.failure_modes_entry = self.make_dropdown(inputFrame, "Failure Modes", 12,
+                                                     ["No faults", "Broken Track", "Power Failure","Circuit Failure"], "No faults")
+
+        ttk.Button(inputFrame, text="File Upload", command=self.upload_schedule).grid(row=14, column=1, padx=5, pady=5)
+
+        # Buttons
+        ttk.Button(inputFrame, text="Simulate", command=self.simulate).grid(row=13, column=0, pady=10)
+        ttk.Button(inputFrame, text="Stop Simulation", command=self.stop_simulation).grid(row=13, column=1, pady=10)
+
+        # ---- Right Frame: Generated Output ----
+        outputFrame = ttk.LabelFrame(self, text="Generated Output")
+        outputFrame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
+
+        # Outputs mirror inputs (always plain labels)
+        self.speed_output = self.make_output(outputFrame, "Commanded Speed", 0)
+        self.authority_output = self.make_output(outputFrame, "Commanded Authority", 1)
+        self.temp_output = self.make_output(outputFrame, "Environmental Temperature", 2)
+        self.route_output = self.make_output(outputFrame, "Switch Positions", 3)
+        self.failure_output = self.make_output(outputFrame, "Traffic Lights", 4)
+        self.gate_output = self.make_output(outputFrame, "Gate", 5)
+        self.passengers_disembark_output = self.make_output(outputFrame, "Passengers Disembarking", 6)
+        self.passengers_board_output = self.make_output(outputFrame, "Passengers Boarding", 7)
+        self.speed_limit_output = self.make_output(outputFrame, "Speed Limit", 8)
+        self.block_num_output = self.make_output(outputFrame, "Block #", 9)
+        self.block_len_output = self.make_output(outputFrame, "Block length", 10)
+        self.section_output = self.make_output(outputFrame, "Section", 11)
+        self.failure_modes_output = self.make_output(outputFrame, "Failure Modes", 12)
+
+    # --- Utility: make entry row ---
+    def make_entry(self, parent, label, row, default=""):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        entry = ttk.Entry(parent)
+        entry.insert(0, default)
+        entry.grid(row=row, column=1, padx=5, pady=5)
+        return entry
+
+    # --- Utility: make dropdown row ---
+    def make_dropdown(self, parent, label, row, values, default=None):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        combo = ttk.Combobox(parent, values=values, state="readonly")
+        if default in values:
+            combo.set(default)
+        else:
+            combo.current(0)
+        combo.grid(row=row, column=1, padx=5, pady=5)
+        return combo
+
+    # --- Utility: make output row ---
+    def make_output(self, parent, label, row):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        var = tk.StringVar()
+        ttk.Label(parent, textvariable=var).grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        return var
+
+    # --- Guard rails ---
+    def validate_inputs(self):
+        try:
+            speed = int(self.speed_entry.get())
+            if not (0 <= speed <= 120):
+                raise ValueError("Speed must be between 0–120 mph")
+
+            authority = int(self.authority_entry.get())
+            if not (0 <= authority <= 1000):
+                raise ValueError("Authority must be between 0–1000 yards")
+
+            temp = int(self.track_closures_entry.get())
+            if not (-50 <= temp <= 150):
+                raise ValueError("Temperature must be between -50–150 °F")
+
+            p_disembark = int(self.passengers_disembark_entry.get())
+            p_board = int(self.passengers_board_entry.get())
+            if p_disembark < 0 or p_board < 0:
+                raise ValueError("Passenger counts cannot be negative")
+            if p_disembark > 412 or p_board > 412:
+                raise ValueError("Passenger counts exceeds maximum occupancy")
+
+            speed_limit = int(self.speed_limit_entry.get())
+            if not (0 <= speed_limit <= 120):
+                raise ValueError("Speed limit must be between 0–120 mph")
+
+            block_num = int(self.block_num_entry.get())
+            if not (0 <= block_num <= 500):
+                raise ValueError("Block number must be between 0–500")
+
+            block_len = int(self.block_len_entry.get().split()[0])
+            if not (0 <= block_len <= 50):
+                raise ValueError("Block length must be between 0–50 miles")
+
+        except ValueError as e:
+            messagebox.showerror("Invalid Input", str(e))
+            return False
+
+        return True
+
+    # --- Functional logic ---
+    def simulate(self):
+        if not self.validate_inputs():
+            return  # stop if invalid
+
+        # Copy inputs to outputs (all outputs are labels only)
+        self.speed_output.set(f"{self.speed_entry.get()} mph")
+        self.authority_output.set(f"{self.authority_entry.get()} yards")
+        self.temp_output.set(f"{self.track_closures_entry.get()} °F")
+        self.route_output.set(self.route_entry.get())
+        self.failure_output.set(self.failure_entry.get())
+        self.gate_output.set(self.train_positions_entry.get())
+        self.passengers_disembark_output.set(self.passengers_disembark_entry.get())
+        self.passengers_board_output.set(self.passengers_board_entry.get())
+        self.speed_limit_output.set(f"{self.speed_limit_entry.get()} mph")
+        self.block_num_output.set(self.block_num_entry.get())
+        self.block_len_output.set(f"{self.block_len_entry.get()} miles")
+        self.section_output.set(self.section_entry.get())
+        self.failure_modes_output.set(self.failure_modes_entry.get())
+
+    def stop_simulation(self):
+        # Reset outputs
+        for var in [
+            self.speed_output, self.authority_output, self.temp_output,
+            self.route_output, self.failure_output, self.gate_output,
+            self.passengers_disembark_output, self.passengers_board_output,
+            self.speed_limit_output, self.block_num_output, self.block_len_output,
+            self.section_output, self.failure_modes_output
+        ]:
+            var.set("")
+
+    def upload_schedule(self):
+        filedialog.askopenfilename(title="Select Schedule File")
+
+
+if __name__ == "__main__":
+    TrackBuilder().mainloop()
