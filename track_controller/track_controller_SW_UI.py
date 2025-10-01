@@ -175,19 +175,20 @@ class SWTrackControllerUI(tk.Tk):
         else:
             waysideInputs = {}
 
-        #get switch options
-        switchOptions = waysideInputs.get("switches",[])
-        self.SwitchMenu.config(values=switchOptions)
-        #get switch states
-        switchStates = waysideInputs.get("switch_states",[])
-        #update switch states dictionary with loaded states
-        for index in range(len(switchOptions)):
-            switch = switchOptions[index]
-            if index < len(switchStates):
-                state = switchStates[index]
-            else:
-                state = "Straight"
-            self.switchStatesDictionary[switch] = state
+        if not self.maintenanceMode.get(): #only update switch options and states if not in maintenance mode
+            #get switch options
+            switchOptions = waysideInputs.get("switches",[])
+            self.SwitchMenu.config(values=switchOptions)
+            #get switch states
+            switchStates = waysideInputs.get("switch_states",[])
+            #update switch states dictionary with loaded states
+            for index in range(len(switchOptions)):
+                switch = switchOptions[index]
+                if index < len(switchStates):
+                    state = switchStates[index]
+                else:
+                    state = "Straight"
+                self.switchStatesDictionary[switch] = state
 
         #Get suggested speed
         suggestedSpeed = waysideInputs.get("suggested_speed",0)

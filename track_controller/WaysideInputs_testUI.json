@@ -11,7 +11,7 @@
     "Diverging",
     "Straight"
   ],
-  "suggested_speed": 500,
-  "suggested_authority": 600,
-  "passengers_disembarking": 22
+  "suggested_speed": 6000,
+  "suggested_authority": 500,
+  "passengers_disembarking": 25
 }
