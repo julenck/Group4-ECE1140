@@ -1,15 +1,17 @@
 {
   "switches": [
     "SW1",
-    "switch2",
-    "sw3",
-    "S5",
-    "switch6"
+    "SW2",
+    "SW3",
+    "SW4"
   ],
   "switch_states": [
+    "Straight",
+    "Straight",
+    "Diverging",
     "Straight"
   ],
-  "suggested_speed": 25,
-  "suggested_authority": 300,
-  "passengers_disembarking": 15
+  "suggested_speed": 500,
+  "suggested_authority": 600,
+  "passengers_disembarking": 22
 }
