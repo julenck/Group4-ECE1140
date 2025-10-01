@@ -85,7 +85,7 @@ class TestUI(tk.Frame):
         self.check_pause = tk.BooleanVar(value=False)
         ttk.Checkbutton(input_frame, text="Pause", variable=self.check_pause, command=self.pause_function).grid(row=row, column=1, pady=10)
 
-        ttk.Button(input_frame, text="Check Forced Switch Position", command=self.update_switch_positions).grid(row=row+1, column=0, pady=10)
+        
     
     def build_output_frame(self):
         output_frame = ttk.LabelFrame(self, text="Generated Output")
@@ -208,33 +208,7 @@ class TestUI(tk.Frame):
         if self.check_pause.get():
             self.after(100, self.pause_function)  # Check again after 100 ms
 
-    def update_switch_positions(self):
-        switch_names = self.switch_name_var.get().split(",")
-        switch_states = self.switch_pos_var.get().split(",")
 
-        # Convert S/D to Straight/Diverging
-        switch_states_converted = []
-        for state in switch_states:
-            if state.upper() == "S":
-                switch_states_converted.append("Straight")
-            elif state.upper() == "D":
-                switch_states_converted.append("Diverging")
-            else:
-                switch_states_converted.append("Straight")  # Default to Straight if invalid
-
-        # Update the output labels directly
-        self.output_switch_names.set(",".join(switch_names))
-        position_str = ""
-        for i in range(len(switch_states_converted)):
-            if switch_states_converted[i] == "Straight":
-                position_str += "S"
-            elif switch_states_converted[i] == "Diverging":
-                position_str += "D"
-            else:
-                position_str += "N/A"
-            if i < len(switch_states_converted)-1:
-                position_str += ","
-        self.output_switch_positions.set(position_str)
 
 if __name__ == "__main__":
    root = tk.Tk()

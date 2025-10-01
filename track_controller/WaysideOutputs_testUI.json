@@ -11,7 +11,7 @@
         "Diverging",
         "Straight"
     ],
-    "commanded_speed": 495,
-    "commanded_authority": 550,
-    "passengers_disembarking": 22
+    "commanded_speed": 5995,
+    "commanded_authority": 450,
+    "passengers_disembarking": 25
 }
