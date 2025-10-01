@@ -114,6 +114,16 @@ class SWTrackControllerUI(tk.Tk):
         #------ Start PLC Upload Frame------#
         UploadFrame = ttk.LabelFrame(self, text="Upload PLC File:")
         UploadFrame.grid(row=0, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+
+        self.file_select_label = ttk.Label(UploadFrame, text="Select PLC File:")
+        self.file_select_label.pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
+
+        self.file_path_var = tk.StringVar(value="blue_line_plc.json")
+        self.file_path_button = ttk.Button(UploadFrame, text="Browse", command=self.browse_file)
+        self.file_path_button.pack(padx=WindowHeight/70, pady=(0,WindowWidth/120))
+
+        self.plc_file_label = ttk.Label(UploadFrame, text="blue_line_plc.json selected")
+        self.plc_file_label.pack(padx=WindowHeight/70, pady=WindowWidth/120)
         #------End PLC Upload Frame------#
         
         #---Start Map Frame---#
@@ -175,6 +185,7 @@ class SWTrackControllerUI(tk.Tk):
         else:
             waysideInputs = {}
 
+
         if not self.maintenanceMode.get(): #only update switch options and states if not in maintenance mode
             #get switch options
             switchOptions = waysideInputs.get("switches",[])
@@ -202,13 +213,35 @@ class SWTrackControllerUI(tk.Tk):
         passengersDisembarking = waysideInputs.get("passengers_disembarking",0)
         self.passengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(passengersDisembarking))
 
+        #process plc file
+        if os.path.exists(self.file_path_var.get()):
+            with open(self.file_path_var.get(), "r") as plc:
+                plc_data = json.load(plc)
+                plc_rules = plc_data.get("rules",[])
+
+        #apply plc rules to suggested speed and authority
+        for rule in plc_rules:
+            target = rule.get("target","")
+            op = rule.get("op","")
+            value = rule.get("value",0)
+
+            if target == "commanded_speed":
+                if op == "-":
+                    commanded_speed = max(0, suggestedSpeed - value)
+                else:
+                    commanded_speed = suggestedSpeed
+            elif target == "commanded_authority":
+                if op == "-":
+                    commanded_authority = max(0, suggestedAuthority - value)
+                else:
+                    commanded_authority = suggestedAuthority
 
         #begin generating outputs
         waysideOutputs = {
             "switches": list(self.switchStatesDictionary.keys()),
             "switch_states": list(self.switchStatesDictionary.values()),
-            "commanded_speed": max(0, suggestedSpeed - 5),#simple logic to reduce speed by 5 mph
-            "commanded_authority": max(0, suggestedAuthority - 50),#simple logic to reduce authority by 50 ft
+            "commanded_speed": max(0, commanded_speed),#simple logic to reduce speed by 5 mph
+            "commanded_authority": max(0, commanded_authority),#simple logic to reduce authority by 50 ft
             "passengers_disembarking": passengersDisembarking#forward information
         }
         
@@ -226,6 +259,16 @@ class SWTrackControllerUI(tk.Tk):
 
         self.after(500, self.Load_Inputs_Outputs)#reload inputs every 500ms
         #return waysideInputs
+
+    def browse_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+        if file_path:
+            self.file_path_var.set(file_path)
+            self.plc_file_label.config(text=os.path.basename(file_path) + " selected")
+        else:
+            self.file_path_var.set("blue_line_plc.json")
+            self.plc_file_label.config(text="blue_line_plc.json selected")
+
 #-------------------------------------#
 
 
