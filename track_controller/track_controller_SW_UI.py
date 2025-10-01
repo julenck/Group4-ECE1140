@@ -129,7 +129,7 @@ class SWTrackControllerUI(tk.Tk):
         # Initialize file modification time tracking
         self.last_mod_time = 0
         
-        self.WaysideInputs = self.Load_Inputs_Outputs()#load wayside inputs from JSON file
+        self.Load_Inputs_Outputs()#load wayside inputs from JSON file
 
 
 
@@ -170,22 +170,8 @@ class SWTrackControllerUI(tk.Tk):
 
         #load wayside inputs from JSON file
         if os.path.exists("WaysideInputs_testUI.json"):
-            # Check if file has been modified since last read
-            current_mod_time = os.path.getmtime("WaysideInputs_testUI.json")
-            if current_mod_time <= self.last_mod_time:
-                # File hasn't changed, just schedule next check
-                self.after(500, self.Load_Inputs_Outputs)
-                return self.WaysideInputs if hasattr(self, 'WaysideInputs') else {}
-            
-            self.last_mod_time = current_mod_time
-            
-            try:
-                with open("WaysideInputs_testUI.json", "r") as file:
-                    waysideInputs = json.load(file)
-                print(f"Loaded new inputs: {waysideInputs}")  # Debug output
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                print(f"Error reading input file: {e}")
-                waysideInputs = {}
+            with open("WaysideInputs_testUI.json", "r") as file:
+                waysideInputs = json.load(file)
         else:
             waysideInputs = {}
 
@@ -226,11 +212,8 @@ class SWTrackControllerUI(tk.Tk):
         }
         
         # Always write outputs when inputs change
-        try:
-            with open("WaysideOutputs_testUI.json", "w") as file:
-                json.dump(waysideOutputs, file, indent=4)
-        except Exception as e:
-            print(f"Error writing output file: {e}")
+        with open("WaysideOutputs_testUI.json", "w") as file:
+            json.dump(waysideOutputs, file, indent=4)
 
         #update output labels
         self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
@@ -241,12 +224,14 @@ class SWTrackControllerUI(tk.Tk):
         self.WaysideInputs = waysideInputs
 
         self.after(500, self.Load_Inputs_Outputs)#reload inputs every 500ms
-        return waysideInputs
+        #return waysideInputs
 #-------------------------------------#
 
 
 
-
+if __name__ == "__main__":
+    app = SWTrackControllerUI()
+    app.mainloop()
 
 
 
