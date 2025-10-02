@@ -12,6 +12,6 @@
         "Straight"
     ],
     "commanded_speed": 95,
-    "commanded_authority": 950,
-    "passengers_disembarking": 10
+    "commanded_authority": 0,
+    "passengers_disembarking": 0
 }
