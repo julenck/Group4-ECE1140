@@ -9,8 +9,8 @@ import os
 
 
 # variables for window size
-window_width = 1200
-window_height = 700
+window_width = 700
+window_height = 500
 
 class train_controller_test_ui(tk.Tk):
 
@@ -27,28 +27,38 @@ class train_controller_test_ui(tk.Tk):
         self.grid_rowconfigure(0, weight=1)
 
          # ---- Left Frame: Force Input ----
-        inputFrame = ttk.LabelFrame(self, text="Force Input")
-        inputFrame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
+        input_frame = ttk.LabelFrame(self, text="Force Input")
+        input_frame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
 
         # Input fields
         # The last column should be variables which are values that change the json file
-        self.commanded_speed_entry = self.make_entry_text(inputFrame, "Commanded Speed (mph)", 0, "25") 
-        self.set_speed_entry = self.make_entry_text(inputFrame, "Set Speed (mph)", 1, "23")
-        self.speed_limit_entry = self.make_entry_text(inputFrame, "Speed Limit (mph)", 2, "30")
-        self.commanded_authority_entry = self.make_entry_text(inputFrame, "Commanded Authority (yds)", 3, "123")
-        self.train_velocity_entry = self.make_entry_text(inputFrame, "Train Velocity (mph)", 4, "30")
-        self.next_stop_beacon_entry = self.make_entry_text(inputFrame, "Next Stop", 5, "Herron Ave")
-        self.station_side_beacon_entry = self.make_entry_dropdown(inputFrame, "Station Side (left/right)", 6, ["left", "right"])
-        self.service_brake_entry = self.make_entry_text(inputFrame, "Service Brake (%)", 7, "30%")
-        self.emergency_brake_entry = self.make_entry_dropdown(inputFrame, "Emergency Brake (on/off)", 8, ["on", "off"], "off")
-        self.train_engine_failure_entry = self.make_entry_dropdown(inputFrame, "Train Engine Failure", 9, ["True", "False"], "False")
-        self.signal_pickup_failure_entry = self.make_entry_dropdown(inputFrame, "Signal Pickup Failure", 10, ["True", "False"], "False")
-        self.brake_failure_entry = self.make_entry_dropdown(inputFrame, "Brake Failure", 11, ["True", "False"], "False")
+        self.commanded_speed_entry = self.make_entry_text(input_frame, "Commanded Speed (mph)", 0, "25") 
+        self.set_speed_entry = self.make_entry_text(input_frame, "Set Speed (mph)", 1, "23")
+        self.speed_limit_entry = self.make_entry_text(input_frame, "Speed Limit (mph)", 2, "30")
+        self.commanded_authority_entry = self.make_entry_text(input_frame, "Commanded Authority (yds)", 3, "123")
+        self.train_velocity_entry = self.make_entry_text(input_frame, "Train Velocity (mph)", 4, "30")
+        self.next_stop_beacon_entry = self.make_entry_text(input_frame, "Next Stop", 5, "Herron Ave")
+        self.station_side_beacon_entry = self.make_entry_dropdown(input_frame, "Station Side (left/right)", 6, ["left", "right"])
+        self.service_brake_entry = self.make_entry_text(input_frame, "Service Brake (%)", 7, "30%")
+        self.emergency_brake_entry = self.make_entry_dropdown(input_frame, "Emergency Brake (on/off)", 8, ["on", "off"], "off")
+        self.train_engine_failure_entry = self.make_entry_dropdown(input_frame, "Train Engine Failure", 9, ["True", "False"], "False")
+        self.signal_pickup_failure_entry = self.make_entry_dropdown(input_frame, "Signal Pickup Failure", 10, ["True", "False"], "False")
+        self.brake_failure_entry = self.make_entry_dropdown(input_frame, "Brake Failure", 11, ["True", "False"], "False")
 
+     # ---- Right Frame: Generated Output ----
+        output_frame = ttk.LabelFrame(self, text="Generated Output")
+        output_frame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
+
+    
+        # Output fields
+        self.right_door_status = self.make_output(output_frame, "Right Door Status", 0)
+        self.left_door_status = self.make_output(output_frame, "Left Door Status",  1)
 
 
         # Buttons
-        ttk.Button(inputFrame, text="Simulate").grid(row=12, column=0, pady=10)
+        ttk.Button(input_frame, text="Simulate").grid(row=12, column=0, pady=10)
+
+
 
 
     def make_entry_text(self, parent, label, row, default=""):
