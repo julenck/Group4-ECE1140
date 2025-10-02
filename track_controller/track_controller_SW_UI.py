@@ -112,14 +112,15 @@ class SWTrackControllerUI(tk.Tk):
         #------End Output Frame------#
 
         #------ Start PLC Upload Frame------#
-        UploadFrame = ttk.LabelFrame(self, text="Upload PLC File:")
-        UploadFrame.grid(row=0, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+        UploadFrame = ttk.LabelFrame(self, text="Upload PLC File - Maintenance Mode Necessary:")
+        UploadFrame.grid(row=1, column=0, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
 
         self.file_select_label = ttk.Label(UploadFrame, text="Select PLC File:")
         self.file_select_label.pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
 
         self.file_path_var = tk.StringVar(value="blue_line_plc.json")
-        self.file_path_button = ttk.Button(UploadFrame, text="Browse", command=self.browse_file)
+
+        self.file_path_button = ttk.Button(UploadFrame, text="Browse", command=self.browse_file,state="disabled")
         self.file_path_button.pack(padx=WindowHeight/70, pady=(0,WindowWidth/120))
 
         self.plc_file_label = ttk.Label(UploadFrame, text="blue_line_plc.json selected")
@@ -128,7 +129,7 @@ class SWTrackControllerUI(tk.Tk):
         
         #---Start Map Frame---#
         MapFrame = ttk.LabelFrame(self, text="Track Map:")
-        MapFrame.grid(row=1, column=0, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+        MapFrame.grid(row=0, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
         #---End Map Frame---#
 
         #---Start Status Frame---#
@@ -148,7 +149,7 @@ class SWTrackControllerUI(tk.Tk):
     def Toggle_Maintenance_Mode(self):
 
        
-        widgets = [self.SwitchMenu, self.selectStateMenu, self.applyChangeButton]
+        widgets = [self.SwitchMenu, self.selectStateMenu, self.applyChangeButton, self.file_path_button]
         if self.maintenanceMode.get():
             s="readonly"
         else:

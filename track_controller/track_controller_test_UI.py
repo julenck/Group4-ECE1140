@@ -210,9 +210,3 @@ class TestUI(tk.Frame):
 
 
 
-if __name__ == "__main__":
-   root = tk.Tk()
-   root.title("Wayside Controller Test UI")
-   root.geometry(f"{WindowWidth}x{WindowHeight}")
-   TestUI(root)
-   root.mainloop()

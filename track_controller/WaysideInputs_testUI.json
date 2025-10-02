@@ -12,6 +12,6 @@
     "Straight"
   ],
   "suggested_speed": 100,
-  "suggested_authority": 1000,
-  "passengers_disembarking": 10
+  "suggested_authority": 50,
+  "passengers_disembarking": 0
 }
