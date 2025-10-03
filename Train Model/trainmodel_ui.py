@@ -1,13 +1,7 @@
-#import tkinter and related libraries
+ #import tkinter and related libraries
 import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
-import json
-import os
+from tkinter import ttk, messagebox
 
-# Window size
-WindowWidth = 1200
-WindowHeight = 700
 
 class TrainModelUI(tk.Tk):
     def __init__(self):
@@ -15,9 +9,9 @@ class TrainModelUI(tk.Tk):
 
         # Set window title and size
         self.title("Train Model Software Module")
-        self.geometry(f"{WindowWidth}x{WindowHeight}")
+        self.geometry("1000x600")
 
-        # Configure grid layout (3 columns, 2 rows)
+        # Configure grid layout
         for i in range(3):
             self.grid_columnconfigure(i, weight=1, uniform="col")
         for i in range(2):
@@ -27,29 +21,35 @@ class TrainModelUI(tk.Tk):
         InputFrame = ttk.LabelFrame(self, text="Input Data:")
         InputFrame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
 
-        self.commandedSpeedLabel = ttk.Label(InputFrame, text="Commanded Speed: N/A")
+        self.commandedSpeedLabel = ttk.Label(InputFrame, text="Commanded Speed: 50 mph")
         self.commandedSpeedLabel.pack(pady=5)
 
-        self.commandedAuthorityLabel = ttk.Label(InputFrame, text="Commanded Authority: N/A")
+        self.commandedAuthorityLabel = ttk.Label(InputFrame, text="Commanded Authority: 300 yds")
         self.commandedAuthorityLabel.pack(pady=5)
 
-        self.beaconLabel = ttk.Label(InputFrame, text="Beacon Data: N/A")
+        self.beaconLabel = ttk.Label(InputFrame, text="Beacon Data: Next Station: A")
         self.beaconLabel.pack(pady=5)
 
-        self.passengersBoardingLabel = ttk.Label(InputFrame, text="Passengers Boarding: N/A")
+        self.passengersBoardingLabel = ttk.Label(InputFrame, text="Passengers Boarding: 5")
         self.passengersBoardingLabel.pack(pady=5)
 
         # ===== Output Frame =====
         OutputFrame = ttk.LabelFrame(self, text="Output Data:")
         OutputFrame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
 
-        self.velocityLabel = ttk.Label(OutputFrame, text="Train Velocity: N/A")
+        self.velocityLabel = ttk.Label(OutputFrame, text="Train Velocity: 48 mph")
         self.velocityLabel.pack(pady=5)
 
-        self.temperatureLabel = ttk.Label(OutputFrame, text="Train Temperature: N/A")
+        self.temperatureLabel = ttk.Label(OutputFrame, text="Train Temperature: 67 °F")
         self.temperatureLabel.pack(pady=5)
 
-        self.passengersDisembarkingLabel = ttk.Label(OutputFrame, text="Passengers Disembarking: N/A")
+        self.doorsLabel = ttk.Label(OutputFrame, text="Doors: Closed")
+        self.doorsLabel.pack(pady=5)
+
+        self.passageLightsLabel = ttk.Label(OutputFrame, text="Passage Lights: OFF")
+        self.passageLightsLabel.pack(pady=5)
+
+        self.passengersDisembarkingLabel = ttk.Label(OutputFrame, text="Passengers Disembarking: 3")
         self.passengersDisembarkingLabel.pack(pady=5)
 
         self.failureModeLabel = ttk.Label(OutputFrame, text="Failure Mode: None")
@@ -59,21 +59,20 @@ class TrainModelUI(tk.Tk):
         ControlFrame = ttk.LabelFrame(self, text="Controls:")
         ControlFrame.grid(row=0, column=2, sticky="NSEW", padx=10, pady=10)
 
-        # Light control
-        self.lightsOn = tk.BooleanVar(value=False)
-        self.lightsButton = ttk.Checkbutton(ControlFrame, text="Lights (ON/OFF)", variable=self.lightsOn)
+        # Overhead Light toggle button
+        self.lights_on = False
+        self.lightsButton = ttk.Button(ControlFrame, text="Overhead Lights: OFF", command=self.toggle_lights)
         self.lightsButton.pack(pady=5)
 
-        # Door control
-        self.doorsOpen = tk.BooleanVar(value=False)
-        self.doorButton = ttk.Checkbutton(ControlFrame, text="Doors (Open/Closed)", variable=self.doorsOpen)
-        self.doorButton.pack(pady=5)
+        # Temperature feedback (expected temperature input)
+        self.tempFeedbackLabel = ttk.Label(ControlFrame, text="Expected Temperature (°F):")
+        self.tempFeedbackLabel.pack(pady=5)
 
-        # Temperature setting
         self.tempEntry = ttk.Entry(ControlFrame)
-        self.tempEntry.pack(pady=5)
-        self.tempButton = ttk.Button(ControlFrame, text="Set Temperature", command=self.set_temperature)
-        self.tempButton.pack(pady=5)
+        self.tempEntry.pack(pady=2)
+
+        self.tempSubmit = ttk.Button(ControlFrame, text="Submit", command=self.submit_temperature_feedback)
+        self.tempSubmit.pack(pady=5)
 
         # Emergency brake button
         self.emergencyButton = ttk.Button(ControlFrame, text="EMERGENCY BRAKE", command=self.activate_emergency)
@@ -107,15 +106,18 @@ class TrainModelUI(tk.Tk):
         self.warningLabel = ttk.Label(WarningFrame, text="No Warnings")
         self.warningLabel.pack(pady=20)
 
-        # Auto-refresh every second
-        self.after(1000, self.update_UI)
-
     # ===== Functions =====
-    def set_temperature(self):
-        """Set train cabin temperature from user entry."""
+    def toggle_lights(self):
+        """Toggle overhead lights ON/OFF."""
+        self.lights_on = not self.lights_on
+        state = "ON" if self.lights_on else "OFF"
+        self.lightsButton.config(text=f"Overhead Lights: {state}")
+
+    def submit_temperature_feedback(self):
+        """Passenger enters expected temperature, feedback is sent to Train Controller."""
         try:
-            t = int(self.tempEntry.get())
-            self.temperatureLabel.config(text=f"Train Temperature: {t} °F")
+            expected_temp = int(self.tempEntry.get())
+            messagebox.showinfo("Temperature Feedback", f"Passenger Expected Temperature: {expected_temp} °F")
         except ValueError:
             messagebox.showerror("Error", "Please enter a valid integer temperature!")
 
@@ -123,29 +125,6 @@ class TrainModelUI(tk.Tk):
         """Activate emergency brake and show warning."""
         self.warningLabel.config(text="EMERGENCY BRAKE ACTIVATED")
         messagebox.showwarning("Emergency Brake", "Emergency Brake has been activated!")
-
-    def update_UI(self):
-        """Update input/output values periodically (example values)."""
-        # Example data
-        commanded_speed = 50
-        commanded_authority = 300
-        beacon = "Next Station: A"
-        boarding = 5
-        velocity = 48
-        disembarking = 3
-
-        # Update input labels
-        self.commandedSpeedLabel.config(text=f"Commanded Speed: {commanded_speed} mph")
-        self.commandedAuthorityLabel.config(text=f"Commanded Authority: {commanded_authority} yds")
-        self.beaconLabel.config(text=f"Beacon Data: {beacon}")
-        self.passengersBoardingLabel.config(text=f"Passengers Boarding: {boarding}")
-
-        # Update output labels
-        self.velocityLabel.config(text=f"Train Velocity: {velocity} mph")
-        self.passengersDisembarkingLabel.config(text=f"Passengers Disembarking: {disembarking}")
-
-        # Refresh again after 1s
-        self.after(1000, self.update_UI)
 
 
 if __name__ == "__main__":
