@@ -1,0 +1,16 @@
+
+
+{
+    "rules":[
+        {
+            "target":"commanded_speed",
+            "op":"-",
+            "value":5
+        },
+        {
+            "target":"commanded_authority",
+            "op":"-",
+            "value":50
+        }
+    ]
+}

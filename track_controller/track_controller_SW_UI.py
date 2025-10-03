@@ -10,19 +10,19 @@ from tkinter import filedialog
 import json
 import os
 
-import track_controller.track_controller_test_UI as testUI
-
-
-
 #variables for window size
 WindowWidth = 1200
 WindowHeight = 700
 
 class SWTrackControllerUI(tk.Tk):
 
-    def __init__(self,testUI):
-
-        super().__init__(testUI)#initialize the tk.Tk class
+    def __init__(self, master=None):
+        if master is None:
+            super().__init__()#initialize the tk.Tk class
+        else:
+            # If a master is provided, this is being used as a toplevel window
+            super().__init__()
+            self.master = master
 
         #set window title and size
         self.title("Track Controller Software Module")
@@ -112,13 +112,24 @@ class SWTrackControllerUI(tk.Tk):
         #------End Output Frame------#
 
         #------ Start PLC Upload Frame------#
-        UploadFrame = ttk.LabelFrame(self, text="Upload PLC File:")
-        UploadFrame.grid(row=0, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+        UploadFrame = ttk.LabelFrame(self, text="Upload PLC File - Maintenance Mode Necessary:")
+        UploadFrame.grid(row=1, column=0, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+
+        self.file_select_label = ttk.Label(UploadFrame, text="Select PLC File:")
+        self.file_select_label.pack(padx=WindowHeight/70, pady=(WindowWidth/30,0))
+
+        self.file_path_var = tk.StringVar(value="blue_line_plc.json")
+
+        self.file_path_button = ttk.Button(UploadFrame, text="Browse", command=self.browse_file,state="disabled")
+        self.file_path_button.pack(padx=WindowHeight/70, pady=(0,WindowWidth/120))
+
+        self.plc_file_label = ttk.Label(UploadFrame, text="blue_line_plc.json selected")
+        self.plc_file_label.pack(padx=WindowHeight/70, pady=WindowWidth/120)
         #------End PLC Upload Frame------#
         
         #---Start Map Frame---#
         MapFrame = ttk.LabelFrame(self, text="Track Map:")
-        MapFrame.grid(row=1, column=0, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
+        MapFrame.grid(row=0, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
         #---End Map Frame---#
 
         #---Start Status Frame---#
@@ -126,7 +137,10 @@ class SWTrackControllerUI(tk.Tk):
         StatusFrame.grid(row=1, column=2, sticky="NSEW", padx=WindowHeight/70, pady=WindowWidth/120)
         #---End Status Frame---#
 
-        self.WaysideInputs = self.Load_Inputs_Outputs()#load wayside inputs from JSON file
+        # Initialize file modification time tracking
+        self.last_mod_time = 0
+        
+        self.Load_Inputs_Outputs()#load wayside inputs from JSON file
 
 
 
@@ -135,7 +149,7 @@ class SWTrackControllerUI(tk.Tk):
     def Toggle_Maintenance_Mode(self):
 
        
-        widgets = [self.SwitchMenu, self.selectStateMenu, self.applyChangeButton]
+        widgets = [self.SwitchMenu, self.selectStateMenu, self.applyChangeButton, self.file_path_button]
         if self.maintenanceMode.get():
             s="readonly"
         else:
@@ -172,19 +186,21 @@ class SWTrackControllerUI(tk.Tk):
         else:
             waysideInputs = {}
 
-        #get switch options
-        switchOptions = waysideInputs.get("switches",[])
-        self.SwitchMenu.config(values=switchOptions)
-        #get switch states
-        switchStates = waysideInputs.get("switch_states",[])
-        #update switch states dictionary with loaded states
-        for index in range(len(switchOptions)):
-            switch = switchOptions[index]
-            if index < len(switchStates):
-                state = switchStates[index]
-            else:
-                state = "Straight"
-            self.switchStatesDictionary[switch] = state
+
+        if not self.maintenanceMode.get(): #only update switch options and states if not in maintenance mode
+            #get switch options
+            switchOptions = waysideInputs.get("switches",[])
+            self.SwitchMenu.config(values=switchOptions)
+            #get switch states
+            switchStates = waysideInputs.get("switch_states",[])
+            #update switch states dictionary with loaded states
+            for index in range(len(switchOptions)):
+                switch = switchOptions[index]
+                if index < len(switchStates):
+                    state = switchStates[index]
+                else:
+                    state = "Straight"
+                self.switchStatesDictionary[switch] = state
 
         #Get suggested speed
         suggestedSpeed = waysideInputs.get("suggested_speed",0)
@@ -198,33 +214,69 @@ class SWTrackControllerUI(tk.Tk):
         passengersDisembarking = waysideInputs.get("passengers_disembarking",0)
         self.passengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(passengersDisembarking))
 
+        #process plc file
+        if os.path.exists(self.file_path_var.get()):
+            with open(self.file_path_var.get(), "r") as plc:
+                plc_data = json.load(plc)
+                plc_rules = plc_data.get("rules",[])
+
+        #apply plc rules to suggested speed and authority
+        for rule in plc_rules:
+            target = rule.get("target","")
+            op = rule.get("op","")
+            value = rule.get("value",0)
+
+            if target == "commanded_speed":
+                if op == "-":
+                    commanded_speed = max(0, suggestedSpeed - value)
+                else:
+                    commanded_speed = suggestedSpeed
+            elif target == "commanded_authority":
+                if op == "-":
+                    commanded_authority = max(0, suggestedAuthority - value)
+                else:
+                    commanded_authority = suggestedAuthority
 
         #begin generating outputs
-        if os.path.exists("WaysideOutputs_testUI.json"):
-            with open("WaysideOutputs_testUI.json", "w") as file:
-                waysideOutputs = {
-                    "switches": list(self.switchStatesDictionary.keys()),
-                    "switch_states": list(self.switchStatesDictionary.values()),
-                    "commanded_speed": max(0, suggestedSpeed - 5),#simple logic to reduce speed by 5 mph
-                    "commanded_authority": max(0, suggestedAuthority - 50),#simple logic to reduce authority by 50 ft
-                    "passengers_disembarking": passengersDisembarking#forward information
-                }
-                json.dump(waysideOutputs, file, indent=4)
+        waysideOutputs = {
+            "switches": list(self.switchStatesDictionary.keys()),
+            "switch_states": list(self.switchStatesDictionary.values()),
+            "commanded_speed": max(0, commanded_speed),#simple logic to reduce speed by 5 mph
+            "commanded_authority": max(0, commanded_authority),#simple logic to reduce authority by 50 ft
+            "passengers_disembarking": passengersDisembarking#forward information
+        }
+        
+        # Always write outputs when inputs change
+        with open("WaysideOutputs_testUI.json", "w") as file:
+            json.dump(waysideOutputs, file, indent=4)
 
-            #update output labels
-            self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
-            self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
-            self.commandedPassengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(waysideOutputs["passengers_disembarking"]))
+        #update output labels
+        self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
+        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
+        self.commandedPassengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(waysideOutputs["passengers_disembarking"]))
             
-                
-
+        # Store the loaded inputs for next comparison
+        self.WaysideInputs = waysideInputs
 
         self.after(500, self.Load_Inputs_Outputs)#reload inputs every 500ms
+        #return waysideInputs
+
+    def browse_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+        if file_path:
+            self.file_path_var.set(file_path)
+            self.plc_file_label.config(text=os.path.basename(file_path) + " selected")
+        else:
+            self.file_path_var.set("blue_line_plc.json")
+            self.plc_file_label.config(text="blue_line_plc.json selected")
+
 #-------------------------------------#
 
 
 
-
+if __name__ == "__main__":
+    app = SWTrackControllerUI()
+    app.mainloop()
 
 
 
