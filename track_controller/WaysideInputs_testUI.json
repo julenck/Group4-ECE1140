@@ -1,17 +1,6 @@
 {
-  "switches": [
-    "SW1",
-    "SW2",
-    "SW3",
-    "SW4"
-  ],
-  "switch_states": [
-    "Straight",
-    "Straight",
-    "Diverging",
-    "Straight"
-  ],
+  "block_occupancies":[3,4],
+  "destination":10,
   "suggested_speed": 100,
-  "suggested_authority": 50,
-  "passengers_disembarking": 0
+  "suggested_authority": 50
 }
