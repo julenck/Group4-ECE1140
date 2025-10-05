@@ -214,6 +214,11 @@ class SWTrackControllerUI(tk.Tk):
         passengersDisembarking = waysideInputs.get("passengers_disembarking",0)
         self.passengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(passengersDisembarking))
 
+        # Minimal safe initializations to avoid NameError if PLC file or rules missing
+        plc_rules = []
+        commanded_speed = suggestedSpeed
+        commanded_authority = suggestedAuthority        #Added by oliver to help with HW files, if it messes things up you can remove it
+
         #process plc file
         if os.path.exists(self.file_path_var.get()):
             with open(self.file_path_var.get(), "r") as plc:
