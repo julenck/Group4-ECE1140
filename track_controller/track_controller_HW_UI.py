@@ -58,33 +58,55 @@ class HWTrackControllerUI(tk.Tk):
 
     def update_display(self):
        
-        fname = "WaysideOutputs_testUI.json"
+        if os.path.exists("WaysideInputs_testUI.json"):
+            with open("WaysideInputs_testUI.json", "r") as file:
+                waysideInputs = json.load(file)
 
-        if os.path.exists(fname):
-            try:
-                with open(fname, "r") as f:
-                    data = json.load(f)
-            except (json.JSONDecodeError, PermissionError, OSError):
-                data = None
         else:
-            data = None
+            waysideInputs = {}
 
-        if data:
-            commanded_speed = data.get("commanded_speed", 0)
-            commanded_authority = data.get("commanded_authority", 0)
+        suggestedSpeed = waysideInputs.get("suggested_speed",0)
+        self.suggestedSpeedLabel.config(text="Suggested Speed: " + str(suggestedSpeed) + " mph")
 
-            # Update labels
-            self.commandedSpeedLabel.config(text=f"Commanded Speed: {commanded_speed} mph")
-            self.commandedAuthorityLabel.config(text=f"Commanded Authority: {commanded_authority} ft")
+        suggestedAuthority = waysideInputs.get("suggested_authority",0)
+        self.suggestedAuthorityLabel.config(text="Suggested Authority: " + str(suggestedAuthority) + " ft")
 
-            # Update LCD (safe on non-RPi thanks to mock)
-            try:
-                lcd.clear()
-                lcd.write_string(f"Speed: {commanded_speed} mph")
-                lcd.crlf()
-                lcd.write_string(f"Auth: {commanded_authority} ft")
-            except Exception:
-                pass
+        if os.path.exists(self.file_path_var.get()):
+            with open(self.file_path_var.get(), "r") as plc:
+                plc_data = json.load(plc)
+                plc_rules = plc_data.get("rules",[])
+
+        #apply plc rules to suggested speed and authority
+        for rule in plc_rules:
+            target = rule.get("target","")
+            op = rule.get("op","")
+            value = rule.get("value",0)
+
+            if target == "commanded_speed":
+                if op == "-":
+                    commanded_speed = max(0, suggestedSpeed - value)
+                else:
+                    commanded_speed = suggestedSpeed
+            elif target == "commanded_authority":
+                if op == "-":
+                    commanded_authority = max(0, suggestedAuthority - value)
+                else:
+                    commanded_authority = suggestedAuthority
+
+        waysideOutputs = {
+            "emergency": self.emergency_active,
+            "commanded_speed": max(0, commanded_speed),#simple logic to reduce speed by 5 mph
+            "commanded_authority": max(0, commanded_authority),#simple logic to reduce authority by 50 ft
+        }
+
+        with open("WaysideOutputs_testUI.json", "w") as file:
+            json.dump(waysideOutputs, file, indent=4)
+
+        self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
+        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
+        self.emergencyStatusLabel.config(text="Emergency: " + ("ACTIVE" if waysideOutputs["emergency"] else "OFF"), foreground=("red" if waysideOutputs["emergency"] else "green"))
+
+        self.WaysideInputs = waysideInputs
 
         # schedule next poll
         self.after(500, self.update_display)
