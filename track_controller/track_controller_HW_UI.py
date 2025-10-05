@@ -10,8 +10,8 @@ from gpiozero import LED, Button, Buzzer
 from time import sleep
 
 # GPIO setup
-emergency_led = LED(27)
-emergency_button = Button(17, pull_up=False)
+emergency_led = LED(17)
+emergency_button = Button(18, pull_up=False)
 buzzer = Buzzer(22)
 
 # LCD setup (I2C, using freenove or iRasptek LCD library)
