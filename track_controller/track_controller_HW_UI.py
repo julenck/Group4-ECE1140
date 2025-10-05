@@ -57,11 +57,19 @@ class HWTrackControllerUI(tk.Tk):
             self.emergencyStatusLabel.config(text="Emergency: OFF", foreground="green")
 
     def update_display(self):
-        """Update speed/authority values from JSON and LCD."""
-        if os.path.exists("WaysideOutputs_testUI.json"):
-            with open("WaysideOutputs_testUI.json", "r") as f:
-                data = json.load(f)
+       
+        fname = "WaysideOutputs_testUI.json"
 
+        if os.path.exists(fname):
+            try:
+                with open(fname, "r") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, PermissionError, OSError):
+                data = None
+        else:
+            data = None
+
+        if data:
             commanded_speed = data.get("commanded_speed", 0)
             commanded_authority = data.get("commanded_authority", 0)
 
@@ -69,12 +77,16 @@ class HWTrackControllerUI(tk.Tk):
             self.commandedSpeedLabel.config(text=f"Commanded Speed: {commanded_speed} mph")
             self.commandedAuthorityLabel.config(text=f"Commanded Authority: {commanded_authority} ft")
 
-            # Update LCD
-            lcd.clear()
-            lcd.write_string(f"Speed: {commanded_speed} mph")
-            lcd.crlf()
-            lcd.write_string(f"Auth: {commanded_authority} ft")
+            # Update LCD (safe on non-RPi thanks to mock)
+            try:
+                lcd.clear()
+                lcd.write_string(f"Speed: {commanded_speed} mph")
+                lcd.crlf()
+                lcd.write_string(f"Auth: {commanded_authority} ft")
+            except Exception:
+                pass
 
+        # schedule next poll
         self.after(500, self.update_display)
 
 if __name__ == "__main__":
