@@ -50,9 +50,9 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
             base = switch["state"]["base"]
             alt = switch["state"]["alt"]
 
-        if destination in alt["destination"] and any(block in block_occupancies for block in base["occupied"]):
+        if destination in alt["destination"] or any(block in block_occupancies for block in base["occupied"]):
             switch_pos = "ALT"
-        elif destination in base["destination"] and any(block in block_occupancies for block in alt["occupied"]):
+        elif destination in base["destination"] or any(block in block_occupancies for block in alt["occupied"]):
             switch_pos = "BASE"
         elif any(block in block_occupancies for block in base["occupied"]):
             switch_pos = "BASE"

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog
 import json
 
 from track_controller_SW_UI import SWTrackControllerUI
@@ -178,7 +178,7 @@ class TestUI(tk.Frame):
 
     def update_outputs(self):
         #read in outputs
-        with open("WaysideOutputs_testUI.json", "r") as f:
+        with open("WaysideOutputs_testUISW.json", "r") as f:
             outputs = json.load(f)
 
         #configure output labels
