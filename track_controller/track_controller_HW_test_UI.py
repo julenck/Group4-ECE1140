@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import json
 
-from track_controller_SW_UI import SWTrackControllerUI
+from track_controller_HW_UI import HWTrackControllerUI
 
 WindowWidth = 900
 WindowHeight = 600
@@ -178,7 +178,7 @@ class TestUI(tk.Frame):
 
     def update_outputs(self):
         #read in outputs
-        with open("WaysideOutputs_testUI.json", "r") as f:
+        with open("WaysideInputs_testUI.json", "r") as f:
             outputs = json.load(f)
 
         #configure output labels

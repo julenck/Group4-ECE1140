@@ -10,8 +10,8 @@ from gpiozero import LED, Button, Buzzer
 from time import sleep
 
 # GPIO setup
-emergency_led = LED(27)
-emergency_button = Button(17, pull_up=False)
+emergency_led = LED(17)
+emergency_button = Button(18, pull_up=False)
 buzzer = Buzzer(22)
 
 # LCD setup (I2C, using freenove or iRasptek LCD library)
@@ -30,6 +30,16 @@ class HWTrackControllerUI(tk.Tk):
         # Emergency status variable
         self.emergency_active = False
 
+        # PLC file path var (match SW UI)
+        self.file_path_var = tk.StringVar(value="blue_line_plc.json")
+
+        # GUI labels for inputs (match SW UI names used in update_display)
+        self.suggestedSpeedLabel = ttk.Label(self, text="Suggested Speed: N/A")
+        self.suggestedSpeedLabel.pack(pady=5)
+
+        self.suggestedAuthorityLabel = ttk.Label(self, text="Suggested Authority: N/A")
+        self.suggestedAuthorityLabel.pack(pady=5)
+
         # GUI label for hardware state
         self.commandedSpeedLabel = ttk.Label(self, text="Commanded Speed: N/A")
         self.commandedSpeedLabel.pack(pady=10)
@@ -39,6 +49,9 @@ class HWTrackControllerUI(tk.Tk):
 
         self.emergencyStatusLabel = ttk.Label(self, text="Emergency: OFF", foreground="green")
         self.emergencyStatusLabel.pack(pady=20)
+
+        # Ensure WaysideInputs placeholder exists
+        self.WaysideInputs = {}
 
         # Periodic update loop
         self.after(500, self.update_display)
@@ -57,24 +70,82 @@ class HWTrackControllerUI(tk.Tk):
             self.emergencyStatusLabel.config(text="Emergency: OFF", foreground="green")
 
     def update_display(self):
-        """Update speed/authority values from JSON and LCD."""
-        if os.path.exists("WaysideOutputs_testUI.json"):
-            with open("WaysideOutputs_testUI.json", "r") as f:
-                data = json.load(f)
+       
+        plc_rules = []
+        commanded_speed = 0
+        commanded_authority = 0
 
-            commanded_speed = data.get("commanded_speed", 0)
-            commanded_authority = data.get("commanded_authority", 0)
+        # Load inputs file if present
+        if os.path.exists("WaysideInputs_testUI.json"):
+            try:
+                with open("WaysideInputs_testUI.json", "r") as file:
+                    waysideInputs = json.load(file)
+            except Exception:
+                waysideInputs = {}
+        else:
+            waysideInputs = {}
 
-            # Update labels
-            self.commandedSpeedLabel.config(text=f"Commanded Speed: {commanded_speed} mph")
-            self.commandedAuthorityLabel.config(text=f"Commanded Authority: {commanded_authority} ft")
+        suggestedSpeed = waysideInputs.get("suggested_speed", 0)
+        self.suggestedSpeedLabel.config(text="Suggested Speed: " + str(suggestedSpeed) + " mph")
 
-            # Update LCD
-            lcd.clear()
-            lcd.write_string(f"Speed: {commanded_speed} mph")
-            lcd.crlf()
-            lcd.write_string(f"Auth: {commanded_authority} ft")
+        suggestedAuthority = waysideInputs.get("suggested_authority", 0)
+        self.suggestedAuthorityLabel.config(text="Suggested Authority: " + str(suggestedAuthority) + " ft")
 
+        # Load PLC rules if PLC file exists
+        if self.file_path_var.get() and os.path.exists(self.file_path_var.get()):
+            try:
+                with open(self.file_path_var.get(), "r") as plc:
+                    plc_data = json.load(plc)
+                    plc_rules = plc_data.get("rules", [])
+            except Exception:
+                plc_rules = []
+
+        # Initialize commanded values from suggested defaults
+        commanded_speed = suggestedSpeed
+        commanded_authority = suggestedAuthority
+
+        # Apply PLC rules (if any)
+        for rule in plc_rules:
+            target = rule.get("target", "")
+            op = rule.get("op", "")
+            value = rule.get("value", 0)
+
+            if target == "commanded_speed":
+                if op == "-":
+                    commanded_speed = max(0, suggestedSpeed - value)
+                else:
+                    commanded_speed = suggestedSpeed
+            elif target == "commanded_authority":
+                if op == "-":
+                    commanded_authority = max(0, suggestedAuthority - value)
+                else:
+                    commanded_authority = suggestedAuthority
+
+        # Build outputs (no switches in HW-only view here)
+        waysideOutputs = {
+            "emergency": self.emergency_active,
+            "commanded_speed": max(0, commanded_speed),
+            "commanded_authority": max(0, commanded_authority),
+        }
+
+        # Write outputs file
+        try:
+            with open("WaysideOutputs_testUI.json", "w") as file:
+                json.dump(waysideOutputs, file, indent=4)
+        except Exception:
+            pass
+
+        # Update displayed values
+        self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
+        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
+        self.emergencyStatusLabel.config(
+            text="Emergency: " + ("ACTIVE" if waysideOutputs["emergency"] else "OFF"),
+            foreground=("red" if waysideOutputs["emergency"] else "green")
+        )
+
+        self.WaysideInputs = waysideInputs
+
+        # schedule next poll
         self.after(500, self.update_display)
 
 if __name__ == "__main__":
