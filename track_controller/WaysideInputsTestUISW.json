@@ -1,6 +1,9 @@
 {
-    "block_occupancies":[3,4],
-    "destination":15,
-    "suggested_speed": 100,
-    "suggested_authority": 50
+  "suggested_speed": 80,
+  "suggested_authority": 551,
+  "destination": 10,
+  "block_occupancies": [
+    1,
+    15
+  ]
 }
