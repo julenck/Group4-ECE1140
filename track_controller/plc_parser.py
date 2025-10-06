@@ -2,18 +2,17 @@
 
 
 import json
+# #test this with a sample plc file and block occupancies
+# def main():
+# 
+#     plc_file_path = "test_plc.json"
+#     block_occupancies = [3]  # Example occupied blocks
+#     destination = 15  # Example destination block ID
+# 
+#     updated_states = parse_plc_data(plc_file_path, block_occupancies, destination)
+#     print(updated_states)
 
-#test this with a sample plc file and block occupancies
-def main():
-
-    plc_file_path = "test_plc.json"
-    block_occupancies = [3]  # Example occupied blocks
-    destination = 15  # Example destination block ID
-
-    updated_states = parse_plc_data(plc_file_path, block_occupancies, destination)
-    print(updated_states)
-
-def parse_plc_data(plc_file_path,block_occupancies,destination):
+def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_auth):
 
     """
     Update switch, light, and crossing states based on occupied blocks and destination.
@@ -38,9 +37,9 @@ def parse_plc_data(plc_file_path,block_occupancies,destination):
     updated_states = {
         "switches": {},
         "lights": {},
-        "crossings": {}#,
-        #"commanded_speed": 0,
-        #"commanded_authority": 0
+        "crossings": {},
+        "commanded_speed": 0,
+        "commanded_authority": 0
     }
 
     for section, infrastructure in plc_data["blue_line"].items():
@@ -77,9 +76,9 @@ def parse_plc_data(plc_file_path,block_occupancies,destination):
             else:
                 crossing_state = "OPEN"
             updated_states["crossings"][crossing["block_id"]] = crossing_state
-    
+
+    updated_states["commanded_speed"] = sug_speed
+    updated_states["commanded_authority"] = sug_auth
+
     return updated_states
 
-
-if __name__ == "__main__":
-    main()
