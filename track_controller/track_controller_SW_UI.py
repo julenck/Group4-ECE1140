@@ -254,7 +254,7 @@ class SWTrackControllerUI(tk.Tk):
 
         #process plc file
         #if not self.maintenanceMode.get(): #only update outputs if not in maintenance mode
-        wayside_outputs = plc_parser.parse_plc_data(self.file_path_var.get(), waysideInputs.get("block_occupancies",[]), waysideInputs.get("destination",0), suggestedSpeed, suggestedAuthority)
+        wayside_outputs = plc_parser.parse_plc_data(self.file_path_var.get(), blockOccupancies, destination, suggestedSpeed, suggestedAuthority)
         switch_options = list("switch"+str(key) for key in wayside_outputs.get("switches",[]).keys())
         self.SwitchMenu.config(values=switch_options)
 
