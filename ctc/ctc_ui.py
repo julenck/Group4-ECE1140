@@ -95,8 +95,8 @@ manual_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
 tk.Label(manual_frame, text="Select a Train to Dispatch", font=label_font, bg="lightgreen").grid(row=0, column=0, sticky='w', padx=10, pady=5)
 tk.Label(manual_frame, text="Select a Line", font=label_font, bg="lightgreen").grid(row=0, column=1, sticky='w', padx=10, pady=5)
-tk.Label(manual_frame, text="Enter Suggested Speed", font=label_font, bg="lightgreen").grid(row=0, column=2, sticky='w', padx=10, pady=5)
-tk.Label(manual_frame, text="Enter Authority", font=label_font, bg="lightgreen").grid(row=0, column=3, sticky='w', padx=10, pady=5)
+tk.Label(manual_frame, text="Enter Suggested Speed in mph", font=label_font, bg="lightgreen").grid(row=0, column=2, sticky='w', padx=10, pady=5)
+tk.Label(manual_frame, text="Enter Authority in yards", font=label_font, bg="lightgreen").grid(row=0, column=3, sticky='w', padx=10, pady=5)
 
 manual_train_box = ttk.Combobox(manual_frame, values=["Train 1", "Train 2", "Train 3"], font=input_font)
 manual_line_box = ttk.Combobox(manual_frame, values=["Red", "Blue", "Green"], font=input_font)
@@ -239,8 +239,8 @@ active_trains = create_table_section(
     "Active Trains",
     ("Train", "Line", "Block", "State", "Suggested Speed", "Authority", "Direction", "Station", "Arrival Time", "Occupancy"),
     [
-        ("Red A1", "Red", "4", "Running", "5", "3", "CW", "Shadyside", "0:33", "26"),
-        ("Red A2", "Red", "5", "Running", "7", "4", "CW", "Pioneer", "0:13", "0"),
+        ("Train 1", "Red", "4", "Running", "5", "3", "CW", "Shadyside", "0:33", "26"),
+        ("Train 2", "Red", "5", "Running", "7", "4", "CW", "Pioneer", "0:13", "0"),
     ]
 )
 active_trains.grid(row=0, column=0, sticky='nsew', padx=5)
