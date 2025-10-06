@@ -1,23 +1,23 @@
 """Test UI module for Train Controller simulation.
 
 This module provides a graphical user interface for testing the Train Controller
-functionality. It allows users to simulate various train inputs from the train
-model and observe the outputs produced by the driver. The UI is divided into input controls for simulating
-different conditions and output displays showing the Driver's commands in the driver UI.
+functionality. It allows users to simulate train inputs from the train model and 
+observe the outputs produced by the driver. The UI is divided into input controls 
+for simulating different conditions and output displays showing the Driver's 
+commands in the driver UI.
 
-The module interfaces with the train_database module to get the train states
-between the test UI and the main train controller interface.
+The module interfaces with the train_controller_api module to handle state management
+and communication with the Train Model.
 
 Typical usage example:
     python test_ui.py
 
 Dependencies:
     - tkinter: For GUI components
-    - train_database: For state persistence
+    - train_controller_api: For state management and Train Model communication
 """
 
 import tkinter as tk
-
 from tkinter import ttk
 import os
 import sys
@@ -27,8 +27,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-# Import database directly from models directory
-from database.database import train_database
+# Import API from api directory
+from api.train_controller_api import train_controller_api
 
 
 class train_controller_test_ui(tk.Tk):
@@ -55,12 +55,12 @@ class train_controller_test_ui(tk.Tk):
     def __init__(self):
         """Initialize the test UI window and create interface elements.
         
-        Sets up the main window, initializes database connection, and creates
+        Sets up the main window, initializes API connection, and creates
         the input and output frames. Configures grid layout for responsive UI.
         """
         super().__init__()
         self.title("Train Controller Test UI")
-        self.db = train_database()
+        self.api = train_controller_api()
         
         # Create main frames
         self.create_input_frame()
@@ -69,6 +69,38 @@ class train_controller_test_ui(tk.Tk):
         # Configure grid
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
+        
+        # Start periodic updates of driver outputs
+        self.update_interval = 500  # 500ms = 0.5 seconds
+        self.periodic_update()
+    
+    def periodic_update(self):
+        """Update the output displays periodically to show current driver commands."""
+        try:
+            # Get both the full state and driver outputs
+            state = self.api.get_state()
+            driver_outputs = self.api.send_to_train_model()
+            
+            # Combine them to show complete status
+            display_state = {
+                'set_speed': state.get('set_speed', 0),
+                'power_command': driver_outputs.get('power_command', 0),
+                'emergency_brake': driver_outputs.get('emergency_brake', False),
+                'service_brake': driver_outputs.get('service_brake', 0),
+                'left_door': driver_outputs.get('left_door', False),
+                'right_door': driver_outputs.get('right_door', False),
+                'lights': driver_outputs.get('lights', False),
+                'train_temperature': state.get('train_temperature', 70),
+                'next_stop': state.get('next_stop', ''),
+                'station_side': state.get('station_side', '')
+            }
+            
+            self.update_outputs(display_state)
+        except Exception as e:
+            print(f"Update error: {e}")
+        finally:
+            # Schedule next update
+            self.after(self.update_interval, self.periodic_update)
     
     def create_input_frame(self):
         """Create and configure the input control frame.
@@ -85,25 +117,6 @@ class train_controller_test_ui(tk.Tk):
         """
         input_frame = ttk.LabelFrame(self, text="Force Inputs")
         input_frame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
-
-
-        # Train selection
-        train_frame = ttk.Frame(input_frame)
-        train_frame.grid(row=0, column=0, columnspan=2, pady=5)
-        
-        ttk.Label(train_frame, text="Select Train ID:").grid(row=0, column=0, padx=5)
-        self.train_id_var = tk.StringVar()
-        self.train_selector = ttk.Combobox(train_frame, textvariable=self.train_id_var, state="readonly", width=10)
-        self.train_selector.grid(row=0, column=1, padx=5)
-        
-
-        ttk.Button(train_frame, text="New Train", command=self.add_new_train).grid(row=0, column=2, padx=5)
-        
-        # Update train list
-        self.update_train_list()
-        
-        # Bind selection change event
-        self.train_selector.bind('<<ComboboxSelected>>', self.on_train_selected)
         
         # Input fields
         self.commanded_speed_entry = self.make_entry_text(input_frame, "Commanded Speed (mph)", 1, "30")
@@ -211,39 +224,9 @@ class train_controller_test_ui(tk.Tk):
         value_label.grid(row=row, column=1, padx=5, pady=5)
         return value_label
 
-    def update_train_list(self):
-        """Update the train selector dropdown with current train IDs.
-        
-        Retrieves the list of train IDs from the database and updates the
-        train selector combobox. If there are trains and none is selected,
-        selects the first train in the list.
-        """
-        train_ids = train_database.get_all_train_ids(self.db)
-        
-        self.train_selector['values'] = train_ids
-        if train_ids and not self.train_selector.get():
-            self.train_selector.set(train_ids[0])
-            
-    def add_new_train(self):
-        """Create a new train instance with default initial state.
-        Creates a new train entry in the database so that we can test a HW train and
-        a SW train without having to implement 2 different test UI's with a unique ID and
-        default initial parameter values. Updates the train selector and
-        automatically selects the new train.
-        
-        Initial state includes:
-            - Default speeds (30 mph)
-            - Default authority (30 yds)
-            - Default station (Herron Ave, right side)
-            - All systems functioning (no failures)
-        """
-        # Get existing train IDs
-        existing_ids = self.db.get_all_train_ids()
-        # Create new ID (max + 1, or 1 if no trains exist)
-        new_id = max(existing_ids) + 1 if existing_ids else 1
-        
-        # Create initial state for new train
-        initial_state = {
+    def reset_to_defaults(self):
+        """Reset all input fields to default values."""
+        defaults = {
             'commanded_speed': "30",
             'speed_limit': "40",
             'commanded_authority': "30",
@@ -258,124 +241,128 @@ class train_controller_test_ui(tk.Tk):
             'brake_failure': "False"
         }
         
-        # Add new train to database
-        self.db.update_train_state(new_id, initial_state)
+        # Reset all input fields
+        self.commanded_speed_entry.delete(0, tk.END)
+        self.commanded_speed_entry.insert(0, defaults['commanded_speed'])
         
-        # Update train list and select new train
-        self.update_train_list()
-        self.train_selector.set(new_id)
-        self.on_train_selected(None)
+        self.speed_limit_entry.delete(0, tk.END)
+        self.speed_limit_entry.insert(0, defaults['speed_limit'])
         
-    def on_train_selected(self, event):
-        """Handle train selection change event.
+        self.commanded_authority_entry.delete(0, tk.END)
+        self.commanded_authority_entry.insert(0, defaults['commanded_authority'])
         
-        Updates all input fields with the current state of the selected train
-        from the database.
+        self.train_velocity_entry.delete(0, tk.END)
+        self.train_velocity_entry.insert(0, defaults['velocity'])
         
-        Args:
-            event: The selection event (not used, can be None)
-        """
-        train_id = int(self.train_selector.get())
-        state = self.db.get_train_state(train_id)
-        if state:
-            # Update input fields with current train state
-            self.commanded_speed_entry.delete(0, tk.END)
-            self.commanded_speed_entry.insert(0, str(state[1]))  # commanded_speed
-            # ... update other fields similarly
+        self.next_stop_beacon_entry.delete(0, tk.END)
+        self.next_stop_beacon_entry.insert(0, defaults['next_stop'])
+        
+        self.station_side_beacon_entry.set(defaults['station_side'])
+        
+        self.current_temperature_entry.delete(0, tk.END)
+        self.current_temperature_entry.insert(0, defaults['train_temperature'])
+        
+        self.service_brake_entry.delete(0, tk.END)
+        self.service_brake_entry.insert(0, defaults['service_brake'])
+        
+        self.emergency_brake_entry.set(defaults['emergency_brake'])
+        self.train_engine_failure_entry.set(defaults['engine_failure'])
+        self.signal_pickup_failure_entry.set(defaults['signal_failure'])
+        self.brake_failure_entry.set(defaults['brake_failure'])
             
     def simulate(self):
         """Run a simulation step with current input values.
         
-        Collects all current input values, updates the train state in the
-        database, and refreshes the output display. This simulates one
-        control cycle of the train controller.
-        
-        The simulation includes:
-            - Speed and authority parameters
-            - Station and beacon information
-            - Brake settings
-            - System failure states
-            
-        Does nothing if no train is selected.
+        Collects all current input values and sends them to the Train Controller
+        via the API. This simulates one control cycle of the train controller.
+        Only sends values that would come from the Train Model, maintaining
+        separation between Train Model inputs and Driver UI controls.
         """
-        if not self.train_selector.get():
-            return
+        try:
+            # Collect only Train Model inputs
+            state_dict = {
+                # Speed and authority values from wayside/track
+                'commanded_speed': float(self.commanded_speed_entry.get()),
+                'speed_limit': float(self.speed_limit_entry.get()),
+                'commanded_authority': float(self.commanded_authority_entry.get()),
+                'velocity': float(self.train_velocity_entry.get()),
+                
+                # Station and beacon information
+                'next_stop': self.next_stop_beacon_entry.get(),
+                'station_side': self.station_side_beacon_entry.get(),
+                
+                # Environmental readings
+                'train_temperature': float(self.current_temperature_entry.get()),
+                
+                # System failures
+                'engine_failure': self.train_engine_failure_entry.get() == "True",
+                'signal_failure': self.signal_pickup_failure_entry.get() == "True",
+                'brake_failure': self.brake_failure_entry.get() == "True"
+            }
             
-        train_id = int(self.train_selector.get())
-        # Collect all input values
-        state_dict = {
-            'commanded_speed': self.commanded_speed_entry.get(),
-            'speed_limit': self.speed_limit_entry.get(),
-            'commanded_authority': self.commanded_authority_entry.get(),
-            'velocity': self.train_velocity_entry.get(),
-            'next_stop': self.next_stop_beacon_entry.get(),
-            'station_side': self.station_side_beacon_entry.get(),
-            'train_temperature': self.current_temperature_entry.get(),
-            'service_brake': self.service_brake_entry.get(),
-            'emergency_brake': self.emergency_brake_entry.get(),
-            'engine_failure': self.train_engine_failure_entry.get(),
-            'signal_failure': self.signal_pickup_failure_entry.get(),
-            'brake_failure': self.brake_failure_entry.get()
-        }
-        
-        # Update database with current train ID
-        self.db.update_train_state(train_id, state_dict)
-        
-        # Update output display
-        self.update_outputs(state_dict)
+            # Send only Train Model inputs to the Train Controller
+            self.api.receive_from_train_model(state_dict)
+            
+        except ValueError as e:
+            print(f"Error converting values: {e}")
+        except Exception as e:
+            print(f"Simulation error: {e}")
 
     def update_outputs(self, state_dict):
         """Update all output displays with current state values.
         
-        Updates all output fields in the interface to reflect the current
-        train state. Handles missing values by using appropriate defaults.
+        Updates all output fields in the interface to reflect what the Driver UI
+        is sending to the Train Model, along with relevant state information.
         
         Args:
-            state_dict: Dictionary containing the current train state values:
-                - Speed and power values
-                - Brake status
-                - Door controls
-                - Environmental controls
-                - System failures
-                
-        The method updates:
-            - Speed and power displays
-            - Brake status indicators
-            - Door status based on station side
-            - Station announcements
-            - Environmental control status
-            - System failure indicators
+            state_dict: Dictionary containing the combined state values:
+                - Driver-set values (set_speed, door controls, etc.)
+                - Calculated values (power_command)
+                - Current train state (temperature, announcements)
         """
-        # Update speed and power
-        self.set_speed.config(text=f"{state_dict.get('set_speed', '0')} mph")
-        self.power_command.config(text=f"{state_dict.get('power_command', '0')} W")
-        
-        # Update brake status
-        self.emergency_brake_status.config(text=state_dict.get('emergency_brake', 'off').upper())
-        self.service_brake_status.config(text=f"{state_dict.get('service_brake', '0')}%")
-        
-        # # Update door status based on station side this should only update based on the driver input
-        # if state_dict.get('station_side') == 'left':
-        #     self.left_door_status.config(text="OPEN")
-        #     self.right_door_status.config(text="CLOSED")
-        # else:  # default to right if not specified
-        #     self.left_door_status.config(text="CLOSED")
-        #     self.right_door_status.config(text="OPEN")
-        
-        # Update station announcement
-        self.announcement_status.config(text=state_dict.get('next_stop', 'No announcement'))
-        
-        # Update environmental controls
-        self.lights_status.config(text=str(state_dict.get('lights', 'OFF')).upper())
-        
-        # Handle temperature controls
-        current_temp = int(self.current_temperature_entry.get())
-        if state_dict.get('temperature_up') == "True":
-            current_temp += 1
-        if state_dict.get('temperature_down') == "True":
-            current_temp -= 1
-        # Show temperature controls status
-        self.current_temperature_status.config(text=f"{current_temp}°F")
+        try:
+            # Update speed and power displays (from driver controls)
+            self.set_speed.config(text=f"{state_dict.get('set_speed', 0):.1f} mph")
+            self.power_command.config(text=f"{state_dict.get('power_command', 0):.1f} W")
+            
+            # Update brake status (from driver controls)
+            self.emergency_brake_status.config(
+                text="ON" if state_dict.get('emergency_brake', False) else "OFF",
+            )
+            self.service_brake_status.config(
+                text=f"{state_dict.get('service_brake', 0):.1f}%"
+            )
+            
+            # Update door status (from driver controls)
+            self.left_door_status.config(
+                text="OPEN" if state_dict.get('left_door', False) else "CLOSED"
+            )
+            self.right_door_status.config(
+                text="OPEN" if state_dict.get('right_door', False) else "CLOSED"
+            )
+            
+            # Update station announcement
+            next_stop = state_dict.get('next_stop', '')
+            if next_stop:
+                announcement = f"Next Stop: {next_stop}"
+                if state_dict.get('station_side'):
+                    announcement += f" ({state_dict.get('station_side')} side)"
+            else:
+                announcement = "No announcement"
+            self.announcement_status.config(text=announcement)
+            
+            # Update environmental controls (from driver inputs)
+            self.lights_status.config(
+                text="ON" if state_dict.get('lights', False) else "OFF"
+            )
+            
+            # Update temperature display
+            self.current_temperature_status.config(
+                text=f"{state_dict.get('train_temperature', 70):.1f}°F"
+            )
+            
+        except Exception as e:
+            print(f"Error updating outputs: {e}")
 
 if __name__ == "__main__":
     app = train_controller_test_ui()
