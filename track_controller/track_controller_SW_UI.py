@@ -56,7 +56,7 @@ class SWTrackControllerUI(tk.Tk):
         self.SwitchMenu.pack(padx=0, pady=0)
 
         #Switch state dictionary
-       # self.switchStatesDictionary = {switch: "Straight" for switch in switchOptions}#initialize all switches to "Straight"
+        self.switchStatesDictionary = {switch: "BASE" for switch in switchOptions}#initialize all switches to "BASE"
 
 
         #display current switch state
@@ -203,8 +203,8 @@ class SWTrackControllerUI(tk.Tk):
     def Load_Inputs_Outputs(self):
 
         #load wayside inputs from JSON file
-        if os.path.exists("WaysideInputs_testUI.json"):
-            with open("WaysideInputs_testUI.json", "r") as file:
+        if os.path.exists("WaysideInputsTestUISW.json"):
+            with open("WaysideInputsTestUISW.json", "r") as file:
                 waysideInputs = json.load(file)
         else:
             waysideInputs = {}
@@ -253,9 +253,9 @@ class SWTrackControllerUI(tk.Tk):
         commanded_authority = suggestedAuthority        #Added by oliver to help with HW files, if it messes things up you can remove it
 
         #process plc file
+        #if not self.maintenanceMode.get(): #only update outputs if not in maintenance mode
         wayside_outputs = plc_parser.parse_plc_data(self.file_path_var.get(), waysideInputs.get("block_occupancies",[]), waysideInputs.get("destination",0), suggestedSpeed, suggestedAuthority)
         switch_options = list("switch"+str(key) for key in wayside_outputs.get("switches",[]).keys())
-
         self.SwitchMenu.config(values=switch_options)
 
         #update switch states label
@@ -274,12 +274,12 @@ class SWTrackControllerUI(tk.Tk):
         self.light_state_label.config(text="Light States: " + light_states_str if light_states_str else "Light States: N/A")
         
         # Always write outputs when inputs change
-        with open("WaysideOutputs_testUI.json", "w") as file:
+        with open("WaysideOutputs_testUISW.json", "w") as file:
             json.dump(wayside_outputs, file, indent=4)
 
         #update output labels
         self.commandedSpeedLabel.config(text="Commanded Speed: " + str(wayside_outputs["commanded_speed"]) + " mph")
-        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(wayside_outputs["commanded_authority"]) + " ft")
+        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(wayside_outputs["commanded_authority"]) + " yds")
         #self.commandedPassengersDisembarkingLabel.config(text="Passengers Disembarking: " + str(waysideOutputs["passengers_disembarking"]))
             
         # Store the loaded inputs for next comparison

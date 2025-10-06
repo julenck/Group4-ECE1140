@@ -1,0 +1,14 @@
+{
+    "switches": {
+        "5": "ALT"
+    },
+    "lights": {
+        "6": "GREEN",
+        "11": "GREEN"
+    },
+    "crossings": {
+        "3": "CLOSED"
+    },
+    "commanded_speed": 100,
+    "commanded_authority": 50
+}
