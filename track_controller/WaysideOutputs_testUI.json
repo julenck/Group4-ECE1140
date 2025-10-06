@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "switches": {
         "5": "ALT"
     },
@@ -11,4 +12,21 @@
     },
     "commanded_speed": 100,
     "commanded_authority": 50
+=======
+    "switches": [
+        "SW1",
+        "SW2",
+        "SW3",
+        "SW4"
+    ],
+    "switch_states": [
+        "Straight",
+        "Straight",
+        "Diverging",
+        "Straight"
+    ],
+    "commanded_speed": 62,
+    "commanded_authority": 650,
+    "passengers_disembarking": 0
+>>>>>>> 87d4615cc2b7e075c4a1d1e809646351d8d33675
 }

@@ -6,7 +6,7 @@ Runs both the Test UI and Main Software UI together
   # main
 import tkinter as tk
 from track_controller_SW_UI import SWTrackControllerUI
-from track_controller_test_UI import TestUI
+from track_controller_SW_test_UI import TestUI
 
 def main():
     # Create the main software UI (this creates the single Tk root)
