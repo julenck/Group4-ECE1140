@@ -6,6 +6,7 @@ import json
 import os
 from gpiozero import LED, Button, Buzzer
 from time import sleep
+import plc_parser
 
 # GPIO setup
 emergency_led = LED(17)
@@ -51,6 +52,13 @@ class HWTrackControllerUI(tk.Tk):
         self.emergencyStatusLabel = ttk.Label(self, text="Emergency: OFF", foreground="green")
         self.emergencyStatusLabel.pack(pady=20)
 
+        # Add gate and light labels so HW UI shows those statuses
+        self.gateStateLabel = ttk.Label(self, text="Gate States: N/A")
+        self.gateStateLabel.pack(pady=5)
+
+        self.lightStateLabel = ttk.Label(self, text="Light States: N/A")
+        self.lightStateLabel.pack(pady=5)
+
         # Ensure WaysideInputs placeholder exists
         self.WaysideInputs = {}
 
@@ -78,17 +86,14 @@ class HWTrackControllerUI(tk.Tk):
         commanded_speed = 0
         commanded_authority = 0
 
-        # Load inputs file if present
+        # Load inputs file if present (now includes block_occupancies and destination and optional emergency flag)
         if os.path.exists("WaysideInputs_testUI.json"):
             try:
                 with open("WaysideInputs_testUI.json", "r") as file:
-
                     waysideInputs = json.load(file)
             except Exception:
-
                 waysideInputs = {}
         else:
-
             waysideInputs = {}
 
         suggestedSpeed = waysideInputs.get("suggested_speed", 0)
@@ -97,72 +102,66 @@ class HWTrackControllerUI(tk.Tk):
         suggestedAuthority = waysideInputs.get("suggested_authority", 0)
         self.suggestedAuthorityLabel.config(text="Suggested Authority: " + str(suggestedAuthority) + " ft")
 
-        # Load PLC rules if PLC file exists
-        if self.file_path_var.get() and os.path.exists(self.file_path_var.get()):
-            try:
-                with open(self.file_path_var.get(), "r") as plc:
-
-                    plc_data = json.load(plc)
-                    plc_rules = plc_data.get("rules", [])
-
-            except Exception:
-
-                plc_rules = []
-
-        # Initialize commanded values from suggested defaults
-        commanded_speed = suggestedSpeed
-        commanded_authority = suggestedAuthority
-
-        # Apply PLC rules (if any)
-        for rule in plc_rules:
-
-            target = rule.get("target", "")
-            op = rule.get("op", "")
-            value = rule.get("value", 0)
-
-            if target == "commanded_speed":
-
-                if op == "-":
-
-                    commanded_speed = max(0, suggestedSpeed - value)
+        # If test UI set an emergency flag, honor it here
+        if "emergency" in waysideInputs:
+            desired_emergency = bool(waysideInputs.get("emergency", False))
+            if desired_emergency != self.emergency_active:
+                # update hardware indicators to match input
+                self.emergency_active = desired_emergency
+                if self.emergency_active:
+                    emergency_led.on()
+                    buzzer.on()
+                    self.emergencyStatusLabel.config(text="Emergency: ACTIVE", foreground="red")
                 else:
+                    emergency_led.off()
+                    buzzer.off()
+                    self.emergencyStatusLabel.config(text="Emergency: OFF", foreground="green")
 
-                    commanded_speed = suggestedSpeed
+        # Read block occupancies and destination for PLC logic
+        block_occupancies = waysideInputs.get("block_occupancies", [])
+        destination = waysideInputs.get("destination", 0)
 
-            elif target == "commanded_authority":
+        # Use plc_parser to compute switches/lights/crossings and commanded values
+        try:
+            waysideOutputs = plc_parser.parse_plc_data(
+                self.file_path_var.get(), block_occupancies, destination, suggestedSpeed, suggestedAuthority
+            )
+        except Exception:
+            # fall back to minimal outputs if parser fails
+            waysideOutputs = {
+                "switches": {},
+                "lights": {},
+                "crossings": {},
+                "commanded_speed": max(0, suggestedSpeed),
+                "commanded_authority": max(0, suggestedAuthority),
+            }
 
-                if op == "-":
+        # Ensure emergency is included in outputs
+        waysideOutputs["emergency"] = self.emergency_active
 
-                    commanded_authority = max(0, suggestedAuthority - value)
-                else:
-
-                    commanded_authority = suggestedAuthority
-
-        # Build outputs (no switches in HW-only view here)
-        waysideOutputs = {
-
-            "emergency": self.emergency_active,
-            "commanded_speed": max(0, commanded_speed),
-            "commanded_authority": max(0, commanded_authority),
-        }
-
-        # Write outputs file
+        # Write outputs file (HW uses WaysideOutputs_testUI.json)
         try:
             with open("WaysideOutputs_testUI.json", "w") as file:
-
                 json.dump(waysideOutputs, file, indent=4)
-
         except Exception:
-            
             pass
 
         # Update displayed values
-        self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs["commanded_speed"]) + " mph")
-        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs["commanded_authority"]) + " ft")
+        self.commandedSpeedLabel.config(text="Commanded Speed: " + str(waysideOutputs.get("commanded_speed", "N/A")) + " mph")
+        self.commandedAuthorityLabel.config(text="Commanded Authority: " + str(waysideOutputs.get("commanded_authority", "N/A")) + " ft")
         self.emergencyStatusLabel.config(
-            text="Emergency: " + ("ACTIVE" if waysideOutputs["emergency"] else "OFF"),
-            foreground=("red" if waysideOutputs["emergency"] else "green")
+            text="Emergency: " + ("ACTIVE" if waysideOutputs.get("emergency") else "OFF"),
+            foreground=("red" if waysideOutputs.get("emergency") else "green")
         )
+
+        # update gate and light labels
+        gate_states = waysideOutputs.get("crossings", {})
+        gate_states_str = ", ".join(f"Crossing {k}:{v}" for k, v in gate_states.items())
+        self.gateStateLabel.config(text="Gate States: " + (gate_states_str if gate_states_str else "N/A"))
+
+        light_states = waysideOutputs.get("lights", {})
+        light_states_str = ", ".join(f"Light {k}:{v}" for k, v in light_states.items())
+        self.lightStateLabel.config(text="Light States: " + (light_states_str if light_states_str else "N/A"))
 
         self.WaysideInputs = waysideInputs
 
