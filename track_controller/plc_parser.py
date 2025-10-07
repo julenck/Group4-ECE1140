@@ -42,6 +42,10 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
         "commanded_authority": 0
     }
 
+    train_on_A = any(block in block_occupancies for block in plc_data["blue_line"]["A"]["block_nums"])
+    train_on_B = any(block in block_occupancies for block in plc_data["blue_line"]["B"]["block_nums"])
+    train_on_C = any(block in block_occupancies for block in plc_data["blue_line"]["C"]["block_nums"])
+
     for section, infrastructure in plc_data["blue_line"].items():
 
         if "switch" in infrastructure:
@@ -50,15 +54,17 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
             base = switch["state"]["base"]
             alt = switch["state"]["alt"]
 
-        if destination in alt["destination"] or any(block in block_occupancies for block in base["occupied"]):
+        if train_on_A and (destination in alt["destination"] and destination not in base["destination"]):
             switch_pos = "ALT"
-        elif destination in base["destination"] or any(block in block_occupancies for block in alt["occupied"]):
+        elif train_on_A and (destination in base["destination"] and destination not in alt["destination"]):
             switch_pos = "BASE"
-        elif any(block in block_occupancies for block in base["occupied"]):
+        elif train_on_B:
             switch_pos = "BASE"
-        else:# any(block in block_occupancies for block in alt["occupied"]):
+        elif train_on_C:
             switch_pos = "ALT"
-
+        else:
+            switch_pos = "BASE"
+        
         updated_states["switches"][switch["block_id"]] = switch_pos
         
         if "light" in infrastructure:
@@ -77,6 +83,14 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
                 crossing_state = "OPEN"
             updated_states["crossings"][crossing["block_id"]] = crossing_state
 
+    if sug_speed <0:
+        sug_speed = 0
+    elif sug_speed >50:
+        sug_speed = 50
+    if sug_auth <0:
+        sug_auth = 0
+    elif sug_auth >500:
+        sug_auth = 500
     updated_states["commanded_speed"] = sug_speed
     updated_states["commanded_authority"] = sug_auth
 
