@@ -1,14 +1,9 @@
-
-"""
-Combined Track Controller UI Launcher
-Runs both the Test UI and Main Software UI together
-"""
-  # main
 import tkinter as tk
 from track_controller_HW_UI import HWTrackControllerUI
 from track_controller_HW_test_UI import TestUI
 
 def main():
+    
     # Create the main software UI (this creates the single Tk root)
     main_ui = HWTrackControllerUI()
     main_ui.title("Track Controller Hardware Module")
