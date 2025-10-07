@@ -194,7 +194,7 @@ class sw_track_controller_ui(tk.Tk):
 		)
 		
         #import map gif file and display it
-		self.map_image = tk.PhotoImage(file="blue_line_map.gif")
+		self.map_image = tk.PhotoImage(file="Blue_line_map.gif")
 		self.map_label = ttk.Label(map_frame, image=self.map_image)
 		self.map_label.pack(expand=True, fill="both", padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120)
 
