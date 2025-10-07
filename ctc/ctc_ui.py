@@ -1,6 +1,41 @@
-import tkinter as tk
-from tkinter import filedialog
-from tkinter import ttk
+import tkinter as tk, json, os, threading
+from tkinter import filedialog, ttk 
+from watchdog.observers import Observer 
+from watchdog.events import FileSystemEventHandler 
+
+# json file set up 
+data_file = "ctc_data.json"
+
+def load_data():
+    if os.path.exists(data_file):
+        with open(data_file, "r") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+def update_labels():
+    data = load_data()
+    dispatcher = data.get("Dispatcher", {})
+    track_controller = data.get("TrackController", {})
+    track_model = data.get("TrackModel", {})
+
+    # Dispatcher
+    active_trains_table.delete(*active_trains_table.get_children())
+    train_data = dispatcher.get("Train", "")
+    line_data = dispatcher.get("Line","")
+    sugg_speed_data = dispatcher.get("Suggested Speed","")
+    authority_data = dispatcher.get("Authority","")
+    station_dest_data = dispatcher.get("Station Destination","")
+    arrival_time_data = dispatcher.get("Arrival Time","")
+    
+    active_trains_table.insert("", "end", values=(train_data, line_data, "", "", sugg_speed_data, authority_data, "", station_dest_data, arrival_time_data, ""))
+
+class FileChangeHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if event.src_path.endswith("ctc_data.json"):
+            root.after(100, update_labels)
 
 # Root window
 root = tk.Tk()
@@ -262,13 +297,22 @@ gates = create_table_section(
 )
 gates.grid(row=0, column=2, sticky='nsew', padx=5)
 
+active_trains_table = active_trains.winfo_children()[1]
+lights_table = lights.winfo_children()[1]
+gates_table = gates.winfo_children()[1]
+
 # Throughput 
 throughput_frame = tk.Frame(bottom_frame)
 throughput_frame.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(10, 0))
 throughput_frame.grid_columnconfigure((0, 1), weight=1)
 
-tk.Label(throughput_frame, text="Red Line: 26 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
+tk.Label(throughput_frame, text=f"Train", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
 tk.Label(throughput_frame, text="Green Line: 14 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=1, sticky='w', padx=20)
+
+event_handler = FileChangeHandler()
+observer = Observer()
+observer.schedule(event_handler, path=os.path.dirname(data_file) or ".", recursive=False)
+threading.Thread(target=observer.start, daemon=True).start()
 
 # Show default frame 
 show_frame(auto_frame)
@@ -276,4 +320,7 @@ auto_button.config(bg="lightgray")
 active_button = auto_button
 
 # Start event loop
+update_labels()
+root.protocol("WM_DELETE_WINDOW", lambda: (observer.stop(), root.destroy()))
 root.mainloop()
+observer.join()
