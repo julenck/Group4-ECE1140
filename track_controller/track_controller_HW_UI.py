@@ -1,6 +1,4 @@
 # Track Controller Hardware UI
-# Based on SWTrackControllerUI, simplified for Raspberry Pi hardware
-# Author: Connor Kariotis + Hardware Adaptation
 
 import tkinter as tk
 from tkinter import ttk
@@ -15,14 +13,17 @@ emergency_button = Button(18, pull_up=False)
 buzzer = Buzzer(22)
 
 # LCD setup (I2C, using freenove or iRasptek LCD library)
+
 from RPLCD.i2c import CharLCD
-lcd = CharLCD('PCF8574', 0x27)  # 0x27 typical address; run `i2cdetect -y 1` to confirm
+lcd = CharLCD('PCF8574', 0x27)  # 0x27 typical address
 
 WindowWidth = 800
 WindowHeight = 480
 
 class HWTrackControllerUI(tk.Tk):
+
     def __init__(self):
+
         super().__init__()
         self.title("Track Controller Hardware Module")
         self.geometry(f"{WindowWidth}x{WindowHeight}")
@@ -58,9 +59,11 @@ class HWTrackControllerUI(tk.Tk):
         emergency_button.when_pressed = self.trigger_emergency
 
     def trigger_emergency(self):
-        """Toggle emergency state."""
+        
         self.emergency_active = not self.emergency_active
+
         if self.emergency_active:
+
             emergency_led.on()
             buzzer.on()
             self.emergencyStatusLabel.config(text="Emergency: ACTIVE", foreground="red")
@@ -79,10 +82,13 @@ class HWTrackControllerUI(tk.Tk):
         if os.path.exists("WaysideInputs_testUI.json"):
             try:
                 with open("WaysideInputs_testUI.json", "r") as file:
+
                     waysideInputs = json.load(file)
             except Exception:
+
                 waysideInputs = {}
         else:
+
             waysideInputs = {}
 
         suggestedSpeed = waysideInputs.get("suggested_speed", 0)
@@ -95,9 +101,12 @@ class HWTrackControllerUI(tk.Tk):
         if self.file_path_var.get() and os.path.exists(self.file_path_var.get()):
             try:
                 with open(self.file_path_var.get(), "r") as plc:
+
                     plc_data = json.load(plc)
                     plc_rules = plc_data.get("rules", [])
+
             except Exception:
+
                 plc_rules = []
 
         # Initialize commanded values from suggested defaults
@@ -106,23 +115,32 @@ class HWTrackControllerUI(tk.Tk):
 
         # Apply PLC rules (if any)
         for rule in plc_rules:
+
             target = rule.get("target", "")
             op = rule.get("op", "")
             value = rule.get("value", 0)
 
             if target == "commanded_speed":
+
                 if op == "-":
+
                     commanded_speed = max(0, suggestedSpeed - value)
                 else:
+
                     commanded_speed = suggestedSpeed
+
             elif target == "commanded_authority":
+
                 if op == "-":
+
                     commanded_authority = max(0, suggestedAuthority - value)
                 else:
+
                     commanded_authority = suggestedAuthority
 
         # Build outputs (no switches in HW-only view here)
         waysideOutputs = {
+
             "emergency": self.emergency_active,
             "commanded_speed": max(0, commanded_speed),
             "commanded_authority": max(0, commanded_authority),
@@ -131,8 +149,11 @@ class HWTrackControllerUI(tk.Tk):
         # Write outputs file
         try:
             with open("WaysideOutputs_testUI.json", "w") as file:
+
                 json.dump(waysideOutputs, file, indent=4)
+
         except Exception:
+            
             pass
 
         # Update displayed values

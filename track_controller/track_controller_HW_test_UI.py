@@ -9,12 +9,12 @@ WindowHeight = 600
 
 
 class TestUI(tk.Frame):
+
     def __init__(self, master):
+
         super().__init__(master)
         self.master = master
         self.grid(sticky="NSEW")
-
-       
 
         # Input frame
         self.build_input_frame()
@@ -23,6 +23,7 @@ class TestUI(tk.Frame):
         self.build_output_frame()
 
     def build_input_frame(self):
+
         input_frame = ttk.LabelFrame(self, text="Force Input")
         input_frame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
 
@@ -38,7 +39,7 @@ class TestUI(tk.Frame):
         self.train_positions_var = tk.StringVar(value="none")
         self.passengers_var = tk.StringVar(value="0")
         self.switch_name_var = tk.StringVar(value="SW1,SW2,SW3,SW4")
-        self.switch_pos_var = tk.StringVar(value="S,S,D,S")  # Example: S=Straight, D=Diverging
+        self.switch_pos_var = tk.StringVar(value="S,S,D,S")  # S=Straight, D=Diverging
 
         row = 0
         ttk.Label(input_frame, text="Suggested Speed (mph)").grid(row=row, column=0, sticky="W")
@@ -88,6 +89,7 @@ class TestUI(tk.Frame):
         
     
     def build_output_frame(self):
+
         output_frame = ttk.LabelFrame(self, text="Generated Output")
         output_frame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
 
@@ -137,6 +139,7 @@ class TestUI(tk.Frame):
         
 
     def simulate(self):
+
         # Grab inputs
         speed = self.speed_var.get()
         authority = self.authority_var.get()
@@ -148,14 +151,19 @@ class TestUI(tk.Frame):
         switch_names_list = switch_names.split(",")
         switch_state_split = switch_state.split(",")
 
-
         switch_state_list = []
         for i in range(len(switch_state_split)):
+
             if switch_state_split[i].upper() == "S":
+
                 switch_state_list.append("Straight")
+
             elif switch_state_split[i].upper() == "D":
+
                 switch_state_list.append("Diverging")
+
             else:
+
                 switch_state_list.append("Straight")  # Default to Straight if invalid
 
 
@@ -172,13 +180,16 @@ class TestUI(tk.Frame):
             json.dump(data, f, indent=2)
 
         self.update_outputs()  # Update outputs after a delay
+
         if not self.check_pause.get():
+
             self.after(500, self.simulate)  # Repeat if simulate is still checked
 
 
     def update_outputs(self):
         #read in outputs
         with open("WaysideInputs_testUI.json", "r") as f:
+
             outputs = json.load(f)
 
         #configure output labels
@@ -189,23 +200,31 @@ class TestUI(tk.Frame):
 
         #make switch positions a comma-separated string
         position_str = ""
+
         for i in range(len(outputs.get("switch_states", []))):
+
             if outputs["switch_states"][i] == "Straight":
+
                 position_str += "S"
+
             elif outputs["switch_states"][i] == "Diverging":
+
                 position_str += "D"
+
             else:
+
                 position_str += "N/A"
+
             if i < len(outputs["switch_states"])-1:
+
                 position_str += ","
 
         self.output_switch_positions.set(position_str)
 
-        
-    
-
     def pause_function(self):
+
         if self.check_pause.get():
+            
             self.after(100, self.pause_function)  # Check again after 100 ms
 
 
