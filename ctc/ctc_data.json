@@ -2,17 +2,14 @@
     "Dispatcher": {
         "Train": "",
         "Line": "",
-        "Section and Block": "",
-        "State": "",
         "Suggested Speed": "",
         "Authority": "",
-        "Direction": "",
-        "Station": "",
+        "Station Destination": "2",
         "Arrival Time": ""
     },
     "TrackController": {
-        "Position": "",
-        "StateOfTrain": "",
+        "Position": "A11",
+        "StateOfTrain": "Running",
         "FailureMode": "",
         "LightColor": "",
         "Gate": "",
@@ -24,8 +21,8 @@
         "Section and Block2": ""
     },
     "TrackModel": {
-        "Station": "",
-        "PassengersLeaving": "",
-        "PassengersEntering": ""
+        "Station": "test",
+        "PassengersLeaving": "1",
+        "PassengersEntering": "5"
     }
 }
