@@ -2,8 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 import json
 
-WindowWidth = 900
-WindowHeight = 600
+WindowWidth = 650
+WindowHeight = 250
 
 class TestUI(tk.Frame):
     def __init__(self, master):
@@ -21,7 +21,7 @@ class TestUI(tk.Frame):
         # --- Input Variables ---
         self.speed_var = tk.StringVar(value="0")
         self.authority_var = tk.StringVar(value="0")
-        self.destination_var = tk.StringVar(value="N/A")
+        self.destination_var = tk.StringVar(value="")
         self.block_occupancies_var = tk.StringVar(value="[]")
 
         # --- Input Widgets ---
