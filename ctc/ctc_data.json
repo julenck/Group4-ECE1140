@@ -1,0 +1,31 @@
+{
+    "Dispatcher": {
+        "Train": "",
+        "Line": "",
+        "Section and Block": "",
+        "State": "",
+        "Suggested Speed": "",
+        "Authority": "",
+        "Direction": "",
+        "Station": "",
+        "Arrival Time": ""
+    },
+    "TrackController": {
+        "Position": "",
+        "StateOfTrain": "",
+        "FailureMode": "",
+        "LightColor": "",
+        "Gate": "",
+        "Train Position": "",
+        "State of the Train": "Not Running",
+        "Track Failure Mode": "Broken Track",
+        "Section and Block1": "",
+        "Light Color": "",
+        "Section and Block2": ""
+    },
+    "TrackModel": {
+        "Station": "",
+        "PassengersLeaving": "",
+        "PassengersEntering": ""
+    }
+}
