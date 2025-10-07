@@ -1,6 +1,48 @@
 import tkinter as tk 
-from tkinter import ttk
-from tkinter import filedialog
+from tkinter import ttk,filedialog
+import json
+import os 
+
+data_file = 'ctc_data.json'
+
+default_data = {
+    "Dispatcher": {
+        "Train": "",
+        "Line": "",
+        "Section and Block": "",
+        "State": "",
+        "Suggested Speed": "",
+        "Authority": "",
+        "Direction": "",
+        "Station": "",
+        "Arrival Time": ""
+    },
+    "TrackController": {
+        "Position": "",
+        "StateOfTrain": "",
+        "FailureMode": "",
+        "LightColor": "",
+        "Gate": ""
+    },
+    "TrackModel": {
+        "Station": "",
+        "PassengersLeaving": "",
+        "PassengersEntering": ""
+    }
+}
+
+if not os.path.exists(data_file):
+    with open(data_file, "w") as f:
+        json.dump(default_data, f, indent=4)
+
+def save_to_json(section, data):
+    with open(data_file, "r") as f:
+        json_data = json.load(f)
+    json_data[section].update(data)
+    with open(data_file, "w") as f:
+        json.dump(json_data, f, indent=4)
+    print(f"{section} data saved:", data)
+
 
 # Root window 
 root = tk.Tk()
@@ -105,15 +147,7 @@ def get_dispatcher_inputs():
         "Station": station_box.get(),
         "Arrival Time": arrival_time_box.get(),
     }
-    train_input = data["Train"]
-    line_input = data["Line"]
-    section_block_input = data["Section and Block"]
-    state_input =  data["State"]
-    sugg_speed_input = data["Suggested Speed"]
-    authority_input = data["Authority"]
-    direction_input = data["Direction"]
-    station_input = data["Station"]
-    arrival_time_input = data["Arrival Time"]
+    save_to_json("Dispatcher",data)
 
 save_button = tk.Button(
     dispatcher_frame,
@@ -147,9 +181,7 @@ def get_track_model_inputs():
         "Passengers Leaving Station": leaving_box.get(),
         "Passengers Entering Station": entering_box.get(),
     }
-    station_input = data["Station"]
-    leaving_input = data["Passengers Leaving Station"]
-    entering_input = data["Passengers Entering Station"]
+    save_to_json("TrackModel",data)
 
 save_button_tm = tk.Button(
     track_model_frame,
@@ -207,13 +239,7 @@ def get_track_controller_inputs():
         "Section and Block2": section_block_box2.get(),
         "Gate": gate_box.get(),
     }
-    train_position_input = data["Train Position"]
-    train_state_input = data["State of the Train"]
-    track_failure_mode_input = data["Track Failure Mode"]
-    light_loc = data["Section and Block1"]
-    light_color = data["Light Color"]
-    gate_loc = data["Section and Block2"]
-    gate_status = data["Gate"]
+    save_to_json("TrackController",data)
 
 save_button_tc = tk.Button(
     track_controller_frame,
