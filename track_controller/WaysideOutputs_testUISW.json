@@ -4,11 +4,11 @@
     },
     "lights": {
         "6": "GREEN",
-        "11": "RED"
+        "11": "GREEN"
     },
     "crossings": {
         "3": "CLOSED"
     },
     "commanded_speed": 50,
-    "commanded_authority": 500
+    "commanded_authority": 400
 }
