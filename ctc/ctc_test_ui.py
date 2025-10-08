@@ -7,33 +7,59 @@ data_file = 'ctc_data.json'
 
 default_data = {
     "Dispatcher": {
-        "Train": "",
-        "Line": "",
-        "Section and Block": "",
-        "State": "",
-        "Suggested Speed": "",
-        "Authority": "",
-        "Direction": "",
-        "Station": "",
-        "Arrival Time": ""
+        "Trains":{
+            "Train 1": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 2": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 3": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+               "Arrival Time": "" 
+            }
+        }
     },
     "TrackController": {
-        "Position": "",
-        "StateOfTrain": "",
-        "FailureMode": "",
-        "LightColor": "",
+        "Train Position": "",
+        "State of the Train": "",
+        "Train Failure Mode": "",
+        "Section and Block1": "",
+        "Light Color": "",
+        "Section and Block2": "",
         "Gate": ""
     },
     "TrackModel": {
         "Station": "",
-        "PassengersLeaving": "",
-        "PassengersEntering": ""
+        "Passengers Leaving Station": "",
+        "Passengers Entering Station": "",
     }
 }
 
-if not os.path.exists(data_file):
+# Ensure JSON file exists and has valid structure
+if not os.path.exists(data_file) or os.stat(data_file).st_size == 0:
     with open(data_file, "w") as f:
         json.dump(default_data, f, indent=4)
+else:
+    try:
+        with open(data_file, "r") as f:
+            json.load(f)
+    except json.JSONDecodeError:
+        # Recreate file if it's corrupted or empty
+        with open(data_file, "w") as f:
+            json.dump(default_data, f, indent=4)
+
 
 def save_to_json(section, data):
     with open(data_file, "r") as f:
@@ -61,6 +87,7 @@ tk.Label(force_inputs_frame,text="Force Inputs",font=("Times New Roman",20,'bold
 # Inputs frame 
 inputs_frame = tk.Frame(root)
 inputs_frame.grid(row=1,column=0,sticky='nsew', padx=10,pady=5)
+
 
 # Dispatcher frame 
 dispatcher_frame = tk.LabelFrame(inputs_frame,text='Dispatcher Inputs',font=label_font)
@@ -123,21 +150,35 @@ upload_button.grid(row=11,column=0,columnspan=2,padx=5,pady=5,sticky='nsew',)
 uploaded_file_label=tk.Label(dispatcher_frame,text="",font=('Times New Roman',12,'italic'))
 uploaded_file_label.grid(row=12,column=1,padx=0,pady=0,sticky='nsew')
 
-def get_dispatcher_inputs():
-    data = {
-        "Train": train_box.get(),
+def save_train_data():
+    train_name = train_box.get()
+    if not train_name:
+        return  # nothing selected
+
+    with open("ctc_data.json", "r") as f:
+        data = json.load(f)
+
+    train_data = {
         "Line": line_box.get(),
         "Suggested Speed": suggested_speed_box.get(),
         "Authority": authority_box.get(),
         "Station Destination": station_box.get(),
         "Arrival Time": arrival_time_box.get(),
     }
-    save_to_json("Dispatcher",data)
+
+    # make sure "Trains" exists
+    data.setdefault("Dispatcher", {}).setdefault("Trains", {})
+    data["Dispatcher"]["Trains"][train_name] = train_data
+
+    with open("ctc_data.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(f"Saved data for {train_name}")
 
 save_button = tk.Button(
     dispatcher_frame,
     text="Save",
-    command=get_dispatcher_inputs, 
+    command=save_train_data, 
     font=('Times New Roman', 15, 'bold'),
     bg="lightgray"
 )
@@ -145,7 +186,7 @@ save_button.grid(row=10, column=0, columnspan=2, pady=20)
 
 # Track Model Frame 
 track_model_frame = tk.LabelFrame(inputs_frame,text='Track Model Inputs',font=label_font)
-track_model_frame.grid(row=1,column=3,sticky='nsew',padx=5,pady=5)
+track_model_frame.grid(row=1,column=3,sticky='new',padx=5,pady=5)
 
 tk.Label(track_model_frame, text="Station",font=label_font).grid(row=2,column=3,sticky='w',padx=5,pady=10)
 tk.Label(track_model_frame, text="Passengers Leaving Station",font=label_font).grid(row=3,column=3,sticky='w',padx=5,pady=10)
@@ -162,7 +203,7 @@ entering_box.grid(row=4,column=4,padx=5,pady=5,sticky='ew')
 
 def get_track_model_inputs():
     data = {
-        "Station": station_box.get(),
+        "Station": station_destination_box.get(),
         "Passengers Leaving Station": leaving_box.get(),
         "Passengers Entering Station": entering_box.get(),
     }
@@ -180,7 +221,7 @@ save_button_tm.grid(row=6, column=3, columnspan=2, pady=10)
     
 # Track Controller Frame 
 track_controller_frame = tk.LabelFrame(inputs_frame,text='Track Controller Inputs', font=label_font)
-track_controller_frame.grid(row=1,column=1,sticky='nsew',padx=20,pady=20)
+track_controller_frame.grid(row=1,column=1,sticky='nsew',padx=5,pady=20)
 
 tk.Label(track_controller_frame, text="Train Position",font=label_font).grid(row=2,column=0,sticky='w',padx=5,pady=10)
 tk.Label(track_controller_frame, text="State of the Train",font=label_font).grid(row=3,column=0,sticky='w',padx=5,pady=10)
@@ -198,21 +239,27 @@ failure_box.grid(row=4,column=1,sticky='ew',padx=20,pady=20)
 # Lights and Gates Frame 
 lights_gates_frame = tk.LabelFrame(track_controller_frame,text='Lights and Gates',font=label_font)
 lights_gates_frame.grid_columnconfigure((0,1),weight=1)
-lights_gates_frame.grid(row=5, column=0, columnspan=2, sticky='nw', padx=20, pady=20)
+lights_gates_frame.grid(row=5, column=0, columnspan=2, sticky='nw', padx=5, pady=20)
 
-tk.Label(lights_gates_frame,text="Section and Block",font=label_font).grid(row=6,column=0, sticky='nsew',padx=10,pady=10)
-section_block_box1 = tk.Entry(lights_gates_frame,font=label_font)
-section_block_box1.grid(row=6,column=1,sticky='w',padx=10,pady=10)
-tk.Label(lights_gates_frame,text="Light Color",font=label_font).grid(row=6,column=2, sticky='nsew',padx=10,pady=10)
-light_color_box = ttk.Combobox(lights_gates_frame,values=["Green","Red"],font=label_font)
-light_color_box.grid(row=6,column=3,sticky='nsew',padx=10,pady=10)
+tk.Label(lights_gates_frame,text="Line",font=label_font).grid(row=6,column=0, sticky='nsew',padx=10,pady=10)
+lights_gates_line_box = ttk.Combobox(lights_gates_frame,values=["Green","Red","Blue"],font=label_font)
+lights_gates_line_box.grid(row=6,column=1,sticky='w',padx=10,pady=10)
 
 tk.Label(lights_gates_frame,text="Section and Block",font=label_font).grid(row=7,column=0, sticky='nsew',padx=10,pady=10)
+section_block_box1 = tk.Entry(lights_gates_frame,font=label_font)
+section_block_box1.grid(row=7,column=1,sticky='w',padx=5,pady=5)
+
+tk.Label(lights_gates_frame,text="Light Color",font=label_font).grid(row=7,column=2, sticky='nsew',padx=10,pady=10)
+light_color_box = ttk.Combobox(lights_gates_frame,values=["Green","Red"],font=label_font)
+light_color_box.grid(row=7,column=3,sticky='nsew',padx=5,pady=10)
+
+tk.Label(lights_gates_frame,text="Section and Block",font=label_font).grid(row=8,column=0, sticky='nsew',padx=10,pady=10)
 section_block_box2 = tk.Entry(lights_gates_frame,font=label_font)
-section_block_box2.grid(row=7,column=1,sticky='w',padx=10,pady=10)
-tk.Label(lights_gates_frame,text="Gate",font=label_font).grid(row=7,column=2, sticky='nsew',padx=10,pady=10)
+section_block_box2.grid(row=8,column=1,sticky='w',padx=5,pady=10)
+
+tk.Label(lights_gates_frame,text="Gate",font=label_font).grid(row=8,column=2, sticky='nsew',padx=10,pady=10)
 gate_box = ttk.Combobox(lights_gates_frame,values=["Open","Closed"],font=label_font)
-gate_box.grid(row=7,column=3,sticky='nsew',padx=10,pady=10)
+gate_box.grid(row=8,column=3,sticky='nsew',padx=5,pady=10)
 
 def get_track_controller_inputs():
     data = {
@@ -220,6 +267,7 @@ def get_track_controller_inputs():
         "State of the Train": state_box.get(),
         "Track Failure Mode": failure_box.get(),
         "Section and Block1": section_block_box1.get(),
+        "Line": lights_gates_line_box.get(),
         "Light Color": light_color_box.get(),
         "Section and Block2": section_block_box2.get(),
         "Gate": gate_box.get(),
@@ -235,5 +283,11 @@ save_button_tc = tk.Button(
 )
 save_button_tc.grid(row=6, column=0, columnspan=2, pady=20)
 
+# Generated Output Frame 
+generated_outputs_frame = tk.LabelFrame(inputs_frame,text="Generated Outputs",font=label_font)
+generated_outputs_frame.grid_columnconfigure((0,1),weight=1)
+generated_outputs_frame.grid(row=2,column=3,sticky='nw',padx=5,pady=(0,10))
+
+tk.Label(generated_outputs_frame,text="Line",font=label_font).grid(row=3,column=4,sticky='nsew',padx=10,pady=10)
 
 root.mainloop()
