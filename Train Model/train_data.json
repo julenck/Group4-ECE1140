@@ -1,0 +1,30 @@
+{
+  "block": {
+    "name": "F6 GREEN",
+    "direction": "Clockwise",
+    "traffic_light": "Green",
+    "speed_limit": 40,
+    "switch": "N/A",
+    "grade": 4,
+    "station_side": "RidgeWood/Left",
+    "branching": "No",
+    "beacon": "Ridgewood",
+    "elevation": 6,
+    "track_heating": true
+  },
+  "environment": {
+    "temperature": 18
+  },
+  "failures": {
+    "power": false,
+    "circuit": false,
+    "broken_track": true
+  },
+  "station": {
+    "ticket_sales": 42,
+    "boarding": 76,
+    "disembarking": 31,
+    "occupancy": "312/400 (78%)"
+  }
+}
+
