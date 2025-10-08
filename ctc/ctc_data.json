@@ -1,28 +1,41 @@
 {
     "Dispatcher": {
-        "Train": "",
-        "Line": "",
-        "Suggested Speed": "",
-        "Authority": "",
-        "Station Destination": "2",
-        "Arrival Time": ""
+        "Trains": {
+            "Train 1": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 2": {
+                "Line": "Blue",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 3": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            }
+        }
     },
     "TrackController": {
-        "Position": "A11",
-        "StateOfTrain": "Running",
-        "FailureMode": "",
-        "LightColor": "",
-        "Gate": "",
         "Train Position": "",
-        "State of the Train": "Not Running",
-        "Track Failure Mode": "Broken Track",
+        "State of the Train": "",
+        "Train Failure Mode": "",
         "Section and Block1": "",
         "Light Color": "",
-        "Section and Block2": ""
+        "Section and Block2": "",
+        "Gate": ""
     },
     "TrackModel": {
-        "Station": "test",
-        "PassengersLeaving": "1",
-        "PassengersEntering": "5"
+        "Station": "",
+        "Passengers Leaving Station": "",
+        "Passengers Entering Station": ""
     }
 }

@@ -22,15 +22,34 @@ def update_labels():
     track_model = data.get("TrackModel", {})
 
     # Dispatcher
-    active_trains_table.delete(*active_trains_table.get_children())
+    #active_trains_table.delete(*active_trains_table.get_children())
     train_data = dispatcher.get("Train", "")
     line_data = dispatcher.get("Line","")
     sugg_speed_data = dispatcher.get("Suggested Speed","")
     authority_data = dispatcher.get("Authority","")
     station_dest_data = dispatcher.get("Station Destination","")
     arrival_time_data = dispatcher.get("Arrival Time","")
-    
-    active_trains_table.insert("", "end", values=(train_data, line_data, "", "", sugg_speed_data, authority_data, "", station_dest_data, arrival_time_data, ""))
+
+    # Track Controller 
+    lights_table.delete(*lights_table.get_children())
+    gates_table.delete(*gates_table.get_children())
+    train_position_data = track_controller.get("Train Position","")
+    state_of_train_data = track_controller.get("State of the Train","")
+    failure_mode_data = track_controller.get("Track Failure Mode","")
+    lights_gates_line = track_controller.get("Line","")
+    light_loc_data = track_controller.get("Section and Block1","")
+    light_color_data = track_controller.get("Light Color","")
+    gate_loc_data = track_controller.get("Section and Block2","")
+    gate_data = track_controller.get("Gate","")
+
+    # Track Model 
+    station_data = track_model.get("Station", "")
+    passengers_leaving_data = track_model.get("Passengers Leaving Station")
+    passengers_entering_data = track_model.get("Passengers Entering Station")
+
+    active_trains_table.insert("", "end", values=(train_data, line_data, train_position_data, state_of_train_data, sugg_speed_data, authority_data, "", station_dest_data, arrival_time_data, ""))
+    lights_table.insert("","end",values=(lights_gates_line,light_loc_data,light_color_data))
+    gates_table.insert("","end",values=(lights_gates_line,gate_loc_data,gate_data))
 
 class FileChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
@@ -256,7 +275,6 @@ def create_table_section(parent, title, columns, data):
 
     tk.Label(section, text=title, font=('Times New Roman', 15, 'bold')).grid(row=0, column=0, sticky='w')
 
-
     table = ttk.Treeview(section, columns=columns, show='headings')
     for col in columns:
         table.heading(col, text=col)
@@ -266,40 +284,71 @@ def create_table_section(parent, title, columns, data):
     for row in data:
         table.insert('', 'end', values=row)
 
-    return section
+    return section,table
 
 # Add each section
-active_trains = create_table_section(
+active_trains_frame, active_trains_table = create_table_section(
     bottom_frame,
     "Active Trains",
-    ("Train", "Line", "Block", "State", "Suggested Speed", "Authority", "Direction", "Station", "Arrival Time", "Occupancy"),
-    [
-        ("Train 1", "Red", "4", "Running", "5", "3", "CW", "Shadyside", "0:33", "26"),
-        ("Train 2", "Red", "5", "Running", "7", "4", "CW", "Pioneer", "0:13", "0"),
-    ]
+    ("Train", "Line", "Block", "State", "Suggested Speed", "Authority", "Direction", "Station", "Arrival Time"),
+    []
 )
-active_trains.grid(row=0, column=0, sticky='nsew', padx=5)
+active_trains_frame.grid(row=0, column=0, sticky='nsew', padx=5)
 
-lights = create_table_section(
+
+def update_active_trains_table():
+    """Refresh the Active Trains table from JSON file."""
+    if not os.path.exists(data_file):
+        return
+
+    try:
+        with open(data_file, "r") as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        return
+
+    dispatcher_data = data.get("Dispatcher", {})
+
+    # Clear current rows
+    for row in active_trains_table.get_children():
+        active_trains_table.delete(row)
+
+    # If you saved multiple trains in your JSON
+    trains = dispatcher_data.get("Trains", {})
+
+    for train_name, info in trains.items():
+        active_trains_table.insert("", "end", values=(
+            train_name,
+            info.get("Line", ""),
+            "",  # Block (if not stored yet)
+            info.get("State", ""),
+            info.get("Suggested Speed", ""),
+            info.get("Authority", ""),
+            info.get("Direction", ""),
+            info.get("Station Destination", ""),
+            info.get("Arrival Time", "")
+        ))
+
+    # Repeat every second
+    root.after(1000, update_active_trains_table)
+
+lights_frame,lights_table = create_table_section(
     bottom_frame,
     "Lights",
     ("Line", "Block", "Status"),
     [("Red", "A1", "Green"), ("Red", "A2", "Red")]
 )
-lights.grid(row=0, column=1, sticky='nsew', padx=5)
+lights_frame.grid(row=0, column=1, sticky='nsew', padx=5)
 
-gates = create_table_section(
+gates_frame,gates_table = create_table_section(
     bottom_frame,
     "Gates",
     ("Line", "Block", "Status"),
     [("Red", "A1", "Closed"), 
      ("Red", "A2", "Closed")]
 )
-gates.grid(row=0, column=2, sticky='nsew', padx=5)
+gates_frame.grid(row=0, column=2, sticky='nsew', padx=5)
 
-active_trains_table = active_trains.winfo_children()[1]
-lights_table = lights.winfo_children()[1]
-gates_table = gates.winfo_children()[1]
 
 # Throughput 
 throughput_frame = tk.Frame(bottom_frame)
@@ -322,5 +371,6 @@ active_button = auto_button
 # Start event loop
 update_labels()
 root.protocol("WM_DELETE_WINDOW", lambda: (observer.stop(), root.destroy()))
+update_active_trains_table()
 root.mainloop()
 observer.join()
