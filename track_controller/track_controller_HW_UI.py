@@ -60,16 +60,12 @@ class LCD:
             pass
 
 
-# --- Pin mapping (adjust if needed) ---
+# --- Pin mapping ---
 EMERGENCY_LED_PIN = 17
 EMERGENCY_BUTTON_PIN = 18
 
 class HWTrackControllerUI(tk.Tk):
-    """
-    Hardware-side UI with real LED/button + I2C LCD.
-    Speed and authority shown on both Tkinter window and LCD.
-    Also indicates Switches/Gates status; they turn RED during emergency.
-    """
+    
     def __init__(self):
         super().__init__()
         self.title("Track Controller - HW UI")
@@ -108,14 +104,14 @@ class HWTrackControllerUI(tk.Tk):
         self.em_label = ttk.Label(self, text="Emergency: OFF", foreground="green", font=("Segoe UI", 14, "bold"))
         self.em_label.grid(row=0, column=0, columnspan=2, sticky="w", **pad)
 
-        disp = ttk.LabelFrame(self, text="On-Train Display")
+        disp = ttk.LabelFrame(self, text="Screen Display")
         disp.grid(row=1, column=0, columnspan=2, sticky="nsew", **pad)
 
-        ttk.Label(disp, text="Speed (mph):", font=("Segoe UI", 12)).grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(disp, text="Commanded Speed (mph):", font=("Segoe UI", 12)).grid(row=0, column=0, sticky="w", padx=8, pady=6)
         self.lbl_speed = ttk.Label(disp, text="0", font=("Consolas", 16, "bold"))
         self.lbl_speed.grid(row=0, column=1, sticky="e", padx=8, pady=6)
 
-        ttk.Label(disp, text="Authority (yards):", font=("Segoe UI", 12)).grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(disp, text="Commanded Authority (yards):", font=("Segoe UI", 12)).grid(row=1, column=0, sticky="w", padx=8, pady=6)
         self.lbl_auth = ttk.Label(disp, text="0", font=("Consolas", 16, "bold"))
         self.lbl_auth.grid(row=1, column=1, sticky="e", padx=8, pady=6)
 
@@ -152,31 +148,37 @@ class HWTrackControllerUI(tk.Tk):
 
     # -------- Apply state to hardware/UI --------
     def _on_emergency_change(self):
+
         val = self.emergency_active.get()
         self._apply_emergency()
         self._apply_assets_status()
-        # Update LCD
+        
         try:
             self._lcd.display(self.speed_kmh.get(), self.authority_m.get(), val)
         except Exception:
             pass
 
     def _apply_emergency(self):
+
         active = self.emergency_active.get()
         self._led.on() if active else self._led.off()
+
         self.em_label.config(
+
             text="Emergency: ACTIVE" if active else "Emergency: OFF",
             foreground="red" if active else "green"
         )
 
     def _apply_assets_status(self):
+
         active = self.emergency_active.get()
-        if active:
+
+        if active: 
             self.lbl_signal_lights.config(text="RED", foreground="red")
-            self.lbl_gates.config(text="RED", foreground="red")
+            self.lbl_gates.config(text="CLOSED", foreground="red")
         else:
-            self.lbl_signal_lights.config(text="NORMAL", foreground="green")
-            self.lbl_gates.config(text="NORMAL", foreground="green")
+            self.lbl_signal_lights.config(text="GREEN", foreground="green")
+            self.lbl_gates.config(text="OPEN", foreground="green")
 
     def _apply_speed_auth_to_labels(self):
         self.lbl_speed.config(text=str(self.speed_kmh.get()))
