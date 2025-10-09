@@ -1,163 +1,110 @@
-# Track Controller Hardware UI
-
+# track_controller_HW_UI.py
 import tkinter as tk
 from tkinter import ttk
-import json
-import os
-from gpiozero import LED, Button, Buzzer
-from time import sleep
-import plc_parser
 
-# GPIO setup
-emergency_led = LED(17)
-emergency_button = Button(18, pull_up=True)
-buzzer = Buzzer(22)
+# ---- GPIO (safe fallback if not on Raspberry Pi) ----
+GPIO_OK = True
+try:
+    from gpiozero import LED, Button
+except Exception:
+    GPIO_OK = False
+    class LED:
+        def __init__(self, *a, **k): pass
+        def on(self): pass
+        def off(self): pass
+        def close(self): pass
+    class Button:
+        def __init__(self, *a, **k): self.when_pressed = None
 
-# LCD setup (I2C, using freenove or iRasptek LCD library)
-
-from RPLCD.i2c import CharLCD
-lcd = CharLCD('PCF8574', 0x27)  # 0x27 typical address
-
-WindowWidth = 800
-WindowHeight = 480
+# --- Pin mapping (adjust to your wiring) ---
+EMERGENCY_LED_PIN = 17
+EMERGENCY_BUTTON_PIN = 18
 
 class HWTrackControllerUI(tk.Tk):
-
+    """
+    Single source of truth for state:
+      - emergency_active: toggled by hardware button OR UI
+      - speed_kmh / authority_m: displayed on screen, settable by Test UI
+    """
     def __init__(self):
-
         super().__init__()
-        self.title("Track Controller Hardware Module")
-        self.geometry(f"{WindowWidth}x{WindowHeight}")
+        self.title("Track Controller - HW UI")
+        self.geometry("520x300")
+        self.resizable(False, False)
 
-        # Emergency status variable
-        self.emergency_active = False
+        # State
+        self.emergency_active = tk.BooleanVar(value=False)
+        self.speed_kmh = tk.IntVar(value=0)
+        self.authority_m = tk.IntVar(value=0)
 
-        # PLC file path var (match SW UI)
-        self.file_path_var = tk.StringVar(value="blue_line_plc.json")
+        # GPIO
+        self._led = LED(EMERGENCY_LED_PIN)
+        self._button = Button(EMERGENCY_BUTTON_PIN, pull_up=True, bounce_time=0.05) if GPIO_OK else Button()
+        self._button.when_pressed = lambda: self.after(0, self.toggle_emergency)  # toggle on each press
 
-        # GUI labels for inputs (match SW UI names used in update_display)
-        self.suggestedSpeedLabel = ttk.Label(self, text="Suggested Speed: N/A")
-        self.suggestedSpeedLabel.pack(pady=5)
+        # UI
+        self._build_ui()
 
-        self.suggestedAuthorityLabel = ttk.Label(self, text="Suggested Authority: N/A")
-        self.suggestedAuthorityLabel.pack(pady=5)
+        # Bind state -> UI
+        self.emergency_active.trace_add("write", lambda *_: self._apply_emergency())
+        self.speed_kmh.trace_add("write", lambda *_: self._apply_speed_auth())
+        self.authority_m.trace_add("write", lambda *_: self._apply_speed_auth())
 
-        # GUI label for hardware state
-        self.commandedSpeedLabel = ttk.Label(self, text="Commanded Speed: N/A")
-        self.commandedSpeedLabel.pack(pady=10)
+        # Initial paint
+        self._apply_emergency()
+        self._apply_speed_auth()
 
-        self.commandedAuthorityLabel = ttk.Label(self, text="Commanded Authority: N/A")
-        self.commandedAuthorityLabel.pack(pady=10)
+    # -------- UI --------
+    def _build_ui(self):
+        pad = {"padx": 10, "pady": 8}
 
-        self.emergencyStatusLabel = ttk.Label(self, text="Emergency: OFF", foreground="green")
-        self.emergencyStatusLabel.pack(pady=20)
+        self.em_label = ttk.Label(self, text="Emergency: OFF", foreground="green", font=("Segoe UI", 14, "bold"))
+        self.em_label.grid(row=0, column=0, columnspan=2, sticky="w", **pad)
 
-        # Add gate and light labels so HW UI shows those statuses
-        self.gateStateLabel = ttk.Label(self, text="Gate States: N/A")
-        self.gateStateLabel.pack(pady=5)
+        disp = ttk.LabelFrame(self, text="On-Train Display")
+        disp.grid(row=1, column=0, columnspan=2, sticky="nsew", **pad)
 
-        self.lightStateLabel = ttk.Label(self, text="Light States: N/A")
-        self.lightStateLabel.pack(pady=5)
+        ttk.Label(disp, text="Speed (km/h):", font=("Segoe UI", 12)).grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        self.lbl_speed = ttk.Label(disp, text="0", font=("Consolas", 16, "bold"))
+        self.lbl_speed.grid(row=0, column=1, sticky="e", padx=8, pady=6)
 
-        # Ensure WaysideInputs placeholder exists
-        self.WaysideInputs = {}
+        ttk.Label(disp, text="Authority (m):", font=("Segoe UI", 12)).grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        self.lbl_auth = ttk.Label(disp, text="0", font=("Consolas", 16, "bold"))
+        self.lbl_auth.grid(row=1, column=1, sticky="e", padx=8, pady=6)
 
-        # Periodic update loop
-        emergency_button.when_pressed = self.trigger_emergency
-        self.after(500, self.update_display)
+        # Simple local test controls
+        ctrls = ttk.LabelFrame(self, text="Quick Test")
+        ctrls.grid(row=2, column=0, columnspan=2, sticky="ew", **pad)
+        ttk.Button(ctrls, text="Toggle Emergency", command=self.toggle_emergency).grid(row=0, column=0, padx=6, pady=6)
 
-    def trigger_emergency(self):
-        
-        """Toggle emergency state immediately when button pressed."""
-        self.emergency_active = not self.emergency_active
+    # -------- Public API used by Test UI --------
+    def toggle_emergency(self):
+        self.emergency_active.set(not self.emergency_active.get())
 
-        # Update hardware indicators
-        emergency_led.value = self.emergency_active
-        buzzer.value = self.emergency_active
+    def set_speed(self, kmh: int):
+        try: self.speed_kmh.set(int(kmh))
+        except: pass
 
-        # Update label
-        self.emergencyStatusLabel.config(
+    def set_authority(self, meters: int):
+        try: self.authority_m.set(int(meters))
+        except: pass
 
-            text=f"Emergency: {'ACTIVE' if self.emergency_active else 'OFF'}",
-            foreground='red' if self.emergency_active else 'green'
-        )
+    # -------- Apply state to hardware/UI --------
+    def _apply_emergency(self):
+        active = self.emergency_active.get()
+        self._led.on() if active else self._led.off()
+        self.em_label.config(text="Emergency: ACTIVE" if active else "Emergency: OFF",
+                             foreground="red" if active else "green")
 
-    def update_display(self):
-       
-        waysideInputs = {}
-        try:
-            if os.path.exists("WaysideInputs_testUI.json"):
-                with open("WaysideInputs_testUI.json", "r") as file:
-                    waysideInputs = json.load(file)
-        except Exception:
-            pass
+    def _apply_speed_auth(self):
+        self.lbl_speed.config(text=str(self.speed_kmh.get()))
+        self.lbl_auth.config(text=str(self.authority_m.get()))
 
-        # Suggested values
-        suggestedSpeed = waysideInputs.get("suggested_speed", 0)
-        suggestedAuthority = waysideInputs.get("suggested_authority", 0)
-        self.suggestedSpeedLabel.config(text=f"Suggested Speed: {suggestedSpeed} mph")
-        self.suggestedAuthorityLabel.config(text=f"Suggested Authority: {suggestedAuthority} ft")
-
-        # If test UI sets emergency, sync it
-        if "emergency" in waysideInputs:
-            desired_emergency = bool(waysideInputs.get("emergency", False))
-            if desired_emergency != self.emergency_active:
-                self.toggle_emergency()  # will update LED/buzzer/label
-
-        block_occupancies = waysideInputs.get("block_occupancies", [])
-        destination = waysideInputs.get("destination", 0)
-
-        # Compute PLC outputs
-        try:
-            waysideOutputs = plc_parser.parse_plc_data(
-                self.file_path_var.get(),
-                block_occupancies,
-                destination,
-                suggestedSpeed,
-                suggestedAuthority
-            )
-        except Exception:
-            waysideOutputs = {
-                "switches": {},
-                "lights": {},
-                "crossings": {},
-                "commanded_speed": suggestedSpeed,
-                "commanded_authority": suggestedAuthority,
-            }
-
-        # Ensure emergency is included
-        waysideOutputs["emergency"] = self.emergency_active
-
-        # Write outputs
-        try:
-            with open("WaysideOutputs_testUI.json", "w") as file:
-                json.dump(waysideOutputs, file, indent=4)
-        except Exception:
-            pass
-
-        # Update GUI with commanded values
-        self.commandedSpeedLabel.config(text=f"Commanded Speed: {waysideOutputs.get('commanded_speed', 'N/A')} mph")
-        self.commandedAuthorityLabel.config(text=f"Commanded Authority: {waysideOutputs.get('commanded_authority', 'N/A')} ft")
-        self.emergencyStatusLabel.config(
-            text=f"Emergency: {'ACTIVE' if waysideOutputs.get('emergency') else 'OFF'}",
-            foreground='red' if waysideOutputs.get('emergency') else 'green'
-        )
-
-        # Update gate and light labels
-        gate_states = waysideOutputs.get("crossings", {})
-        self.gateStateLabel.config(
-            text="Gate States: " + (", ".join(f"{k}: {v}" for k, v in gate_states.items()) or "N/A")
-        )
-        light_states = waysideOutputs.get("lights", {})
-        self.lightStateLabel.config(
-            text="Light States: " + (", ".join(f"{k}: {v}" for k, v in light_states.items()) or "N/A")
-        )
-
-        # Save inputs
-        self.WaysideInputs = waysideInputs
-
-        # Schedule next update
-        self.after(500, self.update_display)
+    # Cleanup
+    def destroy(self):
+        try: self._led.off(); self._led.close()
+        except: pass
+        super().destroy()
 
 if __name__ == "__main__":
     app = HWTrackControllerUI()
