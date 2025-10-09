@@ -3,7 +3,7 @@
 This module provides a graphical user interface for testing the Train Controller
 functionality. It allows users to simulate train inputs from the train model and 
 observe the outputs produced by the driver. The UI is divided into input controls 
-for simulating different conditions and output displays showing the Driver's 
+for simulating different conditions and displays showing the Driver's 
 commands in the driver UI.
 
 The module interfaces with the train_controller_api module to handle state management
@@ -83,16 +83,17 @@ class train_controller_test_ui(tk.Tk):
             
             # Combine them to show complete status
             display_state = {
-                'set_speed': state.get('set_speed', 0),
-                'power_command': driver_outputs.get('power_command', 0),
-                'emergency_brake': driver_outputs.get('emergency_brake', False),
-                'service_brake': driver_outputs.get('service_brake', 0),
-                'left_door': driver_outputs.get('left_door', False),
-                'right_door': driver_outputs.get('right_door', False),
-                'lights': driver_outputs.get('lights', False),
-                'train_temperature': state.get('train_temperature', 70),
-                'next_stop': state.get('next_stop', ''),
-                'station_side': state.get('station_side', '')
+                'set_speed': state['set_speed'],
+                'power_command': driver_outputs['power_command'],
+                'emergency_brake': driver_outputs['emergency_brake'],
+                'service_brake': driver_outputs['service_brake'],
+                'left_door': driver_outputs['left_door'],
+                'right_door': driver_outputs['right_door'],
+                'lights': driver_outputs['lights'],
+                'set_temperature': state['set_temperature'],
+                'next_stop': state['next_stop'],
+                'station_side': state['station_side'],
+                'announce_pressed': state['announce_pressed']
             }
             
             self.update_outputs(display_state)
@@ -126,14 +127,12 @@ class train_controller_test_ui(tk.Tk):
         self.next_stop_beacon_entry = self.make_entry_text(input_frame, "Next Station (for announcements)", 5, "Herron Ave")
         self.station_side_beacon_entry = self.make_entry_dropdown(input_frame, "Station Door Side", 6, ["left", "right"])
         self.current_temperature_entry = self.make_entry_text(input_frame, "Train Temperature (°F)", 7, "70")
-        self.service_brake_entry = self.make_entry_text(input_frame, "Service Brake (%)", 8, "30")
-        self.emergency_brake_entry = self.make_entry_dropdown(input_frame, "Emergency Brake", 9, ["on", "off"], "off")
-        self.train_engine_failure_entry = self.make_entry_dropdown(input_frame, "Train Engine Failure", 10, ["True", "False"], "False")
-        self.signal_pickup_failure_entry = self.make_entry_dropdown(input_frame, "Signal Pickup Failure", 11, ["True", "False"], "False")
-        self.brake_failure_entry = self.make_entry_dropdown(input_frame, "Brake Failure", 12, ["True", "False"], "False")
+        self.train_engine_failure_entry = self.make_entry_dropdown(input_frame, "Train Engine Failure", 8, ["True", "False"], "False")
+        self.signal_pickup_failure_entry = self.make_entry_dropdown(input_frame, "Signal Pickup Failure", 9, ["True", "False"], "False")
+        self.brake_failure_entry = self.make_entry_dropdown(input_frame, "Brake Failure", 10, ["True", "False"], "False")
 
         # Simulate button
-        ttk.Button(input_frame, text="Simulate", command=self.simulate).grid(row=12, column=2, columnspan=2, pady=10)
+        ttk.Button(input_frame, text="Simulate", command=self.simulate).grid(row=10, column=2, columnspan=2, pady=10)
 
     def create_output_frame(self):
         """Create the output frame showing signals sent to Train Model from the driver."""
@@ -166,7 +165,7 @@ class train_controller_test_ui(tk.Tk):
         env_frame = ttk.LabelFrame(output_frame, text="Environmental Controls")
         env_frame.grid(row=4, column=0, sticky="NSEW", padx=5, pady=5)
         self.lights_status = self.make_output(env_frame, "Lights Status", 0)
-        self.current_temperature_status = self.make_output(env_frame, "Current Temperature (°F)", 1)
+        self.set_temperature_status = self.make_output(env_frame, "Set Temperature (°F)", 1)
 
     def make_entry_text(self, parent, label, row, default=""):
         """Create a labeled text entry field.
@@ -234,8 +233,6 @@ class train_controller_test_ui(tk.Tk):
             'next_stop': "Herron Ave",
             'station_side': "right",
             'train_temperature': "70",
-            'service_brake': "30",
-            'emergency_brake': "off",
             'engine_failure': "False",
             'signal_failure': "False",
             'brake_failure': "False"
@@ -262,10 +259,6 @@ class train_controller_test_ui(tk.Tk):
         self.current_temperature_entry.delete(0, tk.END)
         self.current_temperature_entry.insert(0, defaults['train_temperature'])
         
-        self.service_brake_entry.delete(0, tk.END)
-        self.service_brake_entry.insert(0, defaults['service_brake'])
-        
-        self.emergency_brake_entry.set(defaults['emergency_brake'])
         self.train_engine_failure_entry.set(defaults['engine_failure'])
         self.signal_pickup_failure_entry.set(defaults['signal_failure'])
         self.brake_failure_entry.set(defaults['brake_failure'])
@@ -322,43 +315,44 @@ class train_controller_test_ui(tk.Tk):
         """
         try:
             # Update speed and power displays (from driver controls)
-            self.set_speed.config(text=f"{state_dict.get('set_speed', 0):.1f} mph")
-            self.power_command.config(text=f"{state_dict.get('power_command', 0):.1f} W")
+            self.set_speed.config(text=f"{state_dict['set_speed']:.1f} mph")
+            self.power_command.config(text=f"{state_dict['power_command']:.1f} W")
             
             # Update brake status (from driver controls)
             self.emergency_brake_status.config(
-                text="ON" if state_dict.get('emergency_brake', False) else "OFF",
+                text="ON" if state_dict['emergency_brake'] else "OFF",
             )
             self.service_brake_status.config(
-                text=f"{state_dict.get('service_brake', 0):.1f}%"
+                text=f"{state_dict['service_brake']:.1f}%"
             )
             
             # Update door status (from driver controls)
             self.left_door_status.config(
-                text="OPEN" if state_dict.get('left_door', False) else "CLOSED"
+                text="OPEN" if state_dict['left_door'] else "CLOSED"
             )
             self.right_door_status.config(
-                text="OPEN" if state_dict.get('right_door', False) else "CLOSED"
+                text="OPEN" if state_dict['right_door'] else "CLOSED"
             )
             
             # Update station announcement
-            next_stop = state_dict.get('next_stop', '')
-            if next_stop:
+            next_stop = state_dict['next_stop']
+            # Only show announcement when announce button is pressed
+            if state_dict['announce_pressed'] and next_stop:
                 announcement = f"Next Stop: {next_stop}"
-                if state_dict.get('station_side'):
-                    announcement += f" ({state_dict.get('station_side')} side)"
+                if state_dict['station_side']:
+                    announcement += f" ({state_dict['station_side']} side)"
             else:
                 announcement = "No announcement"
             self.announcement_status.config(text=announcement)
             
             # Update environmental controls (from driver inputs)
             self.lights_status.config(
-                text="ON" if state_dict.get('lights', False) else "OFF"
+                text="ON" if state_dict['lights'] else "OFF"
             )
             
             # Update temperature display
-            self.current_temperature_status.config(
-                text=f"{state_dict.get('train_temperature', 70):.1f}°F"
+            self.set_temperature_status.config(
+                text=f"{state_dict['set_temperature']:.1f}°F"
             )
             
         except Exception as e:

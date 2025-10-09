@@ -177,9 +177,27 @@ class sw_train_controller_ui(tk.Tk):
                                       bg=self.normal_color, width=button_width, height=button_height)
         self.right_door_btn.grid(row=0, column=2, padx=padding, pady=padding)
         
-        # Row 2 (Temperature Controls)
+        # Row 2 (Brake Controls)
+
+        # Announcement button
+        self.announce_btn = tk.Button(button_frame, text="Announcement", command=self.toggle_announcement,
+                                   bg=self.normal_color, width=button_width, height=button_height)
+        self.announce_btn.grid(row=1, column=0, padx=padding, pady=padding)
+
+        self.service_brake_btn = tk.Button(button_frame, text="Service Brake", 
+                                         command=self.toggle_service_brake,
+                                         bg=self.normal_color, width=button_width, height=button_height)
+        self.service_brake_btn.grid(row=1, column=1, padx=padding, pady=padding)
+        
+        self.emergency_brake_btn = tk.Button(button_frame, text="Emergency Brake", 
+                                           command=self.emergency_brake,
+                                           bg=self.normal_color, width=button_width, height=button_height)
+        self.emergency_brake_btn.grid(row=1, column=2, padx=padding, pady=padding)
+
+                
+        # Row 3 (Temperature Controls)
         temperature_frame = ttk.LabelFrame(button_frame, text="Temperature Control")
-        temperature_frame.grid(row=1, column=0, columnspan=2, padx=padding, pady=padding, sticky="nsew")
+        temperature_frame.grid(row=2, column=0, columnspan=1, padx=padding, pady=padding, sticky="nsew")
         
         # Set temperature display
         ttk.Label(temperature_frame, text="Set Temperature:").grid(row=0, column=0, padx=5, pady=2)
@@ -194,17 +212,7 @@ class sw_train_controller_ui(tk.Tk):
         # Temperature control buttons
         ttk.Button(temperature_frame, text="↑", command=self.temp_up).grid(row=0, column=2, padx=5, pady=2)
         ttk.Button(temperature_frame, text="↓", command=self.temp_down).grid(row=1, column=2, padx=5, pady=2)
-        
-        # Row 3 (Brake Controls)
-        self.service_brake_btn = tk.Button(button_frame, text="Service Brake", 
-                                         command=self.toggle_service_brake,
-                                         bg=self.normal_color, width=button_width, height=button_height)
-        self.service_brake_btn.grid(row=2, column=1, padx=padding, pady=padding)
-        
-        self.emergency_brake_btn = tk.Button(button_frame, text="Emergency Brake", 
-                                           command=self.emergency_brake,
-                                           bg=self.normal_color, width=button_width, height=button_height)
-        self.emergency_brake_btn.grid(row=2, column=2, padx=padding, pady=padding)
+
         
     def create_engineering_panel(self):
         """Create engineering control panel."""
@@ -231,25 +239,25 @@ class sw_train_controller_ui(tk.Tk):
             current_state = self.api.get_state()
             
             # Recalculate power command based on current state
-            if not current_state.get('emergency_brake', False) and current_state.get('service_brake', 0) == 0:
+            if not current_state['emergency_brake'] and current_state['service_brake'] == 0:
                 power = self.calculate_power_command(current_state)
-                if power != current_state.get('power_command', 0):
+                if power != current_state['power_command']:
                     self.api.update_state({'power_command': power})
             else:
                 # No power when brakes are active
                 self.api.update_state({'power_command': 0})
             
             # Update current speed display
-            self.speed_display.config(text=f"{current_state.get('velocity', 0):.1f} MPH")
+            self.speed_display.config(text=f"{current_state['velocity']:.1f} MPH")
             
             # Update information table with values (Name column stays constant)
-            self.info_table.set("commanded_speed", column="Value", value=f"{current_state.get('commanded_speed', 0):.1f}")
-            self.info_table.set("speed_limit", column="Value", value=f"{current_state.get('speed_limit', 0):.1f}")
-            self.info_table.set("authority", column="Value", value=f"{current_state.get('commanded_authority', 0):.1f}")
-            self.info_table.set("temperature", column="Value", value=f"{current_state.get('train_temperature', 70):.1f}")
-            self.info_table.set("next_stop", column="Value", value=current_state.get('next_stop', '--'))
-            self.info_table.set("power", column="Value", value=f"{current_state.get('power_command', 0):.1f}")
-            self.info_table.set("station_side", column="Value", value=current_state.get('station_side', '--'))
+            self.info_table.set("commanded_speed", column="Value", value=f"{current_state['commanded_speed']:.1f}")
+            self.info_table.set("speed_limit", column="Value", value=f"{current_state['speed_limit']:.1f}")
+            self.info_table.set("authority", column="Value", value=f"{current_state['commanded_authority']:.1f}")
+            self.info_table.set("temperature", column="Value", value=f"{current_state['train_temperature']:.1f}")
+            self.info_table.set("next_stop", column="Value", value=current_state['next_stop'])
+            self.info_table.set("power", column="Value", value=f"{current_state['power_command']:.1f}")
+            self.info_table.set("station_side", column="Value", value=current_state['station_side'])
             
             # Update failures in table
             failures = []
@@ -263,12 +271,12 @@ class sw_train_controller_ui(tk.Tk):
             self.info_table.set("failures", column="Value", value=failure_text)
             
             # Update speed displays
-            self.speed_display.config(text=f"{current_state.get('velocity', 0):.1f} MPH")
-            self.set_speed_label.config(text=f"{current_state.get('set_speed', 0):.1f} MPH")
+            self.speed_display.config(text=f"{current_state['velocity']:.1f} MPH")
+            self.set_speed_label.config(text=f"{current_state['set_speed']:.1f} MPH")
             
             # Update temperature displays
-            self.set_temp_label.config(text=f"{current_state.get('set_temperature', 70)}°F")
-            self.current_temp_label.config(text=f"{current_state.get('train_temperature', 70)}°F")
+            self.set_temp_label.config(text=f"{current_state['set_temperature']}°F")
+            self.current_temp_label.config(text=f"{current_state['train_temperature']}°F")
             
             # Update control button states
             self.update_button_states(current_state)
@@ -292,25 +300,29 @@ class sw_train_controller_ui(tk.Tk):
         self.left_door_btn.configure(bg=self.active_color if state['left_door'] else self.normal_color)
         self.right_door_btn.configure(bg=self.active_color if state['right_door'] else self.normal_color)
         
+        # Announcement button
+        self.announce_btn.configure(bg=self.active_color if state['announce_pressed'] else self.normal_color)
+        
         # Lights button
         self.lights_btn.configure(bg=self.active_color if state['lights'] else self.normal_color)
         
         # Brake buttons
         self.service_brake_btn.configure(bg=self.active_color if state['service_brake'] > 0 else self.normal_color)
         
-        # Emergency brake is one-way: once activated, it stays red and disabled
+        # Emergency brake configuration
         if state['emergency_brake']:
             self.emergency_brake_btn.configure(bg=self.active_color, state='disabled')
-        
+        else:
+            self.emergency_brake_btn.configure(bg=self.normal_color, state='normal')
     
     # Control methods
     def calculate_power_command(self, state):
         """Calculate power command based on speed difference and Kp/Ki values."""
         # Get current values
-        current_speed = state.get('velocity', 0)
-        driver_set_speed = state.get('set_speed', 0)
-        kp = state.get('kp', 0)
-        ki = state.get('ki', 0)
+        current_speed = state['velocity']
+        driver_set_speed = state['set_speed']
+        kp = state['kp']
+        ki = state['ki']
         
         # Calculate speed error
         speed_error = driver_set_speed - current_speed
@@ -328,11 +340,13 @@ class sw_train_controller_ui(tk.Tk):
     def speed_up(self):
         """Increase driver's set speed and update power command."""
         state = self.api.get_state()
-        current_set_speed = state.get('set_speed', 0)
-        speed_limit = state.get('speed_limit', 40)
+        current_set_speed = state['set_speed']
+        commanded_speed = state['commanded_speed']
+        speed_limit = state['speed_limit']
         
-        # Increase set speed (within speed limit)
-        new_speed = min(speed_limit, current_set_speed + 1)
+        # Increase set speed (not exceeding commanded speed or speed limit)
+        max_allowed_speed = min(commanded_speed, speed_limit)
+        new_speed = min(max_allowed_speed, current_set_speed + 1)
         
         # Update state with new set speed
         state['set_speed'] = new_speed
@@ -347,7 +361,7 @@ class sw_train_controller_ui(tk.Tk):
     def speed_down(self):
         """Decrease driver's set speed and update power command."""
         state = self.api.get_state()
-        current_set_speed = state.get('set_speed', 0)
+        current_set_speed = state['set_speed']
         
         # Decrease set speed (minimum 0)
         new_speed = max(0, current_set_speed - 1)
@@ -377,10 +391,16 @@ class sw_train_controller_ui(tk.Tk):
         state = self.api.get_state()
         self.api.update_state({'lights': not state['lights']})
     
+    def toggle_announcement(self):
+        """Toggle announcement state."""
+        state = self.api.get_state()
+        # Toggle announce_pressed state
+        self.api.update_state({'announce_pressed': not state['announce_pressed']})
+        
     def temp_up(self):
         """Increase desired temperature setpoint."""
         current_state = self.api.get_state()
-        set_temp = current_state.get('set_temperature', 70)
+        set_temp = current_state['set_temperature']
         if set_temp < 95:  # Maximum temperature limit
             self.api.update_state({
                 'set_temperature': set_temp + 1,
@@ -391,7 +411,7 @@ class sw_train_controller_ui(tk.Tk):
     def temp_down(self):
         """Decrease desired temperature setpoint."""
         current_state = self.api.get_state()
-        set_temp = current_state.get('set_temperature', 70)
+        set_temp = current_state['set_temperature']
         if set_temp > 55:  # Minimum temperature limit
             self.api.update_state({
                 'set_temperature': set_temp - 1,
@@ -405,8 +425,14 @@ class sw_train_controller_ui(tk.Tk):
         self.api.update_state({'service_brake': 100 if state['service_brake'] == 0 else 0})
     
     def emergency_brake(self):
-        """Activate emergency brake."""
+        """Activate emergency brake for 5 seconds."""
         self.api.update_state({'emergency_brake': True})
+        # Schedule the brake to release after 5000ms (5 seconds)
+        self.after(5000, self.release_emergency_brake)
+    
+    def release_emergency_brake(self):
+        """Release the emergency brake after delay."""
+        self.api.update_state({'emergency_brake': False})
     
     def lock_engineering_values(self):
         """Lock Kp and Ki values."""
