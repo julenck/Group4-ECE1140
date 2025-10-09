@@ -86,8 +86,8 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
 
             if sug_speed <0:
                 sug_speed = 0
-            elif sug_speed >50:
-                sug_speed = 50
+            elif sug_speed >31:
+                sug_speed = 31
             if sug_auth <0:
                 sug_auth = 0
             elif sug_auth >500:
