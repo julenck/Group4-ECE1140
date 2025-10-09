@@ -1,6 +1,6 @@
 {
     "switches": {
-        "5": "BASE"
+        "5": "ALT"
     },
     "lights": {
         "6": "GREEN",
@@ -10,5 +10,6 @@
         "3": "CLOSED"
     },
     "commanded_speed": 50,
-    "commanded_authority": 400
+    "commanded_authority": 10,
+    "failure_signal": 0
 }
