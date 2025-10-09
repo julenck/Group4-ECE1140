@@ -567,7 +567,6 @@ class hw_train_controller_ui(tk.Tk):
         return digits.get(ch, 0x00)
     
     def seven_segment_display_digits(self, digits):
-        # Write characters left->right to HT16K33 RAM so string order matches display
         try:
             data = [0] * 16
             # HT16K33 mapping: use addresses that do NOT overlap the colon (0x04).
