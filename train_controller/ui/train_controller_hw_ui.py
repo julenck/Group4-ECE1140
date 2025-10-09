@@ -255,6 +255,12 @@ class hw_train_controller_ui(tk.Tk):
             elif name == "announcement_button":
                 current = self.api.get_state().get('announcement', '')
                 self.api.update_state({'announcement': '' if current else 'Next station approaching'})
+                # Toggle announce_pressed boolean (like SW UI) and update announcement text
+                announce_flag = self.api.get_state().get('announce_pressed', False)
+                self.api.update_state({
+                    'announce_pressed': not announce_flag,
+                    'announcement': '' if announce_flag else 'Next station approaching'
+                })
             elif name == "service_brake_button": #temp replacement for pot issue
                 current = self.api.get_state().get('service_brake', False)
                 self.api.update_state({'service_brake': not current})
