@@ -2,23 +2,21 @@
     "Dispatcher": {
         "Trains": {
             "Train 1": {
-                "Line": "",
-                "Suggested Speed": "",
-                "AUthority": "",
-                "Station Destination": "",
-                "Arrival Time": ""
+                "Line": "Red",
+                "Suggested Speed": "15",
+                "Authority": "12",
+                "Station Destination": "2",
+                "Arrival Time": "12"
             },
             "Train 2": {
+                "Line": "Green",
+                "Suggested Speed": "13",
+                "Authority": "2"
+            },
+            "Train 3": {
                 "Line": "Blue",
                 "Suggested Speed": "",
                 "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": ""
-            },
-            "Train 3": {
-                "Line": "",
-                "Suggested Speed": "",
-                "AUthority": "",
                 "Station Destination": "",
                 "Arrival Time": ""
             }
@@ -28,10 +26,12 @@
         "Train Position": "",
         "State of the Train": "",
         "Train Failure Mode": "",
-        "Section and Block1": "",
-        "Light Color": "",
-        "Section and Block2": "",
-        "Gate": ""
+        "Section and Block1": "q12",
+        "Light Color": "Red",
+        "Section and Block2": "r3",
+        "Gate": "Closed",
+        "Track Failure Mode": "",
+        "Line": "Red"
     },
     "TrackModel": {
         "Station": "",

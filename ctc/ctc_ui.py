@@ -15,6 +15,11 @@ def load_data():
                 return {}
     return {}
 
+def save_data(data):
+    with open(data_file, "w") as f:
+        json.dump(data, f, indent=4)
+
+
 def update_labels():
     data = load_data()
     dispatcher = data.get("Dispatcher", {})
@@ -162,8 +167,35 @@ manual_line_box.grid(row=1, column=1, padx=5, sticky='ew')
 manual_sugg_speed_box.grid(row=1, column=2, padx=5, sticky='ew')
 manual_authority_box.grid(row=1, column=3, padx=5, sticky='ew')
 
-manual_dispatch_button = tk.Button(manual_frame,text='DISPATCH',**button_style)
+manual_dispatch_button = tk.Button(manual_frame, text='DISPATCH', command=lambda: manual_dispatch(), **button_style)
 manual_dispatch_button.grid(row=2,column=0,columnspan=4,pady=10,padx=500,sticky='ew')
+
+def manual_dispatch():
+    train = manual_train_box.get()
+    line = manual_line_box.get()
+    speed = manual_sugg_speed_box.get()
+    authority = manual_authority_box.get()
+
+    if not train or not line or not speed or not authority:
+        print("Please fill out all fields.")
+        return
+
+    data = load_data()
+    dispatcher = data.get("Dispatcher", {})
+    trains = dispatcher.get("Trains", {})
+
+    # Add or update this train entry
+    trains[train] = {
+        "Line": line,
+        "Suggested Speed": speed,
+        "Authority": authority,
+    }
+
+    dispatcher["Trains"] = trains
+    data["Dispatcher"] = dispatcher
+
+    save_data(data)
+    update_active_trains_table()
 
 # Maintenance Frame UI 
 maint_frame.grid_columnconfigure((0,1,2,3),weight=1)
@@ -258,8 +290,35 @@ tk.Label(dispatch_frame, text="Enter Arrival Time", font=label_font, bg="lightbl
 auto_arrival_box = tk.Entry(dispatch_frame, font=input_font)
 auto_arrival_box.grid(row=3, column=1, padx=5, pady=5, sticky='ew')
 
-dispatch_button = tk.Button(dispatch_frame, text="DISPATCH", **button_style)
+dispatch_button = tk.Button(dispatch_frame, text="DISPATCH", command=lambda: auto_dispatch(), **button_style)
 dispatch_button.grid(row=4, column=0, columnspan=2, padx=50, pady=10, sticky='ew')
+
+def auto_dispatch():
+    train = auto_train_box.get()
+    line = auto_line_box.get()
+    dest = auto_dest_box.get()
+    arrival = auto_arrival_box.get()
+
+    if not train or not line or not dest or not arrival:
+        print("Please fill out all fields.")
+        return
+
+    data = load_data()
+    dispatcher = data.get("Dispatcher", {})
+    trains = dispatcher.get("Trains", {})
+
+    # Add or update train info
+    trains[train] = {
+        "Line": line,
+        "Station Destination": dest,
+        "Arrival Time": arrival,
+    }
+
+    dispatcher["Trains"] = trains
+    data["Dispatcher"] = dispatcher
+
+    save_data(data)
+    update_active_trains_table()
 
 # Tables Below Mode Area 
 bottom_frame = tk.Frame(root)
@@ -355,7 +414,7 @@ throughput_frame = tk.Frame(bottom_frame)
 throughput_frame.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(10, 0))
 throughput_frame.grid_columnconfigure((0, 1), weight=1)
 
-tk.Label(throughput_frame, text=f"Train", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
+tk.Label(throughput_frame, text=f"Red Line:", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
 tk.Label(throughput_frame, text="Green Line: 14 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=1, sticky='w', padx=20)
 
 event_handler = FileChangeHandler()
