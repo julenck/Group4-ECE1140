@@ -9,10 +9,10 @@ import os
 import sys
 
 try:
-    import RPi.GPIO as GPIO
-    GPIO_AVAILABLE = True
+    from gpiozero import LED, Button
+    GPIOZERO_AVAILABLE = True
 except Exception:
-    GPIO_AVAILABLE = False
+    GPIOZERO_AVAILABLE = False
 
 try:
     from smbus2 import SMBus
@@ -168,33 +168,27 @@ class hw_train_controller_ui(tk.Tk):
         self.after(self.update_interval, self.periodic_update)
 
     def init_hardware(self):
-        if GPIO_AVAILABLE:
+        if GPIOZERO_AVAILABLE:
             try:
-                GPIO.setmode(GPIO.BCM)
-                print("GPIO initialization") # debug
+                print("gpiozero initialization")
+                # store gpiozero objects
+                self.gpio_buttons = {}
+                self.gpio_leds = {}
                 for name, pin in self.GPIO_PINS.items():
                     if "button" in name:
-                        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-                        try:
-                            GPIO.add_event_detect(pin, GPIO.FALLING, callback=self.gpio_callbacks, bouncetime=300)
-                            print(f"GPIO Event Detect added for {name} on pin {pin}") # debug
-                        except Exception:
-                            pass
+                        btn = Button(pin, pull_up=True)
+                        # small hold to reduce bounce impact
+                        btn.when_pressed = lambda n=name: self.gpio_button_pressed(n)
+                        self.gpio_buttons[name] = btn
                     elif "status_led" in name:
-                        try:
-                            GPIO.setup(pin, GPIO.IN)
-                        except Exception:
-                            try:
-                                GPIO.setup(pin, GPIO.OUT)
-                                GPIO.output(pin, GPIO.LOW)
-                                print(f"GPIO Status LED {name} set to LOW on pin {pin}") #debug
-                            except Exception:
-                                pass
-                    print("GPIO Initialized")
+                        led = LED(pin)
+                        led.off()
+                        self.gpio_leds[name] = led
+                print("gpiozero Initialized")
             except Exception as e:
-                print(f"GPIO Initialization Error: {e}")
+                print(f"gpiozero Initialization Error: {e}")
         else:
-            print("GPIO library not available. Running in simulation mode.")
+            print("gpiozero not available. Running in simulation mode.")
 
         if I2C_AVAILABLE:
             try:
@@ -213,25 +207,26 @@ class hw_train_controller_ui(tk.Tk):
         else:
             print("I2C library not available. Running in simulation mode.")
 
-    def gpio_callbacks(self, channel):
+    def gpio_button_pressed(self, name):
+        """Handle a gpiozero button press by logical name (e.g. 'lights_button')."""
         try:
-            print(f"GPIO Callback on channel {channel}") # debug
-            if channel == self.GPIO_PINS["lights_button"]:
+            print(f"gpiozero Button pressed: {name}")
+            if name == "lights_button":
                 current = self.api.get_state().get('lights', False)
                 self.api.update_state({'lights': not current})
-            elif channel == self.GPIO_PINS["left_door_button"]:
+            elif name == "left_door_button":
                 current = self.api.get_state().get('left_door', False)
                 self.api.update_state({'left_door': not current})
-            elif channel == self.GPIO_PINS["right_door_button"]:
+            elif name == "right_door_button":
                 current = self.api.get_state().get('right_door', False)
                 self.api.update_state({'right_door': not current})
-            elif channel == self.GPIO_PINS["announcement_button"]:
+            elif name == "announcement_button":
                 current = self.api.get_state().get('announcement', '')
                 self.api.update_state({'announcement': '' if current else 'Next station approaching'})
-            elif channel == self.GPIO_PINS["horn_button"]:
+            elif name == "horn_button":
                 current = self.api.get_state().get('horn', False)
                 self.api.update_state({'horn': not current})
-            elif channel == self.GPIO_PINS["emergency_brake_button"]:
+            elif name == "emergency_brake_button":
                 self.api.update_state({'emergency_brake': True})
         except Exception as e:
             print(f"GPIO Callback Error: {e}")
@@ -339,6 +334,19 @@ class hw_train_controller_ui(tk.Tk):
                 btn.config(bg=self.active_color, fg="white")
             else:
                 btn.config(bg=self.inactive_color, fg="black")
+            # If gpiozero LEDs are present, mirror status to physical LED
+            try:
+                if GPIOZERO_AVAILABLE and hasattr(self, 'gpio_leds'):
+                    # map UI name to gpio_led key
+                    key = name.lower().replace(' ', '_') + "_status_led"
+                    led = self.gpio_leds.get(key)
+                    if led is not None:
+                        if val:
+                            led.on()
+                        else:
+                            led.off()
+            except Exception as e:
+                print(f"LED update error for {name}: {e}")
 
     def lock_engineering_values(self):
             """Lock Kp and Ki values."""
