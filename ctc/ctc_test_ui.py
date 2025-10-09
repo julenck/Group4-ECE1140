@@ -5,6 +5,15 @@ import os
 
 data_file = 'ctc_data.json'
 
+def load_data():
+    if os.path.exists(data_file):
+        with open(data_file, "r") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
 default_data = {
     "Dispatcher": {
         "Trains":{
@@ -298,8 +307,19 @@ save_button_tm.grid(row=6, column=3, columnspan=2, pady=10)
 generated_outputs_frame = tk.LabelFrame(right_col, text="Generated Outputs", font=label_font)
 generated_outputs_frame.grid(row=1, column=0, sticky='nsew', padx=5, pady=5)
 
-tk.Label(generated_outputs_frame, text="Number of Passengers Leaving", font=label_font).grid(row=0, column=0, sticky='w', padx=10, pady=10)
-tk.Label(generated_outputs_frame, text="Switch Position", font=label_font).grid(row=1, column=0, sticky='w', padx=10, pady=10)
-tk.Label(generated_outputs_frame, text="Track Closure", font=label_font).grid(row=2, column=0, sticky='w', padx=10, pady=10)
+data = load_data()
+maint_data = data.get("MaintenenceModeOutputs",{})
+switch_line = maint_data.get("Switch Line","")
+switch = maint_data.get("Switch Position","")
+
+
+#todo add label and output for line in same row 
+tk.Label(generated_outputs_frame, text="Switch Position", font=label_font).grid(row=0, column=0, sticky='w', padx=10, pady=10)
+tk.Label(generated_outputs_frame,text=f"{switch}",font=label_font).grid(row=0,column=1,sticky='w',padx=10,pady=10)
+
+#todo add label and output for line in same row 
+tk.Label(generated_outputs_frame, text="Track Closure", font=label_font).grid(row=1, column=0, sticky='w', padx=10, pady=10)
+tk.Label(generated_outputs_frame,text="12",font=label_font).grid(row=1,column=1,sticky='w',padx=10,pady=10)
 
 root.mainloop()
+

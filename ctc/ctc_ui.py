@@ -176,9 +176,9 @@ def manual_dispatch():
     speed = manual_sugg_speed_box.get()
     authority = manual_authority_box.get()
 
-    if not train or not line or not speed or not authority:
-        print("Please fill out all fields.")
-        return
+    #if not train or not line or not speed or not authority:
+        #print("Please fill out all fields.")
+        #return
 
     data = load_data()
     dispatcher = data.get("Dispatcher", {})
@@ -214,7 +214,7 @@ maint_switch_box = ttk.Combobox(switch_frame, values=["1", "2", "3", "4"], font=
 maint_line_box1.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 maint_switch_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
 
-move_switch_button = tk.Button(switch_frame, text='Move Switch', **button_style)
+move_switch_button = tk.Button(switch_frame, text='Move Switch', command=lambda: move_switch(),**button_style)
 move_switch_button.grid(row=2, column=0, columnspan=2, padx=100,pady=10, sticky='ew')
 
 # Close block section 
@@ -233,6 +233,22 @@ maint_block_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
 
 close_block_button = tk.Button(block_frame, text='Close Block', **button_style)
 close_block_button.grid(row=2, column=0, columnspan=2, padx=100,pady=10, sticky='ew')
+
+def move_switch():
+    switch_line = maint_line_box1.get()
+    switch = maint_switch_box.get()
+
+    data = load_data()
+    maintenance = data.get("MaintenenceModeOutputs",{})
+
+    maintenance = {
+        "Switch Line": switch_line,
+        "Switch Position": switch,
+    }
+
+    data["MaintenenceModeOutputs"] = maintenance
+
+    save_data(data)
 
 # Auto Frame UI 
 auto_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
