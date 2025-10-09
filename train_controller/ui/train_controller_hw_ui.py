@@ -230,6 +230,11 @@ class hw_train_controller_ui(tk.Tk):
                     self.i2c_bus.write_byte(self.seven_segment_address, 0x81)
                     self.i2c_bus.write_byte(self.seven_segment_address, 0xE0 | 8)
                     self.seven_segment_present = True
+                    try:
+                        self.seven_segment_raw_write([0] * 16)
+                        self.seven_segment_display_set_speed(0)
+                    except Exception as e:
+                        print(f"I2C 7-Segment Setup Error: {e}")
                     print("I2C 7-Segment Display Initialized")
                 else:
                     self.seven_segment_present = False
@@ -331,7 +336,7 @@ class hw_train_controller_ui(tk.Tk):
 
             try:
                 if I2C_AVAILABLE and getattr(self, 'seven_segment_present', False) and self.i2c_bus:
-                    self.seven_segment_display_set_speed(state.get('set_speed', 0))
+                    self.seven_segment_display_set_speed(state.get('velocity', 0))
             except Exception as e:
                 print(f"I2C 7-Segment Update Error: {e}")
 
@@ -562,11 +567,23 @@ class hw_train_controller_ui(tk.Tk):
         return digits.get(ch, 0x00)
     
     def seven_segment_display_digits(self, digits):
-        data = [0] * 16
-        for i in range(4):
-            seg = self.seven_segment_for_digit(digits[i])
-            data[i*2] = seg
-        self.seven_segment_raw_write(data)
+        # Write characters left->right to HT16K33 RAM so string order matches display
+        try:
+            data = [0] * 16
+            # HT16K33 mapping: use addresses that do NOT overlap the colon (0x04).
+            # Use 0x00,0x02 for left two digits and 0x06,0x08 for right two digits.
+            positions = [0, 2, 6, 8]
+            # ensure digits is a 4-char string
+            s = str(digits).rjust(4)[:4]
+            for i in range(4):
+                ch = s[i]
+                seg = self.seven_segment_for_digit(ch)
+                data[positions[i]] = seg
+            # ensure colon is cleared (colon bit lives in address 0x04)
+            data[4] = data[4] & ~0x02
+            self.seven_segment_raw_write(data)
+        except Exception as e:
+            print(f"7-Segment Display Digits Error: {e}")
 
     def seven_segment_display_set_speed(self, speed):
         try:
