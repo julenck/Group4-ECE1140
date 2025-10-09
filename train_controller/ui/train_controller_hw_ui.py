@@ -258,9 +258,9 @@ class hw_train_controller_ui(tk.Tk):
             elif name == "service_brake_button": #temp replacement for pot issue
                 current = self.api.get_state().get('service_brake', False)
                 self.api.update_state({'service_brake': not current})
-            #elif name == "emergency_brake_button":
-            #    self.api.update_state({'emergency_brake': True})
-            #    self.after(5000, lambda: self.api.update_state({'emergency_brake': False}))
+            elif name == "emergency_brake_button":
+                self.api.update_state({'emergency_brake': True})
+                self.after(5000, lambda: self.api.update_state({'emergency_brake': False}))
         except Exception as e:
             print(f"GPIO Callback Error: {e}")
 
@@ -339,60 +339,63 @@ class hw_train_controller_ui(tk.Tk):
             return
         try:
             addr = self.i2c_address['adc']
-            
-            def _read_ads1115_single_ended(channel):
-                """Start single-shot conversion on ADS1115 channel (0-3) and return raw signed int."""
+
+            def _read_ads1115_single_ended(channel, pga_bits=0x0200, fsr=4.096):
+                """Single-shot read from ADS1115 single-ended channel.
+                Returns (voltage, raw_code).
+                pga_bits should be the PGA setting (bits shifted into bits 11:9).
+                fsr is the full-scale range in volts corresponding to pga_bits.
+                """
                 OS_SINGLE = 0x8000
                 MUX_BASE = {0: 0x4000, 1: 0x5000, 2: 0x6000, 3: 0x7000}
-                PGA_2_048 = 0x0200  # +/-2.048V
                 MODE_SINGLE = 0x0100
-                DR_128 = 0x0080     # 128 SPS
+                DR_128 = 0x0080
                 COMP_QUE_DISABLE = 0x0003
 
                 mux = MUX_BASE.get(channel, 0x4000)
-                config = OS_SINGLE | mux | PGA_2_048 | MODE_SINGLE | DR_128 | COMP_QUE_DISABLE
-
+                config = OS_SINGLE | mux | pga_bits | MODE_SINGLE | DR_128 | COMP_QUE_DISABLE
                 hi = (config >> 8) & 0xFF
                 lo = config & 0xFF
-                # Write config to config register (pointer 0x01)
-                try:
-                    self.i2c_bus.write_i2c_block_data(addr, 0x01, [hi, lo])
-                except Exception as e:
-                    # if write fails, raise to outer except
-                    raise
-                # Wait for conversion (128 SPS -> ~7.8ms). use small margin
+                self.i2c_bus.write_i2c_block_data(addr, 0x01, [hi, lo])
+                # wait for conversion: 128SPS -> ~7.8ms
                 time.sleep(0.01)
-                # Read conversion register (pointer 0x00), 2 bytes
                 data = self.i2c_bus.read_i2c_block_data(addr, 0x00, 2)
                 raw = (data[0] << 8) | data[1]
-                # Convert to signed 16-bit
+                # convert to signed 16-bit (should be non-negative for single-ended)
                 if raw & 0x8000:
                     raw -= 1 << 16
-                return raw
+                # convert raw -> voltage using full-scale range
+                voltage = (raw / 32767.0) * fsr
+                # clamp to 0..fsr for safety
+                voltage = max(0.0, min(voltage, fsr))
+                return voltage, raw
+            
+            PGA_4_096_BITS = 0x0200
+            FSR_4_096 = 4.096
 
-            raw0 = _read_ads1115_single_ended(0)
-            raw1 = _read_ads1115_single_ended(1)
-            raw3 = _read_ads1115_single_ended(3)
+            v0, raw0 = _read_ads1115_single_ended(0, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
+            v1, raw1 = _read_ads1115_single_ended(1, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
+            v3, raw3 = _read_ads1115_single_ended(3, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
 
-            # ADS1115 single-ended raw range 0..32767 -> map to 0.0..1.0
-            ratio0 = max(0.0, min(1.0, raw0 / 32767.0))
-            ratio1 = max(0.0, min(1.0, raw1 / 32767.0))
-            ratio3 = max(0.0, min(1.0, raw3 / 32767.0))
+            # compute ratio relative to the actual pot supply (3.3V)
+            V_POT = 3.3
+            ratio0 = max(0.0, min(1.0, v0 / V_POT))
+            ratio1 = max(0.0, min(1.0, v1 / V_POT))
+            ratio3 = max(0.0, min(1.0, v3 / V_POT))
 
             state = self.api.get_state()
             commanded_speed = state.get('commanded_speed', 0.0)
             set_speed = round(ratio0 * commanded_speed, 2)
-            # Map channel1 to temperature range 55..95 F
             set_temp = int(round(55 + (ratio1 * 40)))
-            service_brake = int(round(ratio3 * 100))  # 0..100%
+            service_brake = int(round(ratio3 * 100))
 
+            # build updated state and compute power using updated set_speed
             new_state = state.copy()
             new_state['set_speed'] = set_speed
             new_state['set_temperature'] = set_temp
             new_state['service_brake'] = service_brake
 
-            # Update API with set values; also refresh power command (PI controller uses set_speed)
-            power = self.calculate_power_command(state)
+            power = self.calculate_power_command(new_state)
 
             self.api.update_state({
                 'set_speed': set_speed,
