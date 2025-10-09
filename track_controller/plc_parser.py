@@ -25,7 +25,7 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
         dict: Updated states for switches, lights, and crossings.
               Format:
               {
-                  "switches": {block_id: "BASE" or "ALT"},
+                  "switches": {block_id: "STRAIGHT" or "DIVERGING"},
                   "lights": {block_id: "GREEN" or "RED"},
                   "crossings": {block_id: "OPEN" or "CLOSED"}
               }
@@ -51,20 +51,20 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
         if fail_sig ==0:
             if "switch" in infrastructure:
                 switch = infrastructure["switch"]
-                switch_pos = "BASE"
-                base = switch["state"]["base"]
-                alt = switch["state"]["alt"]
+                switch_pos = "STRAIGHT"
+                straight = switch["state"]["straight"]
+                diverging = switch["state"]["diverging"]
 
-            if train_on_A and (destination in alt["destination"] and destination not in base["destination"]):
-                switch_pos = "ALT"
-            elif train_on_A and (destination in base["destination"] and destination not in alt["destination"]):
-                switch_pos = "BASE"
+            if train_on_A and (destination in diverging["destination"] and destination not in straight["destination"]):
+                switch_pos = "DIVERGING"
+            elif train_on_A and (destination in straight["destination"] and destination not in diverging["destination"]):
+                switch_pos = "STRAIGHT"
             elif train_on_B:
-                switch_pos = "BASE"
+                switch_pos = "STRAIGHT"
             elif train_on_C:
-                switch_pos = "ALT"
+                switch_pos = "DIVERGING"
             else:
-                switch_pos = "BASE"
+                switch_pos = "STRAIGHT"
             
             updated_states["switches"][switch["block_id"]] = switch_pos
             
@@ -97,7 +97,7 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
         else:
             if "switch" in infrastructure:
                 switch = infrastructure["switch"]
-                switch_pos = "BASE"
+                switch_pos = "STRAIGHT"
                 updated_states["switches"][switch["block_id"]] = switch_pos
             if "light" in infrastructure:
                 light = infrastructure["light"]
@@ -109,6 +109,7 @@ def parse_plc_data(plc_file_path,block_occupancies,destination,sug_speed,sug_aut
                 updated_states["crossings"][crossing["block_id"]] = crossing_state
             updated_states["commanded_speed"] = 0
             updated_states["commanded_authority"] = 0
+        updated_states["failure_signal"] = fail_sig
 
     return updated_states
 

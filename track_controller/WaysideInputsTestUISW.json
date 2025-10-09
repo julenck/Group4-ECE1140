@@ -1,9 +1,10 @@
 {
-  "suggested_speed": 55,
-  "suggested_authority": 10,
+  "suggested_speed": 200,
+  "suggested_authority": 200,
   "destination": 10,
   "block_occupancies": [
-    2
+    3,
+    10
   ],
   "failure_signal": 0
 }

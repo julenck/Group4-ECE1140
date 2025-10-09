@@ -15,12 +15,12 @@
             "switch":{
                       "block_id":5,
                        "state":{
-                               "base":{
+                               "straight":{
                                       "occupied":[11,12,13,14,15],
                                       "unoccupied":[1,2,3,4,5],
                                       "destination":[10,1]
                                 },
-                               "alt":{
+                               "diverging":{
                                       "occupied":[6,7,8,9,10],
                                       "unoccupied":[1,2,3,4,5],
                                       "destination":[15,1]

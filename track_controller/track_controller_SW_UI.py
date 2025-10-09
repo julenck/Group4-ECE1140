@@ -90,7 +90,7 @@ class sw_track_controller_ui(tk.Tk):
 		self.switch_menu.pack(padx=0, pady=0)
 
 		#Switch state dictionary
-		self.switch_states_dictionary = {switch: "BASE" for switch in switch_options}
+		self.switch_states_dictionary = {switch: "STRAIGHT" for switch in switch_options}
 
 		#display current switch state
 		self.switch_state_label = ttk.Label(
@@ -106,7 +106,7 @@ class sw_track_controller_ui(tk.Tk):
 		#select State combobox
 		self.select_state = tk.StringVar()
 		self.select_state_menu = ttk.Combobox(
-			maintenance_frame, textvariable=self.select_state, values=["BASE", "ALT"], state="disabled"
+			maintenance_frame, textvariable=self.select_state, values=["STRAIGHT", "DIVERGING"], state="disabled"
 		)
 		self.select_state_menu.pack(padx=0, pady=(WINDOW_WIDTH / 120, 0))
 
@@ -216,6 +216,14 @@ class sw_track_controller_ui(tk.Tk):
 		status_frame.grid(
 			row=1, column=2, sticky="NSEW", padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120
 		)
+
+		#display current state of train
+		self.status_label = ttk.Label(status_frame, text="Status: Unknown", font=("Helvetica", 18))
+		self.status_label.pack(padx=WINDOW_HEIGHT / 35, pady=WINDOW_WIDTH / 60)
+
+		#display if there is a failure
+		self.failure_label = ttk.Label(status_frame, text="Failure: None", font=("Helvetica", 20))
+		self.failure_label.pack(padx=WINDOW_HEIGHT / 35, pady=WINDOW_WIDTH / 60)
 		#---End Status Frame---#
 
 		# Initialize file modification time tracking
@@ -379,6 +387,24 @@ class sw_track_controller_ui(tk.Tk):
 		self.commanded_authority_label.config(
 			text="Commanded Authority: " + str(wayside_outputs["commanded_authority"]) + " yds"
 		)
+
+		#update state and failure labels
+		if fail_signal == 1:
+			self.status_label.config(text="Status: FAILURE DETECTED")
+			self.failure_label.config(text="Failure: Broken Track")
+		elif fail_signal == 2:
+			self.status_label.config(text="Status: FAILURE DETECTED")
+			self.failure_label.config(text="Failure: Power Failure")
+		elif fail_signal == 3:
+			self.status_label.config(text="Status: FAILURE DETECTED")
+			self.failure_label.config(text="Failure: Circuit Failure")
+		else:
+			if block_occupancies:
+				self.status_label.config(text="Status: Operational")
+				self.failure_label.config(text="Failure: None")
+			else:
+				self.status_label.config(text="Status: No Train Detected")
+				self.failure_label.config(text="Failure: None")
 
 		# Store the loaded inputs for next comparison
 		self.wayside_inputs = wayside_inputs
