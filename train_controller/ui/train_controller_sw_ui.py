@@ -131,11 +131,11 @@ class sw_train_controller_ui(tk.Tk):
         # Add rows with initial values - (Name, Value, Unit)
         self.info_table.insert("", "end", "commanded_speed", values=("Commanded Speed", "0", "mph"))
         self.info_table.insert("", "end", "speed_limit", values=("Speed Limit", "0", "mph"))
-        self.info_table.insert("", "end", "authority", values=("Authority", "0", "yards"))
-        self.info_table.insert("", "end", "temperature", values=("Temperature", "70", "°F"))
-        self.info_table.insert("", "end", "next_stop", values=("Next Stop", "--", ""))
+        self.info_table.insert("", "end", "authority", values=("Commanded Authority", "0", "yds"))
+        self.info_table.insert("", "end", "temperature", values=("Train Temperature", "70", "°F"))
+        self.info_table.insert("", "end", "next_stop", values=("Next Stop", "--", "Name"))
         self.info_table.insert("", "end", "power", values=("Power Command", "0", "W"))
-        self.info_table.insert("", "end", "station_side", values=("Station Side", "--", ""))
+        self.info_table.insert("", "end", "station_side", values=("Station Side", "--", "right/left"))
         self.info_table.insert("", "end", "failures", values=("System Failures", "None", ""))
         
         # Add explanatory text
@@ -259,16 +259,29 @@ class sw_train_controller_ui(tk.Tk):
             self.info_table.set("power", column="Value", value=f"{current_state['power_command']:.1f}")
             self.info_table.set("station_side", column="Value", value=current_state['station_side'])
             
-            # Update failures in table
+            # Update failures in table with color
             failures = []
+            has_failures = False
             if current_state.get('engine_failure', False):
                 failures.append("Engine")
+                has_failures = True
             if current_state.get('signal_failure', False):
                 failures.append("Signal")
+                has_failures = True
             if current_state.get('brake_failure', False):
                 failures.append("Brake")
+                has_failures = True
             failure_text = ", ".join(failures) if failures else "None"
+            
+            # Update failure text and color
             self.info_table.set("failures", column="Value", value=failure_text)
+            # Change text color based on failure state
+            self.info_table.tag_configure("failure_tag", foreground="red")
+            self.info_table.tag_configure("normal_tag", foreground="black")
+            if has_failures:
+                self.info_table.item("failures", tags=("failure_tag",))
+            else:
+                self.info_table.item("failures", tags=("normal_tag",))
             
             # Update speed displays
             self.speed_display.config(text=f"{current_state['velocity']:.1f} MPH")
@@ -426,7 +439,9 @@ class sw_train_controller_ui(tk.Tk):
     
     def emergency_brake(self):
         """Activate emergency brake for 5 seconds."""
-        self.api.update_state({'emergency_brake': True})
+        self.api.update_state({'emergency_brake': True,
+                               'set_speed': 0 # set speed to 0 when the e brake is pressed
+                               })
         # Schedule the brake to release after 5000ms (5 seconds)
         self.after(5000, self.release_emergency_brake)
     
