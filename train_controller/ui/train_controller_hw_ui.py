@@ -5,14 +5,27 @@
 #import tkinter and related libraries
 import tkinter as tk
 from tkinter import ttk
-from tkinter import messagebox
-from tkinter import filedialog
-import json
 import os
+import sys
 
-#variables for window size
-window_width = 1200
-window_height = 700
+try:
+    import RPi.GPIO as GPIO
+    GPIO_AVAILABLE = True
+except Exception:
+    GPIO_AVAILABLE = False
+
+try:
+    from smbus2 import SMBus
+    I2C_AVAILABLE = True
+except Exception:
+    I2C_AVAILABLE = False
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+#import API
+from api.train_controller_api import train_controller_api
 
 class hw_train_controller_ui(tk.Tk):
 
@@ -21,23 +34,58 @@ class hw_train_controller_ui(tk.Tk):
 
 
         #set window title and size
-        self.title("Hardware Driver Interface")
-        self.geometry(f"{window_width}x{window_height}")
+        self.title("Train Controller - Hardware Driver Interface")
+        self.geometry("1200x700")
         self.minsize(900, 600)
 
-        #top frame which displays and allows selections of train
-        train_selection_frame = ttk.Frame(self)
-        train_selection_frame.pack(fill="x", padx=10, pady=(8, 2))
+        # Setting font sizes for UI
+        font_style = ("Sans Serif")
+        tree_default_font = (font_style, 11)
+        heading_font = (font_style, 15, "bold")
+        tree_heading_font = (font_style, 13, "bold")
 
-        ttk.Label(train_selection_frame, font=(12), text="Select Train:").pack(side="left")
-        self.train_var = tk.StringVar()
-        self.train_combobox = ttk.Combobox(train_selection_frame,
-                                           textvariable=self.train_var,
-                                           state="readonly",
-                                           width=18,
-                                           values=["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"])        
-        self.train_combobox.current(0)
-        self.train_combobox.pack(side="left", padx=5)
+        style = ttk.Style(self)
+        style.configure("TLabelframe.Label", font=heading_font)
+        style.configure("Treeview.Heading", font=tree_heading_font)
+        style.configure("Treeview", font=tree_default_font, rowheight=28)
+
+        # Initialize API
+        self.api = train_controller_api()
+
+        # Defining button colors
+        self.active_color = "#ff4444"
+        self.inactive_color = "#dddddd"
+
+        # Hardware configuration (GPIO pin mapping)
+        self.GPIO_PINS = {
+            "lights_button": 4,
+            "lights_status_led": 13,
+            "left_door_button": 17,
+            "left_door_status_led": 19,
+            "right_door_button": 27,
+            "right_door_status_led": 26,
+            "announcement_button": 22,
+            "announcement_status_led": 20,
+            "horn_button": 5,
+            "horn_status_led": 16,
+            "emergency_brake_button": 6,
+            "emergency_brake_status_led": 21,
+        }
+
+        # I2C configuration
+        self.i2c_bus_number = 1
+        self.i2c_address = {
+            "lcd": 0x27,
+            "adc": 0x48,
+            "seven_segment": 0x70
+        }
+
+        self.i2c_bus = None
+        self.i2c_devices = {
+            "lcd": False,
+            "adc": False,
+            "seven_segment": False
+        }
 
         #main frame which shows important train information panel
         main_frame = ttk.Frame(self)
@@ -46,24 +94,28 @@ class hw_train_controller_ui(tk.Tk):
         info_panel_frame = ttk.LabelFrame(main_frame, text="Train Information Panel", padding=(8,8))
         info_panel_frame.pack(fill="both", expand=True, padx=(0,8))
 
-        columns = ("parameter", "value")
+        columns = ("parameter", "value", "unit")
         self.info_treeview = ttk.Treeview(info_panel_frame, columns=columns, show="headings")
         self.info_treeview.heading("parameter", text="Parameter")
         self.info_treeview.heading("value", text="Value")
-        self.info_treeview.column("parameter", anchor="w", width=300)
-        self.info_treeview.column("value", anchor="center", width=150)
+        self.info_treeview.heading("unit", text="Unit")
+        self.info_treeview.column("parameter", anchor="w", width=320)
+        self.info_treeview.column("value", anchor="center", width=120)
+        self.info_treeview.column("unit", anchor="center", width=80)
         self.info_treeview.pack(fill="both", expand=True)
 
         self.important_parameters = [
-            ("Commanded Speed", "25 mph"),
-            ("Commanded Authority", "21 yards"),
-            ("Speed Limit", "30 mph"),
-            ("Power Availability", "1000 kW"),
-            ("Station Side", "Left/Right"),
-            ("Cabin Temperature", "67 F"),
+            ("Commanded Speed", "", "mph"),
+            ("Commanded Authority", "", "yards"),
+            ("Speed Limit", "", "mph"),
+            ("Power Availability", "", "W"),
+            ("Cabin Temperature", "", "F°"),
+            ("Station Side", "", "Left/Right"),
+            ("Next Station", "", "Station"),
+            ("Failure(s)", "", "Type(s)"),
         ]
-        for param, val in self.important_parameters:
-            self.info_treeview.insert("", "end", values=(param, val))
+        for param, val, unit in self.important_parameters:
+            self.info_treeview.insert("", "end", values=(param, val, unit))
 
         #bottom left frame with status indicators
         bottom_frame = ttk.Frame(self)
@@ -73,7 +125,7 @@ class hw_train_controller_ui(tk.Tk):
         status_frame.pack(side="left", fill="both", expand=True)
 
         self.status_buttons = {}
-        statuses = ["Lights", "Left Door", "Right Door", "Horn", "Announcement", "Emergency Brake"]
+        statuses = ["Lights", "Left Door", "Right Door", "Announcement", "Horn", "Emergency Brake"]
 
         button_frame = ttk.Frame(status_frame)
         button_frame.pack(fill="x", padx=4, pady=6)
@@ -82,7 +134,7 @@ class hw_train_controller_ui(tk.Tk):
             r = idx // 3
             c = idx % 3
             b = tk.Button(button_frame, text=status, width=22, height=3, 
-                           bg="#f0f0f0", command=lambda s=status: self.toggle_status(s))
+                           bg="#f0f0f0", command=lambda: None)
             b.grid(row=r, column=c, padx=10, pady=8, sticky="nsew")
             button_frame.grid_columnconfigure(c, weight=1)
             self.status_buttons[status] = {"button": b, "active": False}
@@ -102,48 +154,191 @@ class hw_train_controller_ui(tk.Tk):
         self.ki_entry.grid(row=1, column=1, pady=(2,6))
 
         # setting apply button to only be applied once
-        self.apply_button = ttk.Button(engineering_frame, text="Apply", command=self.apply_gain)
+        self.apply_button = ttk.Button(engineering_frame, text="Apply", command=self.lock_engineering_values)
         self.apply_button.grid(row=2, column=0, columnspan=2, pady=(8,2), sticky="ew")
 
         # make layout responsive
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-    def on_train_change(self, event):
-        selected_train = self.train_var.get()
-        new_values = {
-            "Train 1": "25 mph",
-            "Train 2": "20 mph",
-            "Train 3": "30 mph",
-        }
-        children = self.info_treeview.get_children()
-        for iid in children:
-            param = self.info_treeview.item(iid)["values"][0]
-            if param == "Commanded Speed":
-                self.info_treeview.set(iid, "value", new_values.get(selected_train, "N/A"))
+        self.init_hardware()
 
-    def toggle_status(self, status):
-        entry = self.status_buttons[status]
-        entry["active"] = not entry["active"]
-        button = entry["button"]
-        if entry["active"]:
-            button.config(bg="red", fg="white")
+        self.update_interval = 500  # 500ms = 0.5 seconds
+        self.after(self.update_interval, self.periodic_update)
+
+    def init_hardware(self):
+        if GPIO_AVAILABLE:
+            try:
+                GPIO.setmode(GPIO.BCM)
+                for name, pin in self.GPIO_PINS.items():
+                    if "button" in name:
+                        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+                        try:
+                            GPIO.add_event_detect(pin, GPIO.FALLING, callback=self.gpio_callbacks, bouncetime=300)
+                        except Exception:
+                            pass
+                    elif "status_led" in name:
+                        try:
+                            GPIO.setup(pin, GPIO.IN)
+                        except Exception:
+                            try:
+                                GPIO.setup(pin, GPIO.OUT)
+                                GPIO.output(pin, GPIO.LOW)
+                            except Exception:
+                                pass
+                    print("GPIO Initialized")
+            except Exception as e:
+                print(f"GPIO Initialization Error: {e}")
         else:
-            button.config(bg="#f0f0f0", fg="black")
+            print("GPIO library not available. Running in simulation mode.")
 
-    def apply_gain(self):
+        if I2C_AVAILABLE:
+            try:
+                self.i2c_bus = SMBus(self.i2c_bus_number)
+                for name, addr in self.i2c_address.items():
+                    try:
+                        self.i2c_bus.read_byte(addr)
+                        self.i2c_devices[name] = True
+                        print(f"I2C Device {name} found at address {hex(addr)}")
+                    except Exception:
+                        self.i2c_devices[name] = False
+                        print(f"I2C Device {name} NOT found at address {hex(addr)}")
+                print("I2C Initialized")
+            except Exception as e:
+                print(f"I2C Initialization Error: {e}")
+        else:
+            print("I2C library not available. Running in simulation mode.")
+
+    def gpio_callbacks(self, channel):
         try:
-            kp = float(self.kp_var.get())
-            ki = float(self.ki_var.get())
-            messagebox.showinfo("Gains Applied", f"Gains set to:\nKp: {kp}\nKi: {ki}")
-        except ValueError:
-            messagebox.showerror("Invalid Input", "Please enter valid numeric values for Kp and Ki.")
+            if channel == self.GPIO_PINS["lights_button"]:
+                current = self.api.get_state().get('lights', False)
+                self.api.update_state({'lights': not current})
+            elif channel == self.GPIO_PINS["left_door_button"]:
+                current = self.api.get_state().get('left_door', False)
+                self.api.update_state({'left_door': not current})
+            elif channel == self.GPIO_PINS["right_door_button"]:
+                current = self.api.get_state().get('right_door', False)
+                self.api.update_state({'right_door': not current})
+            elif channel == self.GPIO_PINS["announcement_button"]:
+                current = self.api.get_state().get('announcement', '')
+                self.api.update_state({'announcement': '' if current else 'Next station approaching'})
+            elif channel == self.GPIO_PINS["horn_button"]:
+                current = self.api.get_state().get('horn', False)
+                self.api.update_state({'horn': not current})
+            elif channel == self.GPIO_PINS["emergency_brake_button"]:
+                self.api.update_state({'emergency_brake': True})
+        except Exception as e:
+            print(f"GPIO Callback Error: {e}")
+
+    def periodic_update(self):
+        try:
+            state = self.api.get_state()
+
+            # Read ADC (potentiometer inputs) and update set_speed, temperature, service_brake
+            self.read_and_update_adc_api()
+
+            # Update important parameters in the treeview
+            children = self.info_treeview.get_children()
+            for iid in children:
+                param = self.info_treeview.item(iid)["values"][0]
+                if param == "Commanded Speed":
+                    self.info_treeview.set(iid, "value", f"{state.get('commanded_speed', 0):.1f}")
+                elif param == "Commanded Authority":
+                    self.info_treeview.set(iid, "value", f"{state.get('commanded_authority', 0):.1f}")
+                elif param == "Speed Limit":
+                    self.info_treeview.set(iid, "value", f"{state.get('speed_limit', 0):.1f}")
+                elif param == "Power Availability":
+                    self.info_treeview.set(iid, "value", f"{state.get('power_command', 0):.1f}")
+                elif param == "Cabin Temperature":
+                    self.info_treeview.set(iid, "value", f"{state.get('train_temperature', 0):.1f}")
+                elif param == "Station Side":
+                    self.info_treeview.set(iid, "value", state.get('station_side', ''))
+                elif param == "Next Station":
+                    self.info_treeview.set(iid, "value", state.get('next_stop', ''))
+                elif param == "Failure(s)":
+                    failures = []
+                    if state.get('engine_failure', False):
+                        failures.append("Engine")
+                    if state.get('signal_failure', False):
+                        failures.append("Signal")
+                    if state.get('brake_failure', False):
+                        failures.append("Brake")
+                    self.info_treeview.set(iid, "value", ", ".join(failures) if failures else "None")
+
+            self.update_status_indicators(state)
+
+        except Exception as e:
+            print(f"Periodic Update Error: {e}")
+        finally:
+            self.after(self.update_interval, self.periodic_update)
+
+    def read_and_update_adc_api(self):
+        if (not I2C_AVAILABLE) or (not self.i2c_devices.get('adc', False)) or (not self.i2c_bus):
+            return
+        try:
+            address = self.i2c_address['adc']
+            try:
+                data = self.i2c_bus.read_i2c_block_data(address, 0, 3)
+                a0, a4, a7 = data[0], data[1], data[2]
+                # Set speed bounded within 0 to commanded speed (max)
+                state = self.api.get_state()
+                commanded_speed = state.get('commanded_speed', 0)
+                set_speed = round((a0 / 255.00) * commanded_speed, 2)
+                # Temperature bounded within 55 to 95 F (honestly dont know what range to use, probably wrong)
+                set_temp = int(55 + (a4 / 255.00) * 40)
+                # Service brake bounded from 0% to 100%
+                service_brake = int((a7 / 255.00) * 100)
+                self.api.update_state({
+                    'set_speed': set_speed,
+                    'train_temperature': set_temp,
+                    'service_brake': service_brake
+                })
+            except Exception:
+                return
+        except Exception as e:
+            print(f"ADC Read Error: {e}")
+
+    def update_status_indicators(self, state):
+        mapping = {
+            "Lights": bool(state.get('lights', False)),
+            "Left Door": bool(state.get('left_door', False)),
+            "Right Door": bool(state.get('right_door', False)),
+            "Announcement": bool(state.get('announcement', '')),
+            "Horn": bool(state.get('horn', False)),
+            "Emergency Brake": bool(state.get('emergency_brake', False))
+        }
+        for name, val in mapping.items():
+            entry = self.status_buttons.get(name)
+            if not entry:
+                continue
+            entry["active"] = val
+            btn = entry["button"]
+            if val:
+                btn.config(bg=self.active_color, fg="white")
+            else:
+                btn.config(bg=self.inactive_color, fg="black")
+
+    def lock_engineering_values(self):
+            """Lock Kp and Ki values."""
+            try:
+                kp = float(self.kp_entry.get())
+                ki = float(self.ki_entry.get())
+                
+                self.api.update_state({
+                    'kp': kp,
+                    'ki': ki,
+                    'engineering_panel_locked': True
+                })
+                
+                # Disable inputs
+                self.kp_entry.configure(state="disabled")
+                self.ki_entry.configure(state="disabled")
+                self.apply_button.configure(state="disabled")
+                
+            except ValueError:
+                tk.messagebox.showerror("Error", "Kp and Ki must be valid numbers")
 
 if __name__ == "__main__":
     app = hw_train_controller_ui()
     app.mainloop()
-# THINGS THAT I SHOULD DISPLAY ON THE DRIVE UI FOR HARDWARE:
-# THE SPEEDOMETER, THE INFORMATION PANNEL
-
-# THINGS THAT MY HARDWARE SHOULD CONTROL ON THE DRIVER UI (LED CAN BE SHOWN ON THE UI, SO INCLUDE THE BUTTONS THERE):
-# ALL BUTTONS, THE SPEED INPUT, THE TEMP INPUT, AND SERVICE BRAKE INPUT
