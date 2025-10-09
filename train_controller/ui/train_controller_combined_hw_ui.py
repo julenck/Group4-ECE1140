@@ -3,7 +3,7 @@
 This module provides a combined interface that launches both the Driver UI
 and the Test UI simultaneously for testing purposes.
 
-Author: Julen Coca-Knorr
+Author: James Struyk
 """
 
 import tkinter as tk

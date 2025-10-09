@@ -25,50 +25,71 @@ class train_controller_api:
             # Inputs FROM Train Model
             'commanded_speed': 0.0,      # mph
             'commanded_authority': 0.0,   # yards
-            'speed_limit': 40.0,         # mph
+            'speed_limit': 0,         # mph
             'velocity': 0.0,             # mph
             'next_stop': '',             # station name
-            'station_side': 'right',     # left/right
-            'train_temperature': 70,     # °F
+            'station_side': '',     # left/right
+            'train_temperature': 0,   # °F
             'engine_failure': False,
             'signal_failure': False,
             'brake_failure': False,
             
             # Internal Train Controller State
-            'set_speed': 'commanded_speed',           # mph
-            'service_brake': 0,         # percentage
-            'right_door': False,
-            'left_door': False,
-            'lights': False,
-            'set_temperature': 70,      # Driver's desired temperature (°F)
-            'temperature_up': False,
-            'temperature_down': False,
-            'announcement': '',
-            'emergency_brake': False,
-            'kp': 0.0,
-            'ki': 0.0,
-            'engineering_panel_locked': False,
+            'set_speed': 0.0,           # mph - will be initialized to match commanded_speed
+            'service_brake': 0,         # percentage (0-100)
+            'right_door': False,        # door state
+            'left_door': False,         # door state
+            'lights': False,            # lights state
+            'set_temperature': 0.0,     # Driver's desired temperature (°F) - will be initialized to match train_temperature
+            'temperature_up': False,    # temperature control
+            'temperature_down': False,   # temperature control
+            'announcement': '',         # current announcement
+            'announce_pressed': False,  # tracks if announcement button is pressed
+            'emergency_brake': False,   # emergency brake state
+            'kp': 0.0,                 # proportional gain
+            'ki': 0.0,                 # integral gain
+            'engineering_panel_locked': False,  # engineering panel state
             
             # Outputs TO Train Model
-            'power_command': 0.0,        # W
+            'power_command': 0.0,        # power in Watts
         }
         
         # Initialize state file if it doesn't exist or is empty/malformed
         try:
             if not os.path.exists(self.state_file) or os.path.getsize(self.state_file) == 0:
-                self.save_state(self.default_state)
+                # Initialize default state with matched values
+                initial_state = self.default_state.copy()
+                initial_state['set_speed'] = initial_state['commanded_speed']
+                initial_state['set_temperature'] = initial_state['train_temperature']
+                self.save_state(initial_state)
             else:
                 # Validate existing file
                 with open(self.state_file, 'r') as f:
                     try:
-                        json.load(f)
+                        current_state = json.load(f)
+                        # Ensure all required fields are present
+                        for key in self.default_state:
+                            if key not in current_state:
+                                current_state[key] = self.default_state[key]
+                        # Always ensure set_speed and set_temperature match their inputs if not set
+                        if 'set_speed' not in current_state:
+                            current_state['set_speed'] = current_state['commanded_speed']
+                        if 'set_temperature' not in current_state:
+                            current_state['set_temperature'] = current_state['train_temperature']
+                        self.save_state(current_state)
                     except json.JSONDecodeError:
                         # File exists but is malformed, overwrite with defaults
-                        self.save_state(self.default_state)
+                        initial_state = self.default_state.copy()
+                        initial_state['set_speed'] = initial_state['commanded_speed']
+                        initial_state['set_temperature'] = initial_state['train_temperature']
+                        self.save_state(initial_state)
         except Exception as e:
             print(f"Error initializing state file: {e}")
-            # Ensure we have a valid state file
-            self.save_state(self.default_state)
+            # Ensure we have a valid state file with proper initialization
+            initial_state = self.default_state.copy()
+            initial_state['set_speed'] = initial_state['commanded_speed']
+            initial_state['set_temperature'] = initial_state['train_temperature']
+            self.save_state(initial_state)
 
     def update_state(self, state_dict: dict) -> None:
         """Update train state with new values.
@@ -136,12 +157,29 @@ class train_controller_api:
         Args:
             data: Dictionary containing Train Model outputs
         """
+        # Get current state to check if speed/temperature are changing
+        current_state = self.get_state()
+        
+        # Filter relevant data from train model
         relevant_data = {
             k: v for k, v in data.items() 
             if k in ['commanded_speed', 'commanded_authority', 'speed_limit',
                     'velocity', 'next_stop', 'station_side', 'train_temperature',
                     'engine_failure', 'signal_failure', 'brake_failure']
         }
+        
+        # If commanded_speed is changing and set_speed matches old commanded_speed,
+        # update set_speed to match new commanded_speed
+        if ('commanded_speed' in relevant_data and 
+            current_state['set_speed'] == current_state['commanded_speed']):
+            relevant_data['set_speed'] = relevant_data['commanded_speed']
+            
+        # If train_temperature is changing and set_temperature matches old train_temperature,
+        # update set_temperature to match new train_temperature
+        if ('train_temperature' in relevant_data and 
+            current_state['set_temperature'] == current_state['train_temperature']):
+            relevant_data['set_temperature'] = relevant_data['train_temperature']
+            
         self.update_state(relevant_data)
 
     def send_to_train_model(self) -> dict:
