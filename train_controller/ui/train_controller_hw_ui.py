@@ -239,6 +239,15 @@ class hw_train_controller_ui(tk.Tk):
             # Read ADC (potentiometer inputs) and update set_speed, temperature, service_brake
             self.read_and_update_adc_api()
 
+            # Recalculate power command based on current state
+            if not state['emergency_brake'] and state['service_brake'] == 0:
+                power = self.calculate_power_command(state)
+                if power != state['power_command']:
+                    self.api.update_state({'power_command': power})
+            else:
+                # No power when brakes are active
+                self.api.update_state({'power_command': 0})
+
             # Update important parameters in the treeview
             children = self.info_treeview.get_children()
             for iid in children:
@@ -341,6 +350,27 @@ class hw_train_controller_ui(tk.Tk):
                 
             except ValueError:
                 tk.messagebox.showerror("Error", "Kp and Ki must be valid numbers")
+
+    def calculate_power_command(self, state):
+        """Calculate power command based on speed difference and Kp/Ki values."""
+        # Get current values
+        current_speed = state['velocity']
+        driver_set_speed = state['set_speed']
+        kp = state['kp']
+        ki = state['ki']
+        
+        # Calculate speed error
+        speed_error = driver_set_speed - current_speed
+        
+        # Calculate power command using PI control
+        # P = Kp * error + Ki * ∫error dt
+        # For simplicity, we're using a basic implementation
+        power = (kp * speed_error) + (ki * speed_error * 0.5)  # 0.5 is dt
+        
+        # Ensure power is non-negative and within limits
+        power = max(0, min(power, 120000))  # 120kW max power
+        
+        return power
 
 if __name__ == "__main__":
     app = hw_train_controller_ui()
