@@ -23,6 +23,7 @@ class TestUI(tk.Frame):
         self.authority_var = tk.StringVar(value="0")
         self.destination_var = tk.StringVar(value="")
         self.block_occupancies_var = tk.StringVar(value="[]")
+        self.failure_signal_input_var = tk.StringVar(value="0")
 
         # --- Input Widgets ---
         row = 0
@@ -41,6 +42,10 @@ class TestUI(tk.Frame):
         ttk.Label(input_frame, text="Block Occupancies (list)").grid(row=row, column=0, sticky="W")
         ttk.Entry(input_frame, textvariable=self.block_occupancies_var).grid(row=row, column=1, pady=2)
 
+        row += 1
+        ttk.Label(input_frame, text="Failure Signal:").grid(row=row, column=0, sticky="W")
+        ttk.Entry(input_frame, textvariable=self.failure_signal_input_var).grid(row=row, column=1, pady=2)
+
         # Buttons
         row += 1
         ttk.Button(input_frame, text="Auto Simulate", command=self.simulate).grid(row=row, column=0, pady=10)
@@ -58,6 +63,7 @@ class TestUI(tk.Frame):
         self.output_switch_states = tk.StringVar(value="N/A")
         self.output_gate_states = tk.StringVar(value="N/A")
         self.output_light_states = tk.StringVar(value="N/A")
+        self.failure_signal_var = tk.StringVar(value="N/A")
 
         # --- Output Widgets ---
         labels = [
@@ -66,6 +72,7 @@ class TestUI(tk.Frame):
             ("Switch States:", self.output_switch_states),
             ("Gate States:", self.output_gate_states),
             ("Light States:", self.output_light_states),
+            ("Failure Signal:", self.failure_signal_var)
         ]
 
         for i, (text, var) in enumerate(labels):
@@ -77,6 +84,7 @@ class TestUI(tk.Frame):
         speed = int(self.speed_var.get()) if self.speed_var.get().isdigit() else 0
         authority = int(self.authority_var.get()) if self.authority_var.get().isdigit() else 0
         destination = self.destination_var.get()
+        fail_sig = int(self.failure_signal_input_var.get()) if self.failure_signal_input_var.get().isdigit() else 0
         try:
             block_occupancies = json.loads(self.block_occupancies_var.get())
         except:
@@ -87,7 +95,8 @@ class TestUI(tk.Frame):
             "suggested_speed": speed,
             "suggested_authority": authority,
             "destination": int(destination),
-            "block_occupancies": block_occupancies
+            "block_occupancies": block_occupancies,
+            "failure_signal": fail_sig
         }
 
         with open("WaysideInputsTestUISW.json", "w") as f:
@@ -109,6 +118,7 @@ class TestUI(tk.Frame):
         self.output_switch_states.set(str(outputs.get("switches", {})))
         self.output_gate_states.set(str(outputs.get("crossings", {})))
         self.output_light_states.set(str(outputs.get("lights", {})))
+        self.failure_signal_var.set(str(outputs.get("failure_signal", "0")))
 
     def pause_function(self):
         if self.check_pause.get():

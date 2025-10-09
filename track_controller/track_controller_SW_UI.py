@@ -90,7 +90,7 @@ class sw_track_controller_ui(tk.Tk):
 		self.switch_menu.pack(padx=0, pady=0)
 
 		#Switch state dictionary
-		self.switch_states_dictionary = {switch: "BASE" for switch in switch_options}
+		self.switch_states_dictionary = {switch: "STRAIGHT" for switch in switch_options}
 
 		#display current switch state
 		self.switch_state_label = ttk.Label(
@@ -106,7 +106,7 @@ class sw_track_controller_ui(tk.Tk):
 		#select State combobox
 		self.select_state = tk.StringVar()
 		self.select_state_menu = ttk.Combobox(
-			maintenance_frame, textvariable=self.select_state, values=["BASE", "ALT"], state="disabled"
+			maintenance_frame, textvariable=self.select_state, values=["STRAIGHT", "DIVERGING"], state="disabled"
 		)
 		self.select_state_menu.pack(padx=0, pady=(WINDOW_WIDTH / 120, 0))
 
@@ -138,6 +138,11 @@ class sw_track_controller_ui(tk.Tk):
 		#label and display for block occupancies
 		self.block_occupancies_label = ttk.Label(input_frame, text="Block Occupancies: N/A")
 		self.block_occupancies_label.pack(padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120)
+
+		#label and display for failure signal
+		self.failure_signal_label = ttk.Label(input_frame, text="Failure Signal: 0")
+		self.failure_signal_label.pack(padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120)
+
 		#------End Input Frame------#
 
 		#------Start Output Frame------#
@@ -165,6 +170,11 @@ class sw_track_controller_ui(tk.Tk):
 		#label and display for light states
 		self.light_state_label = ttk.Label(output_frame, text="Light States: N/A")
 		self.light_state_label.pack(padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120)
+
+		#label and display for failure signal
+		self.failure_signal_label_output = ttk.Label(output_frame, text="Failure Signal: 0")
+		self.failure_signal_label_output.pack(padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120)
+
 		#------End Output Frame------#
 
 		#------ Start PLC Upload Frame------#
@@ -176,15 +186,16 @@ class sw_track_controller_ui(tk.Tk):
 		self.file_select_label = ttk.Label(upload_frame, text="Select PLC File:")
 		self.file_select_label.pack(padx=WINDOW_HEIGHT / 70, pady=(WINDOW_WIDTH / 30, 0))
 
-		self.file_path_var = tk.StringVar(value="test_plc.json")
+		self.file_path_var = tk.StringVar(value="blue_line_config.json")
 
 		self.file_path_button = ttk.Button(
 			upload_frame, text="Browse", command=self.browse_file, state="disabled"
 		)
 		self.file_path_button.pack(padx=WINDOW_HEIGHT / 70, pady=(0, WINDOW_WIDTH / 120))
 
-		self.plc_file_label = ttk.Label(upload_frame, text="test_plc.json selected")
+		self.plc_file_label = ttk.Label(upload_frame, text="blue_line_config.json selected")
 		self.plc_file_label.pack(padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120)
+
 		#------End PLC Upload Frame------#
 
 		#---Start Map Frame---#
@@ -205,6 +216,14 @@ class sw_track_controller_ui(tk.Tk):
 		status_frame.grid(
 			row=1, column=2, sticky="NSEW", padx=WINDOW_HEIGHT / 70, pady=WINDOW_WIDTH / 120
 		)
+
+		#display current state of train
+		self.status_label = ttk.Label(status_frame, text="Status: Unknown", font=("Helvetica", 18))
+		self.status_label.pack(padx=WINDOW_HEIGHT / 35, pady=WINDOW_WIDTH / 60)
+
+		#display if there is a failure
+		self.failure_label = ttk.Label(status_frame, text="Failure: None", font=("Helvetica", 20))
+		self.failure_label.pack(padx=WINDOW_HEIGHT / 35, pady=WINDOW_WIDTH / 60)
 		#---End Status Frame---#
 
 		# Initialize file modification time tracking
@@ -291,6 +310,10 @@ class sw_track_controller_ui(tk.Tk):
 		block_occupancies = wayside_inputs.get("block_occupancies", [])
 		self.block_occupancies_label.config(text="Block Occupancies: " + str(block_occupancies))
 
+		#Get failure signal
+		fail_sig = wayside_inputs.get("failure_signal", 0)
+		self.failure_signal_label.config(text="Failure Signal: " + str(fail_sig))
+
 		# Minimal safe initializations
 		plc_rules = []
 		commanded_speed = suggested_speed
@@ -298,7 +321,7 @@ class sw_track_controller_ui(tk.Tk):
 
 		#process plc file
 		wayside_outputs = plc_parser.parse_plc_data(
-			self.file_path_var.get(), block_occupancies, destination, suggested_speed, suggested_authority
+			self.file_path_var.get(), block_occupancies, destination, suggested_speed, suggested_authority, fail_sig
 		)
 		switch_options = list("switch" + str(key) for key in wayside_outputs.get("switches", {}).keys())
 		self.switch_menu.config(values=switch_options)
@@ -347,6 +370,12 @@ class sw_track_controller_ui(tk.Tk):
 			text="Light States: " + light_states_str if light_states_str else "Light States: N/A"
 		)
 
+		#update failure signal label
+		fail_signal = wayside_outputs.get("failure_signal", 0)
+		self.failure_signal_label_output.config(text="Failure Signal: " + str(fail_signal))
+
+
+
 		# Always write outputs when inputs change
 		with open("WaysideOutputs_testUISW.json", "w") as file:
 			json.dump(wayside_outputs, file, indent=4)
@@ -358,6 +387,24 @@ class sw_track_controller_ui(tk.Tk):
 		self.commanded_authority_label.config(
 			text="Commanded Authority: " + str(wayside_outputs["commanded_authority"]) + " yds"
 		)
+
+		#update state and failure labels
+		if fail_signal == 1:
+			self.status_label.config(text="Status: FAILURE DETECTED")
+			self.failure_label.config(text="Failure: Broken Track")
+		elif fail_signal == 2:
+			self.status_label.config(text="Status: FAILURE DETECTED")
+			self.failure_label.config(text="Failure: Power Failure")
+		elif fail_signal == 3:
+			self.status_label.config(text="Status: FAILURE DETECTED")
+			self.failure_label.config(text="Failure: Circuit Failure")
+		else:
+			if block_occupancies:
+				self.status_label.config(text="Status: Operational")
+				self.failure_label.config(text="Failure: None")
+			else:
+				self.status_label.config(text="Status: No Train Detected")
+				self.failure_label.config(text="Failure: None")
 
 		# Store the loaded inputs for next comparison
 		self.wayside_inputs = wayside_inputs
@@ -374,8 +421,8 @@ class sw_track_controller_ui(tk.Tk):
 			self.file_path_var.set(file_path)
 			self.plc_file_label.config(text=os.path.basename(file_path) + " selected")
 		else:
-			self.file_path_var.set("test_plc.json")
-			self.plc_file_label.config(text="test_plc.json selected")
+			self.file_path_var.set("blue_line_config.json")
+			self.plc_file_label.config(text="blue_line_config.json selected")
 
 
 #-------------------------------------#
