@@ -25,11 +25,11 @@ class TestUI(tk.Frame):
         out = ttk.LabelFrame(self, text="Outputs (Mirror of HW Screen)")
         out.grid(row=1, column=0, columnspan=4, sticky="nsew", **pad)
 
-        ttk.Label(out, text="Speed (km/h):").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(out, text="Speed (mph):").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         self.m_speed = ttk.Label(out, text="0", font=("Consolas", 14, "bold"))
         self.m_speed.grid(row=0, column=1, sticky="e", padx=8, pady=6)
 
-        ttk.Label(out, text="Authority (m):").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(out, text="Authority (yards):").grid(row=1, column=0, sticky="w", padx=8, pady=6)
         self.m_auth = ttk.Label(out, text="0", font=("Consolas", 14, "bold"))
         self.m_auth.grid(row=1, column=1, sticky="e", padx=8, pady=6)
 
@@ -54,10 +54,16 @@ class TestUI(tk.Frame):
         self.grid_columnconfigure(3, weight=1)
 
     def _apply_inputs(self):
-        try: self.controller.set_speed(int(self.e_speed.get()))
-        except: pass
-        try: self.controller.set_authority(int(self.e_auth.get()))
-        except: pass
+        try:
+            val_s = max(0, int(self.e_speed.get()) - 5)
+            self.controller.set_speed(val_s)
+        except:
+            pass
+        try:
+            val_a = max(0, int(self.e_auth.get()) - 50)
+            self.controller.set_authority(val_a)
+        except:
+            pass
 
     # --- mirror helpers
     def _sync_all(self):

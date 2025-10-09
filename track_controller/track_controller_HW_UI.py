@@ -64,11 +64,11 @@ class HWTrackControllerUI(tk.Tk):
         disp = ttk.LabelFrame(self, text="On-Train Display")
         disp.grid(row=1, column=0, columnspan=2, sticky="nsew", **pad)
 
-        ttk.Label(disp, text="Speed (km/h):", font=("Segoe UI", 12)).grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(disp, text="Speed (mph):", font=("Segoe UI", 12)).grid(row=0, column=0, sticky="w", padx=8, pady=6)
         self.lbl_speed = ttk.Label(disp, text="0", font=("Consolas", 16, "bold"))
         self.lbl_speed.grid(row=0, column=1, sticky="e", padx=8, pady=6)
 
-        ttk.Label(disp, text="Authority (m):", font=("Segoe UI", 12)).grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(disp, text="Authority (yards):", font=("Segoe UI", 12)).grid(row=1, column=0, sticky="w", padx=8, pady=6)
         self.lbl_auth = ttk.Label(disp, text="0", font=("Consolas", 16, "bold"))
         self.lbl_auth.grid(row=1, column=1, sticky="e", padx=8, pady=6)
 
