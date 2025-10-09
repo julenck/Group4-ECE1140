@@ -204,6 +204,37 @@ class hw_train_controller_ui(tk.Tk):
                 print("I2C Initialized")
             except Exception as e:
                 print(f"I2C Initialization Error: {e}")
+            # Initialize LCD if available    
+            try:
+                if self.i2c_devices.get('lcd', False) and self.i2c_bus:
+                    self.lcd_address = self.i2c_address['lcd']
+                    self.lcd_backlight = 0x08
+                    self.LCD_RS = 0x01
+                    self.LCD_RW = 0x02
+                    self.LCD_EN = 0x04
+                    self.lcd_write_cmd(0x33)
+                    self.lcd_write_cmd(0x32)
+                    self.lcd_write_cmd(0x28)
+                    self.lcd_write_cmd(0x0C)
+                    self.lcd_write_cmd(0x06)
+                    self.lcd_write_cmd(0x01)
+                    print("I2C LCD Initialized")
+            except Exception as e:
+                print(f"I2C LCD Initialization Error: {e}")
+            # Initialize 4-Digit 7-segment display if available
+            try:
+                if self.i2c_devices.get('seven_segment', False) and self.i2c_bus:
+                    self.seven_segment_address = self.i2c_address['seven_segment']
+                    self.i2c_bus.write_byte(self.seven_segment_address, 0x21)
+                    self.i2c_bus.write_byte(self.seven_segment_address, 0x81)
+                    self.i2c_bus.write_byte(self.seven_segment_address, 0xE0 | 8)
+                    self.seven_segment_present = True
+                    print("I2C 7-Segment Display Initialized")
+                else:
+                    self.seven_segment_present = False
+            except Exception as e:
+                self.seven_segment_present = False
+                print(f"I2C 7-Segment Initialization Error: {e}")
         else:
             print("I2C library not available. Running in simulation mode.")
 
@@ -279,6 +310,23 @@ class hw_train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", ", ".join(failures) if failures else "None")
 
             self.update_status_indicators(state)
+
+            try:
+                if I2C_AVAILABLE and self.i2c_devices.get('lcd', False) and self.i2c_bus:
+                    cmd_speed = state.get('commanded_speed', 0.0)
+                    cmd_auth = state.get('commanded_authority', 0.0)
+                    line0 = f"CmdSped:{cmd_speed:5.1f}mph"
+                    line1 = f"CmdAuth:{cmd_auth:5.1f}yds"
+                    self.lcd_write_line(line0, line=0, width=16)
+                    self.lcd_write_line(line1, line=1, width=16)
+            except Exception as e:
+                print(f"I2C LCD Update Error: {e}")
+
+            try:
+                if I2C_AVAILABLE and getattr(self, 'seven_segment_present', False) and self.i2c_bus:
+                    self.seven_segment_display_set_speed(state.get('set_speed', 0))
+            except Exception as e:
+                print(f"I2C 7-Segment Update Error: {e}")
 
         except Exception as e:
             print(f"Periodic Update Error: {e}")
@@ -389,6 +437,106 @@ class hw_train_controller_ui(tk.Tk):
         power = max(0, min(power, 120000))  # 120kW max power
         
         return power
+    
+    def lcd_write_cmd(self, cmd):
+        try:
+            high = cmd & 0xF0
+            low = (cmd << 4) & 0xF0
+            self.lcd_write4bits(high)
+            self.lcd_write4bits(low)
+        except Exception as e:
+            print(f"LCD Write Command Error: {e}")
+    
+    def lcd_write4bits(self, data):
+        self.lcd_expander_write(data)
+        self.lcd_pulse_enable(data)
+
+    def lcd_expander_write(self, data):
+        try:
+            self.i2c_bus.write_byte(self.lcd_address, data | self.lcd_backlight)
+        except Exception as e:
+            print(f"LCD Expander Write Error: {e}")
+
+    def lcd_pulse_enable(self, data):
+        self.lcd_expander_write(data | self.LCD_EN)
+        self.after(1, lambda: self.lcd_expander_write(data & ~self.LCD_EN))
+
+    def lcd_write_char(self, char):
+        try:
+            val = ord(char)
+            mode = self.LCD_RS
+            high = (val & 0xF0) | mode
+            low = (val << 4) & 0xF0 | mode
+            self.lcd_write4bits(high)
+            self.lcd_write4bits(low)
+        except Exception as e:
+            print(f"LCD Write Char Error: {e}")
+
+    def lcd_clear(self):
+        try:
+            self.lcd_write_cmd(0x01)  # Clear display command
+        except Exception as e:
+            print(f"LCD Clear Error: {e}")
+
+    def lcd_set_cursor(self, line):
+        try:
+            addr = 0x80 if line == 0 else 0xC0
+            self.lcd_write_cmd(addr)
+        except Exception as e:
+            print(f"LCD Set Cursor Error: {e}")
+
+    def lcd_write_line(self, text, line=0, width=16):
+        try:
+            s = str(text)[:width].ljust(width)
+            self.lcd_set_cursor(line)
+            for char in s:
+                self.lcd_write_char(char)
+        except Exception as e:
+            print(f"LCD Write Line Error: {e}")
+
+    def seven_segment_raw_write(self, data):
+        try:
+            if len(data) != 16:
+                data = (data + [0]*16)[:16]
+            self.i2c_bus.write_i2c_block_data(self.seven_segment_address, 0x00, data)
+        except Exception as e:
+            print(f"7-Segment Raw Write Error: {e}")
+
+    def seven_segment_for_digit(self, ch):
+        digits = {
+            '0' : 0x3F, '1' : 0x06,
+            '2' : 0x5B, '3' : 0x4F,
+            '4' : 0x66, '5' : 0x6D,
+            '6' : 0x7D, '7' : 0x07,
+            '8' : 0x7F, '9' : 0x6F,
+            '-' : 0x40, ' ' : 0x00
+        }
+        return digits.get(ch, 0x00)
+    
+    def seven_segment_display_digits(self, digits):
+        data = [0] * 16
+        for i in range(4):
+            seg = self.seven_segment_for_digit(digits[i])
+            data[i*2] = seg
+        self.seven_segment_raw_write(data)
+
+    def seven_segment_display_set_speed(self, speed):
+        try:
+            ival = int(round(speed))
+        except Exception:
+            ival = 0
+        if ival > 9999:
+            ival = 9999
+        s = str(abs(ival)).rjust(4, ' ')
+        if ival < 0:
+            s = '-' + s[1:]
+        self.seven_segment_display_digits(s)
+
+    def seven_segment_clear(self):
+        try:
+            self.seven_segment_raw_write([0]*16)
+        except Exception as e:
+            print(f"7-Segment Clear Error: {e}")
 
 if __name__ == "__main__":
     app = hw_train_controller_ui()
