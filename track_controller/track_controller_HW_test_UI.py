@@ -68,11 +68,21 @@ class TestUI(tk.Frame):
     def _apply_inputs(self):
         try:
             val_s = max(0, int(self.e_speed.get()) - 5)   # subtract 5 mph
+
+            if (val_s > 31):
+
+                val_s = 31
+
             self.controller.set_speed(val_s)
         except:
             pass
         try:
             val_a = max(0, int(self.e_auth.get()) - 50)   # subtract 50 yards
+
+            if (val_a > 500):
+
+                val_a = 500
+
             self.controller.set_authority(val_a)
         except:
             pass
