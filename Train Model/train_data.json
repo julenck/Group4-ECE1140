@@ -1,0 +1,26 @@
+{
+  "train_status": {
+    "commanded_speed": "30 mph",
+    "authority": "23 Block#",
+    "beacon": "128 B",
+    "speed_limit": "30 mph",
+    "passengers_boarding": 80,
+    "crew_count": 2,
+    "lights_on": true,
+    "doors_closed": true,
+    "temperature_inside": 22,
+    "announcement": "Train approaching Herron Ave",
+    "emergency_brake": false
+  },
+  "train_specs": {
+    "length_ft": 66,
+    "width_ft": 10,
+    "height_ft": 11.5,
+    "mass_lb": 91
+  },
+  "failures": {
+    "train_engine_failure": false,
+    "signal_pickup_failure": false,
+    "brake_failure": false
+  }
+}
