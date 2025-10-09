@@ -171,11 +171,13 @@ class hw_train_controller_ui(tk.Tk):
         if GPIO_AVAILABLE:
             try:
                 GPIO.setmode(GPIO.BCM)
+                print("GPIO initialization") # debug
                 for name, pin in self.GPIO_PINS.items():
                     if "button" in name:
                         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
                         try:
                             GPIO.add_event_detect(pin, GPIO.FALLING, callback=self.gpio_callbacks, bouncetime=300)
+                            print(f"GPIO Event Detect added for {name} on pin {pin}") # debug
                         except Exception:
                             pass
                     elif "status_led" in name:
@@ -185,6 +187,7 @@ class hw_train_controller_ui(tk.Tk):
                             try:
                                 GPIO.setup(pin, GPIO.OUT)
                                 GPIO.output(pin, GPIO.LOW)
+                                print(f"GPIO Status LED {name} set to LOW on pin {pin}") #debug
                             except Exception:
                                 pass
                     print("GPIO Initialized")
@@ -212,6 +215,7 @@ class hw_train_controller_ui(tk.Tk):
 
     def gpio_callbacks(self, channel):
         try:
+            print(f"GPIO Callback on channel {channel}") # debug
             if channel == self.GPIO_PINS["lights_button"]:
                 current = self.api.get_state().get('lights', False)
                 self.api.update_state({'lights': not current})
@@ -288,46 +292,31 @@ class hw_train_controller_ui(tk.Tk):
     def read_and_update_adc_api(self):
         if (not I2C_AVAILABLE) or (not self.i2c_devices.get('adc', False)) or (not self.i2c_bus):
             return
-        address = self.i2c_address['adc']
-
-        def read_adc_channel(ch: int):
-            try:
-                # ADS7830 control byte: 0x84 | channel
-                ctrl = 0x84 | (ch & 0x07)
-                self.i2c_bus.write_byte(address, ctrl)
-                return self.i2c_bus.read_byte(address)
-            except Exception:
-                return None
-            
         try:
-            raw_a0 = read_adc_channel(0)  # set_speed potentiometer
-            raw_a4 = read_adc_channel(4)  # temperature potentiometer
-            raw_a7 = read_adc_channel(7)  # service_brake potentiometer
-
-            state = self.api.get_state()
-            commanded_speed = state.get('commanded_speed', 0)
-
-            update = {}
-
-            if raw_a0 is not None:
-                set_speed = round((raw_a0 / 255.00) * commanded_speed, 2)
-                update['set_speed'] = set_speed
+            address = self.i2c_address['adc']
+            try:
+                data = self.i2c_bus.read_i2c_block_data(address, 0, 3)
+                a0, a4, a7 = data[0], data[1], data[2]
+                # Set speed bounded within 0 to commanded speed (max)
+                state = self.api.get_state()
+                commanded_speed = state.get('commanded_speed', 0)
+                set_speed = round((a0 / 255.00) * commanded_speed, 2)
                 power = self.calculate_power_command(state)
-                update['power_command'] = power
-
-            if raw_a4 is not None:
+                self.api.update_state({
+                    'set_speed': set_speed,
+                    'power_command': power
+                })
                 # Temperature bounded within 55 to 95 F (honestly dont know what range to use, probably wrong)
-                set_temp = int(round(55 + (raw_a4 / 255.00) * 40))
-                update['set_temperature'] = set_temp
-
-            if raw_a7 is not None:
+                set_temp = int(55 + (a4 / 255.00) * 40)
                 # Service brake bounded from 0% to 100%
-                service_brake = int((raw_a7 / 255.00) * 100)
-                update['service_brake'] = service_brake
-
-            if update:
-                self.api.update_state(update)
-
+                service_brake = int((a7 / 255.00) * 100)
+                self.api.update_state({
+                    'set_speed': set_speed,
+                    'set_temperature': set_temp,
+                    'service_brake': service_brake
+                })
+            except Exception:
+                return
         except Exception as e:
             print(f"ADC Read Error: {e}")
 

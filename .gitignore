@@ -6,3 +6,4 @@ train_controller/data/train_state.json
 train_controller/ui/__pycache__/train_controller_hw_ui.cpython-313.pyc
 train_controller/ui/__pycache__/train_controller_test_ui.cpython-313.pyc
 train_controller/ui/__pycache__/train_controller_sw_ui.cpython-313.pyc
+train_controller/data/train_state.json.tmp
