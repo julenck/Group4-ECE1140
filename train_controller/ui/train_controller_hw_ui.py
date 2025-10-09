@@ -108,6 +108,7 @@ class hw_train_controller_ui(tk.Tk):
             ("Commanded Speed", "", "mph"),
             ("Commanded Authority", "", "yards"),
             ("Speed Limit", "", "mph"),
+            ("Current Speed", "", "mph"),
             ("Power Availability", "", "W"),
             ("Cabin Temperature", "", "F°"),
             ("Station Side", "", "Left/Right"),
@@ -248,6 +249,8 @@ class hw_train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", f"{state.get('commanded_authority', 0):.1f}")
                 elif param == "Speed Limit":
                     self.info_treeview.set(iid, "value", f"{state.get('speed_limit', 0):.1f}")
+                elif param == "Current Speed":
+                    self.info_treeview.set(iid, "value", f"{state.get('velocity', 0):.1f}")
                 elif param == "Power Availability":
                     self.info_treeview.set(iid, "value", f"{state.get('power_command', 0):.1f}")
                 elif param == "Cabin Temperature":
