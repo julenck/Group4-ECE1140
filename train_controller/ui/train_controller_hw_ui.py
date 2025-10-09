@@ -75,9 +75,9 @@ class hw_train_controller_ui(tk.Tk):
         # I2C configuration
         self.i2c_bus_number = 1
         self.i2c_address = {
-            "lcd": 27,
-            "adc": 48,
-            "seven_segment": 70
+            "lcd": 0x27,
+            "adc": 0x48,
+            "seven_segment": 0x70
         }
 
         self.i2c_bus = None
