@@ -36,9 +36,9 @@ class TestUI(tk.Frame):
         assets = ttk.LabelFrame(self, text="Field Assets")
         assets.grid(row=2, column=0, columnspan=6, sticky="ew", **pad)
 
-        ttk.Label(assets, text="Switches:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
-        self.m_switches = ttk.Label(assets, text="NORMAL", foreground="green", font=("Segoe UI", 12, "bold"))
-        self.m_switches.grid(row=0, column=1, sticky="w", padx=8, pady=4)
+        ttk.Label(assets, text="Signal Lights:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        self.m_signal_lights = ttk.Label(assets, text="NORMAL", foreground="green", font=("Segoe UI", 12, "bold"))
+        self.m_signal_lights.grid(row=0, column=1, sticky="w", padx=8, pady=4)
 
         ttk.Label(assets, text="Gates:").grid(row=1, column=0, sticky="w", padx=8, pady=4)
         self.m_gates = ttk.Label(assets, text="NORMAL", foreground="green", font=("Segoe UI", 12, "bold"))
@@ -97,8 +97,8 @@ class TestUI(tk.Frame):
     def _sync_assets(self):
         a = self.controller.emergency_active.get()
         if a:
-            self.m_switches.config(text="RED", foreground="red")
+            self.m_signal_lights.config(text="RED", foreground="red")
             self.m_gates.config(text="RED", foreground="red")
         else:
-            self.m_switches.config(text="NORMAL", foreground="green")
+            self.m_signal_lights.config(text="NORMAL", foreground="green")
             self.m_gates.config(text="NORMAL", foreground="green")
