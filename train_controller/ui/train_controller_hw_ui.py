@@ -291,7 +291,7 @@ class hw_train_controller_ui(tk.Tk):
                 service_brake = int((a7 / 255.00) * 100)
                 self.api.update_state({
                     'set_speed': set_speed,
-                    'train_temperature': set_temp,
+                    'set_temperature': set_temp,
                     'service_brake': service_brake
                 })
             except Exception:
