@@ -66,8 +66,8 @@ class hw_train_controller_ui(tk.Tk):
             "right_door_status_led": 26,
             "announcement_button": 22,
             "announcement_status_led": 20,
-            "horn_button": 5,
-            "horn_status_led": 16,
+            "service_brake_button": 5, #temp replacement for pot issue
+            "service_brake_status_led": 16, #temp replacement for pot issue
             "emergency_brake_button": 6,
             "emergency_brake_status_led": 21,
         }
@@ -126,7 +126,7 @@ class hw_train_controller_ui(tk.Tk):
         status_frame.pack(side="left", fill="both", expand=True)
 
         self.status_buttons = {}
-        statuses = ["Lights", "Left Door", "Right Door", "Announcement", "Horn", "Emergency Brake"]
+        statuses = ["Lights", "Left Door", "Right Door", "Announcement", "Service Brake", "Emergency Brake"]
 
         button_frame = ttk.Frame(status_frame)
         button_frame.pack(fill="x", padx=4, pady=6)
@@ -223,11 +223,12 @@ class hw_train_controller_ui(tk.Tk):
             elif name == "announcement_button":
                 current = self.api.get_state().get('announcement', '')
                 self.api.update_state({'announcement': '' if current else 'Next station approaching'})
-            elif name == "horn_button":
-                current = self.api.get_state().get('horn', False)
-                self.api.update_state({'horn': not current})
+            elif name == "service_brake_button": #temp replacement for pot issue
+                current = self.api.get_state().get('service_brake', False)
+                self.api.update_state({'service_brake': not current})
             elif name == "emergency_brake_button":
                 self.api.update_state({'emergency_brake': True})
+                self.after(5000, lambda: self.api.update_state({'emergency_brake': False}))
         except Exception as e:
             print(f"GPIO Callback Error: {e}")
 
@@ -301,15 +302,15 @@ class hw_train_controller_ui(tk.Tk):
                     'set_speed': set_speed,
                     'power_command': power
                 })
-                # Temperature bounded within 55 to 95 F (honestly dont know what range to use, probably wrong)
-                set_temp = int(55 + (a4 / 255.00) * 40)
-                # Service brake bounded from 0% to 100%
-                service_brake = int((a7 / 255.00) * 100)
-                self.api.update_state({
-                    'set_speed': set_speed,
-                    'set_temperature': set_temp,
-                    'service_brake': service_brake
-                })
+                # # Temperature bounded within 55 to 95 F (honestly dont know what range to use, probably wrong)
+                # set_temp = int(55 + (a4 / 255.00) * 40)
+                # # Service brake bounded from 0% to 100%
+                # service_brake = int((a7 / 255.00) * 100)
+                # self.api.update_state({
+                #     'set_speed': set_speed,
+                #     'set_temperature': set_temp,
+                #     'service_brake': service_brake
+                # })
             except Exception:
                 return
         except Exception as e:
@@ -321,7 +322,7 @@ class hw_train_controller_ui(tk.Tk):
             "Left Door": bool(state.get('left_door', False)),
             "Right Door": bool(state.get('right_door', False)),
             "Announcement": bool(state.get('announcement', '')),
-            "Horn": bool(state.get('horn', False)),
+            "Service Brake": bool(state.get('service_brake', 0) > 0), #active if >0%
             "Emergency Brake": bool(state.get('emergency_brake', False))
         }
         for name, val in mapping.items():
