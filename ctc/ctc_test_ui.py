@@ -53,7 +53,12 @@ default_data = {
         "Station": "",
         "Passengers Leaving Station": "",
         "Passengers Entering Station": "",
+    },
+    "MaintenenceModeOutputs": {
+        "Block Line": "Green",
+        "Closed Block": "3"
     }
+
 }
 
 # Ensure JSON file exists and has valid structure
@@ -311,15 +316,18 @@ data = load_data()
 maint_data = data.get("MaintenenceModeOutputs",{})
 switch_line = maint_data.get("Switch Line","")
 switch = maint_data.get("Switch Position","")
+block_line = maint_data.get("Block Line","")
+closed_block = maint_data.get("Closed Block","")
 
+tk.Label(generated_outputs_frame, text="Line:", font=label_font).grid(row=0, column=0, sticky='w', padx=5, pady=10)
+tk.Label(generated_outputs_frame,text=f"{switch_line}",font=label_font).grid(row=0,column=1,sticky='w',padx=5,pady=10)
+tk.Label(generated_outputs_frame, text="Switch Position:", font=label_font).grid(row=0, column=2, sticky='w', padx=5, pady=10)
+tk.Label(generated_outputs_frame,text=f"{switch}",font=label_font).grid(row=0,column=3,sticky='w',padx=5,pady=10)
 
-#todo add label and output for line in same row 
-tk.Label(generated_outputs_frame, text="Switch Position", font=label_font).grid(row=0, column=0, sticky='w', padx=10, pady=10)
-tk.Label(generated_outputs_frame,text=f"{switch}",font=label_font).grid(row=0,column=1,sticky='w',padx=10,pady=10)
-
-#todo add label and output for line in same row 
-tk.Label(generated_outputs_frame, text="Track Closure", font=label_font).grid(row=1, column=0, sticky='w', padx=10, pady=10)
-tk.Label(generated_outputs_frame,text="12",font=label_font).grid(row=1,column=1,sticky='w',padx=10,pady=10)
+tk.Label(generated_outputs_frame, text="Line:", font=label_font).grid(row=1, column=0, sticky='w', padx=5, pady=10)
+tk.Label(generated_outputs_frame,text=f"{block_line}",font=label_font).grid(row=1,column=1,sticky='w',padx=5,pady=10)
+tk.Label(generated_outputs_frame, text="Closed Block:", font=label_font).grid(row=1, column=2, sticky='w', padx=5, pady=10)
+tk.Label(generated_outputs_frame,text=f"{closed_block}",font=label_font).grid(row=1,column=3,sticky='w',padx=5,pady=10)
 
 root.mainloop()
 

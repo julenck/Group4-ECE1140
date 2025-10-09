@@ -37,7 +37,9 @@
         "Passengers Entering Station": ""
     },
     "MaintenenceModeOutputs": {
-        "Switch Line": "",
-        "Switch Position": "2"
+        "Block Line": "Green",
+        "Closed Block": "1",
+        "Switch Line": "Green",
+        "Switch Position": "3"
     }
 }
