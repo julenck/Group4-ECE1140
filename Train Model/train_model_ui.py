@@ -96,12 +96,26 @@ class TrainModelUI(tk.Tk):
         map_frame.pack(fill="both", expand=True, padx=10, pady=10)
         map_path = "map.png"
         if os.path.exists(map_path):
-            img = Image.open(map_path)
-            img = img.resize((500, 350))
-            self.map_img = ImageTk.PhotoImage(img)
-            ttk.Label(map_frame, image=self.map_img).pack()
+           img = Image.open(map_path)
+
+        # Get original dimensions
+           orig_width, orig_height = img.size
+
+        # Define max width and height for display
+           max_width, max_height = 550, 400
+
+        # Compute aspect ratio scaling
+           ratio = min(max_width / orig_width, max_height / orig_height)
+           new_size = (int(orig_width * ratio), int(orig_height * ratio))
+
+        # Resize with preserved ratio
+           img = img.resize(new_size, Image.LANCZOS)
+
+           self.map_img = ImageTk.PhotoImage(img)
+           map_label = ttk.Label(map_frame, image=self.map_img)
+           map_label.pack(pady=5)
         else:
-            ttk.Label(map_frame, text="Map image not found.").pack(pady=20)
+           ttk.Label(map_frame, text="Map image not found.").pack(pady=20)
 
         # === Interactive failure controls ===
         fail_frame = ttk.LabelFrame(frame, text="Failure Status (Editable)")
