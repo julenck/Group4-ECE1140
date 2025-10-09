@@ -297,6 +297,11 @@ class hw_train_controller_ui(tk.Tk):
                 state = self.api.get_state()
                 commanded_speed = state.get('commanded_speed', 0)
                 set_speed = round((a0 / 255.00) * commanded_speed, 2)
+                power = self.calculate_power_command(state)
+                self.api.update_state({
+                    'set_speed': set_speed,
+                    'power_command': power
+                })
                 # Temperature bounded within 55 to 95 F (honestly dont know what range to use, probably wrong)
                 set_temp = int(55 + (a4 / 255.00) * 40)
                 # Service brake bounded from 0% to 100%
