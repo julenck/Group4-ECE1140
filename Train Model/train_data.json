@@ -12,7 +12,7 @@
     "temperature_inside": 22,
     "lights_on": true,
     "doors_closed": true,
-    "announcement": "Train approaching Herron Ave"
+    "announcement": "Train approaching next station."
   },
   "train_specs": {
     "decel_limit_mphps": 2.4,

@@ -10,34 +10,42 @@ class TrainModelUI(tk.Tk):
 
         # === Window setup ===
         self.title("Train Model - UI")
-        self.geometry("1200x800")
+        self.geometry("1250x850")
+        self.configure(bg="#f4f4f4")
         os.chdir(os.path.dirname(os.path.abspath(__file__)))  # Ensure working directory is correct
 
-        # === Load JSON data (shared data file) ===
+        # === ttk style customization ===
+        style = ttk.Style()
+        style.configure("TLabel", font=("Segoe UI", 11), background="#ffffff")
+        style.configure("TLabelFrame", background="#ffffff", font=("Segoe UI", 11, "bold"))
+        style.configure("TButton", font=("Segoe UI", 10, "bold"))
+        style.configure("TCheckbutton", font=("Segoe UI", 10), background="#ffffff")
+
+        # === Load JSON data ===
         self.data = self.load_json()
         self.status = self.data.get("train_status", {})
         self.specs = self.data.get("train_specs", {})
         self.failures = self.data.get("failures", {})
 
-        # === Layout configuration (2-column grid) ===
+        # === Layout configuration ===
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
         self.rowconfigure(1, weight=0)
 
-        # === LEFT SIDE: Info panels ===
-        left_frame = ttk.Frame(self)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        self.populate_left(left_frame)
+        # === LEFT SIDE ===
+        left_container = ttk.Frame(self)
+        left_container.grid(row=0, column=0, sticky="nsew", padx=(20, 10), pady=20)
+        self.populate_left(left_container)
 
-        # === RIGHT SIDE: Map, Failures, and Controls ===
-        right_frame = ttk.LabelFrame(self, text="Map, Failures & Control")
-        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-        self.populate_right(right_frame)
+        # === RIGHT SIDE ===
+        right_container = ttk.LabelFrame(self, text="Map, Failures & Control")
+        right_container.grid(row=0, column=1, sticky="nsew", padx=(10, 20), pady=20)
+        self.populate_right(right_container)
 
         # === BOTTOM: Announcements ===
         announce_frame = ttk.LabelFrame(self, text="Announcements")
-        announce_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        announce_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 20))
         self.populate_announcement(announce_frame)
 
         # === Auto refresh ===
@@ -54,13 +62,22 @@ class TrainModelUI(tk.Tk):
             return {}
 
     # ----------------------------------------------------------------------
+    def create_label_pair(self, frame, label, value, row):
+        """Helper to create clean, evenly spaced labels."""
+        lbl_name = ttk.Label(frame, text=f"{label}:", anchor="w", width=25)
+        lbl_val = ttk.Label(frame, text=value, anchor="w", width=15)
+        lbl_name.grid(row=row, column=0, sticky="w", padx=(10, 2), pady=3)
+        lbl_val.grid(row=row, column=1, sticky="w", padx=(2, 10), pady=3)
+        return lbl_val
+
+    # ----------------------------------------------------------------------
     def populate_left(self, frame):
         """Left section divided into movement, passengers, and specs."""
         self.labels = {}
 
-        # ===== 1️⃣ Train Movement Info =====
+        # === Train Movement Info ===
         movement_frame = ttk.LabelFrame(frame, text="Train Movement Information")
-        movement_frame.pack(fill="x", padx=5, pady=5)
+        movement_frame.pack(fill="x", padx=5, pady=5, ipadx=5, ipady=5)
 
         movement_info = [
             ("Commanded Speed", self.status.get("commanded_speed", "N/A")),
@@ -71,15 +88,12 @@ class TrainModelUI(tk.Tk):
             ("Acceleration", self.status.get("acceleration", "N/A")),
             ("Deceleration Limit", f"{self.specs.get('decel_limit_mphps', 'N/A')} mph/s"),
         ]
-
         for i, (label, value) in enumerate(movement_info):
-            lbl = ttk.Label(movement_frame, text=f"{label}: {value}")
-            lbl.grid(row=i, column=0, sticky="w", padx=10, pady=3)
-            self.labels[label] = lbl
+            self.labels[label] = self.create_label_pair(movement_frame, label, value, i)
 
-        # ===== 2️⃣ Passenger Info =====
+        # === Passenger Info ===
         passenger_frame = ttk.LabelFrame(frame, text="Passenger Information")
-        passenger_frame.pack(fill="x", padx=5, pady=5)
+        passenger_frame.pack(fill="x", padx=5, pady=10, ipadx=5, ipady=5)
 
         boarding = self.status.get("passengers_boarding", 0)
         disembarking = self.status.get("passengers_disembarking", 0)
@@ -92,15 +106,12 @@ class TrainModelUI(tk.Tk):
             ("Passengers Onboard", onboard),
             ("Crew Count", crew)
         ]
-
         for i, (label, value) in enumerate(passenger_info):
-            lbl = ttk.Label(passenger_frame, text=f"{label}: {value}")
-            lbl.grid(row=i, column=0, sticky="w", padx=10, pady=3)
-            self.labels[label] = lbl
+            self.labels[label] = self.create_label_pair(passenger_frame, label, value, i)
 
-        # ===== 3️⃣ Train Specs =====
+        # === Train Specs ===
         specs_frame = ttk.LabelFrame(frame, text="Train Specifications")
-        specs_frame.pack(fill="x", padx=5, pady=5)
+        specs_frame.pack(fill="x", padx=5, pady=5, ipadx=5, ipady=5)
 
         specs_info = [
             ("Inside Temperature", f"{self.status.get('temperature_inside', 'N/A')} °C"),
@@ -111,33 +122,30 @@ class TrainModelUI(tk.Tk):
             ("Height", f"{self.specs.get('height_ft', 'N/A')} ft"),
             ("Mass", f"{self.specs.get('mass_lb', 'N/A')} lb")
         ]
-
         for i, (label, value) in enumerate(specs_info):
-            lbl = ttk.Label(specs_frame, text=f"{label}: {value}")
-            lbl.grid(row=i, column=0, sticky="w", padx=10, pady=3)
-            self.labels[label] = lbl
+            self.labels[label] = self.create_label_pair(specs_frame, label, value, i)
 
     # ----------------------------------------------------------------------
     def populate_right(self, frame):
         """Right section: map, failures, and emergency brake."""
         map_frame = ttk.LabelFrame(frame, text="Track Map")
         map_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        map_frame.configure(borderwidth=2)
 
         map_path = "map.png"
         if os.path.exists(map_path):
             img = Image.open(map_path)
-            orig_w, orig_h = img.size
-            max_w, max_h = 550, 400
-            ratio = min(max_w / orig_w, max_h / orig_h)
-            new_size = (int(orig_w * ratio), int(orig_h * ratio))
+            ow, oh = img.size
+            ratio = min(550 / ow, 400 / oh)
+            new_size = (int(ow * ratio), int(oh * ratio))
             img = img.resize(new_size, Image.LANCZOS)
             self.map_img = ImageTk.PhotoImage(img)
-            ttk.Label(map_frame, image=self.map_img).pack(pady=5)
+            ttk.Label(map_frame, image=self.map_img).pack(pady=10)
         else:
             ttk.Label(map_frame, text="Map image not found.").pack(pady=20)
 
         # === Failures ===
-        fail_frame = ttk.LabelFrame(frame, text="Failure Status")
+        fail_frame = ttk.LabelFrame(frame, text="Failure Status (Editable)")
         fail_frame.pack(fill="x", padx=10, pady=10)
         self.failure_vars = {}
 
@@ -151,19 +159,28 @@ class TrainModelUI(tk.Tk):
                 variable=var,
                 command=lambda k=key, v=var: self.toggle_failure(k, v)
             )
-            chk.pack(anchor="w")
+            chk.pack(anchor="w", padx=15, pady=2)
 
         # === Emergency Brake ===
         eb_frame = ttk.LabelFrame(frame, text="Emergency Brake")
         eb_frame.pack(fill="x", padx=10, pady=10)
         self.eb_button = ttk.Button(eb_frame, text="ACTIVATE", command=self.activate_emergency)
-        self.eb_button.pack(pady=10, ipadx=20, ipady=5)
+        self.eb_button.pack(pady=10, ipadx=25, ipady=8)
 
     # ----------------------------------------------------------------------
     def populate_announcement(self, frame):
         """Bottom section for announcements."""
-        self.announcement_box = tk.Text(frame, height=4, width=100)
+        container = tk.Frame(frame, bg="#eaeaea")
+        container.pack(fill="both", expand=True, padx=5, pady=5)
+
+        scrollbar = ttk.Scrollbar(container)
+        scrollbar.pack(side="right", fill="y")
+
+        self.announcement_box = tk.Text(container, height=4, width=100, wrap="word",
+                                        bg="#f7f7f7", fg="#222222", font=("Segoe UI", 11))
         self.announcement_box.insert("end", self.status.get("announcement", "No announcements available."))
+        self.announcement_box.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.announcement_box.yview)
         self.announcement_box.pack(fill="both", expand=True, padx=10, pady=5)
 
     # ----------------------------------------------------------------------
@@ -201,10 +218,9 @@ class TrainModelUI(tk.Tk):
             elif label == "Doors":
                 val = "Closed" if new_status.get("doors_closed") else "Open"
             else:
-                # Generic field name mapping
                 key = label.lower().replace(" ", "_")
                 val = new_status.get(key, self.specs.get(key, "N/A"))
-            widget.config(text=f"{label}: {val}")
+            widget.config(text=val)
 
         # Update Failures
         for k, v in new_failures.items():
