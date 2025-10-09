@@ -1,177 +1,348 @@
-# Track Builder Test UI with Guard Rails
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import json
+import os
+import re
+import csv
 
-import track_model_UI
-
-WindowWidth = 1200
-WindowHeight = 700
 
 class TrackBuilder(tk.Tk):
-
     def __init__(self):
         super().__init__()
-
-        # Window setup
         self.title("Track Model Test UI")
-        self.geometry(f"{WindowWidth}x{WindowHeight}")
+        self.geometry("850x600")
+        self.resizable(False, False)
 
-        # Grid layout
-        for i in range(2):
-            self.grid_columnconfigure(i, weight=1, uniform="col")
-        self.grid_rowconfigure(0, weight=1)
-
-        # ---- Left Frame: Force Input ----
+        # ---- Force Input Frame ----
         inputFrame = ttk.LabelFrame(self, text="Force Input")
-        inputFrame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
+        inputFrame.pack(fill="both", expand=False, padx=10, pady=(10, 2))
 
-        # Input fields with guard rails
-        self.speed_entry = self.make_entry(inputFrame, "Commanded Speed (mph)", 0, "22")
-        self.authority_entry = self.make_entry(inputFrame, "Commanded Authority (yrds)", 1, "10")
-        self.track_closures_entry = self.make_entry(inputFrame, "Environmental Temperature (°F)", 2, "77")
+        for i in range(2):
+            inputFrame.columnconfigure(i, weight=1)
+        current_row = 0
 
-        # Dropdown fields
-        self.route_entry = self.make_dropdown(inputFrame, "Switch Positions", 3, ["Straight", "Diverging"], "Diverging")
-        self.failure_entry = self.make_dropdown(inputFrame, "Traffic Lights", 4, ["Red", "Yellow", "Green"], "Red")
-        self.train_positions_entry = self.make_dropdown(inputFrame, "Gate", 5, ["Open", "Closed"], "Closed")
+        def make_entry(label):
+            nonlocal current_row
+            ttk.Label(inputFrame, text=label).grid(
+                row=current_row // 2,
+                column=(current_row % 2) * 2,
+                sticky="w", padx=5, pady=5
+            )
+            entry = ttk.Entry(inputFrame, width=20)
+            entry.grid(
+                row=current_row // 2,
+                column=(current_row % 2) * 2 + 1,
+                padx=5, pady=5
+            )
+            current_row += 1
+            return entry
 
-        # Normal entries
-        self.passengers_disembark_entry = self.make_entry(inputFrame, "Passengers Disembarking", 6, "31")
-        self.passengers_board_entry = self.make_entry(inputFrame, "Passengers Boarding", 7, "45")
-        self.speed_limit_entry = self.make_entry(inputFrame, "Speed Limit (mph)", 8, "25")
-        self.block_num_entry = self.make_entry(inputFrame, "Block #", 9, "4")
-        self.block_len_entry = self.make_entry(inputFrame, "Block length (miles)", 10, "15")
+        def make_dropdown(label, values):
+            nonlocal current_row
+            ttk.Label(inputFrame, text=label).grid(
+                row=current_row // 2,
+                column=(current_row % 2) * 2,
+                sticky="w", padx=5, pady=5
+            )
+            combo = ttk.Combobox(inputFrame, values=values, state="readonly", width=18)
+            combo.grid(
+                row=current_row // 2,
+                column=(current_row % 2) * 2 + 1,
+                padx=5, pady=5
+            )
+            current_row += 1
+            return combo
 
-        # Dropdowns
-        self.section_entry = self.make_dropdown(inputFrame, "Section", 11, ["A","B","C","D","E","F","G","H","I","J","K"], "D")
-        self.failure_modes_entry = self.make_dropdown(inputFrame, "Failure Modes", 12,
-                                                     ["No faults", "Broken Track", "Power Failure","Circuit Failure"], "No faults")
+        # --- Force Inputs (auto-loaded from JSON) ---
+        self.speed_entry = make_entry("Commanded Speed (mph)")
+        self.authority_entry = make_entry("Commanded Authority (yards)")
+        self.temp_entry = make_entry("Environmental Temperature (°F)")
+        self.route_entry = make_dropdown("Switch Positions", ["Straight", "Diverging"])
+        self.traffic_entry = make_dropdown("Traffic Lights", ["Red", "Yellow", "Green"])
+        self.gate_entry = make_dropdown("Gate", ["Open", "Closed"])
+        self.crossing_entry = make_dropdown("Crossing", ["Yes", "No"])
+        self.branching_entry = make_entry("Branching (e.g., F7, G1)")
+        self.direction_entry = make_dropdown("Direction of Travel", ["Clockwise", "Counterclockwise"])
+        self.grade_entry = make_entry("Grade (%)")
+        self.elevation_entry = make_entry("Elevation (ft)")
+        self.passengers_disembark_entry = make_entry("Passengers Disembarking")
+        self.passengers_board_entry = make_entry("Passengers Boarding")
+        self.speed_limit_entry = make_entry("Speed Limit (mph)")
+        self.block_num_entry = make_entry("Block #")
+        self.block_len_entry = make_entry("Block length (miles)")
+        self.section_entry = make_dropdown("Section", ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"])
 
-        ttk.Button(inputFrame, text="File Upload", command=self.upload_schedule).grid(row=14, column=1, padx=5, pady=5)
+        # --- Failure Modes ---
+        failure_frame = ttk.LabelFrame(self, text="Failure Modes")
+        failure_frame.pack(fill="x", expand=False, padx=10, pady=(5, 5))
+        self.failure_vars = {
+            "power": tk.BooleanVar(value=False),
+            "circuit": tk.BooleanVar(value=False),
+            "broken_track": tk.BooleanVar(value=False)
+        }
+        ttk.Checkbutton(failure_frame, text="Power Failure", variable=self.failure_vars["power"]).pack(anchor="w", padx=15, pady=2)
+        ttk.Checkbutton(failure_frame, text="Circuit Failure", variable=self.failure_vars["circuit"]).pack(anchor="w", padx=15, pady=2)
+        ttk.Checkbutton(failure_frame, text="Broken Track", variable=self.failure_vars["broken_track"]).pack(anchor="w", padx=15, pady=2)
 
-        # Buttons
-        ttk.Button(inputFrame, text="Simulate", command=self.simulate).grid(row=13, column=0, pady=10)
-        ttk.Button(inputFrame, text="Stop Simulation", command=self.stop_simulation).grid(row=13, column=1, pady=10)
+        # ---- Generated Outputs Frame ----
+        self.outputFrame = ttk.LabelFrame(self, text="Generated Outputs")
+        self.outputFrame.pack(fill="x", expand=False, padx=10, pady=(5, 5))
+        self.placeholder = ttk.Label(self.outputFrame, text=" ")
+        self.placeholder.pack()
 
-        # ---- Right Frame: Generated Output ----
-        outputFrame = ttk.LabelFrame(self, text="Generated Output")
-        outputFrame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
+        # ---- Buttons ----
+        button_frame = ttk.Frame(self)
+        button_frame.pack(pady=(0, 10))
+        ttk.Button(button_frame, text="Track File Upload", command=self.upload_schedule, width=20).grid(row=0, column=0, padx=10)
+        ttk.Button(button_frame, text="Update Inputs", command=self.simulate, width=20).grid(row=0, column=1, padx=10)
 
-        # Outputs mirror inputs (always plain labels)
-        self.speed_output = self.make_output(outputFrame, "Commanded Speed", 0)
-        self.authority_output = self.make_output(outputFrame, "Commanded Authority", 1)
-        self.temp_output = self.make_output(outputFrame, "Environmental Temperature", 2)
-        self.route_output = self.make_output(outputFrame, "Switch Positions", 3)
-        self.failure_output = self.make_output(outputFrame, "Traffic Lights", 4)
-        self.gate_output = self.make_output(outputFrame, "Gate", 5)
-        self.passengers_disembark_output = self.make_output(outputFrame, "Passengers Disembarking", 6)
-        self.passengers_board_output = self.make_output(outputFrame, "Passengers Boarding", 7)
-        self.speed_limit_output = self.make_output(outputFrame, "Speed Limit", 8)
-        self.block_num_output = self.make_output(outputFrame, "Block #", 9)
-        self.block_len_output = self.make_output(outputFrame, "Block length", 10)
-        self.section_output = self.make_output(outputFrame, "Section", 11)
-        self.failure_modes_output = self.make_output(outputFrame, "Failure Modes", 12)
+        # Output variables
+        self.generated_speed = tk.StringVar(value="")
+        self.generated_authority = tk.StringVar(value="")
+        self.generated_gate = tk.StringVar(value="")
+        self.output_initialized = False
 
-    # --- Utility: make entry row ---
-    def make_entry(self, parent, label, row, default=""):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
-        entry = ttk.Entry(parent)
-        entry.insert(0, default)
-        entry.grid(row=row, column=1, padx=5, pady=5)
-        return entry
+        # Load values from JSON at startup
+        self.load_json_inputs()
 
-    # --- Utility: make dropdown row ---
-    def make_dropdown(self, parent, label, row, values, default=None):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
-        combo = ttk.Combobox(parent, values=values, state="readonly")
-        if default in values:
-            combo.set(default)
-        else:
-            combo.current(0)
-        combo.grid(row=row, column=1, padx=5, pady=5)
-        return combo
+        # Begin periodic updates
+        self.read_json_outputs()
 
-    # --- Utility: make output row ---
-    def make_output(self, parent, label, row):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=5, pady=5)
-        var = tk.StringVar()
-        ttk.Label(parent, textvariable=var).grid(row=row, column=1, sticky="w", padx=5, pady=5)
-        return var
+    # --- Load saved values into Force Inputs ---
+    def load_json_inputs(self):
+        if os.path.exists("track_model_state.json"):
+            try:
+                with open("track_model_state.json", "r") as f:
+                    data = json.load(f)
+                block = data.get("block", {})
+                env = data.get("environment", {})
+                station = data.get("station", {})
+                commanded = data.get("commanded", {})
+                failures = data.get("failures", {})
 
-    # --- Guard rails ---
+                self.speed_entry.delete(0, tk.END)
+                self.speed_entry.insert(0, commanded.get("speed", ""))
+                self.authority_entry.delete(0, tk.END)
+                self.authority_entry.insert(0, commanded.get("authority", ""))
+                self.gate_entry.set(commanded.get("gate", ""))
+
+                self.temp_entry.delete(0, tk.END)
+                self.temp_entry.insert(0, env.get("temperature", ""))
+                self.route_entry.set(block.get("switch", ""))
+                self.traffic_entry.set(block.get("traffic_light", ""))
+                self.crossing_entry.set(block.get("crossing", ""))
+                self.branching_entry.delete(0, tk.END)
+                self.branching_entry.insert(0, block.get("branching", ""))
+                self.direction_entry.set(block.get("direction", ""))
+                self.grade_entry.delete(0, tk.END)
+                self.grade_entry.insert(0, block.get("grade", ""))
+                self.elevation_entry.delete(0, tk.END)
+                self.elevation_entry.insert(0, block.get("elevation", ""))
+                self.passengers_disembark_entry.delete(0, tk.END)
+                self.passengers_disembark_entry.insert(0, station.get("disembarking", ""))
+                self.passengers_board_entry.delete(0, tk.END)
+                self.passengers_board_entry.insert(0, station.get("boarding", ""))
+                self.speed_limit_entry.delete(0, tk.END)
+                self.speed_limit_entry.insert(0, block.get("speed_limit", ""))
+                self.block_num_entry.delete(0, tk.END)
+                self.block_num_entry.insert(0, re.sub(r"[A-Za-z]", "", block.get("name", "")))
+                self.block_len_entry.delete(0, tk.END)
+                self.block_len_entry.insert(0, "15")
+                self.section_entry.set(block.get("name", "")[:1])
+
+                self.failure_vars["power"].set(failures.get("power", False))
+                self.failure_vars["circuit"].set(failures.get("circuit", False))
+                self.failure_vars["broken_track"].set(failures.get("broken_track", False))
+
+            except Exception:
+                pass
+
+    # --- Branching Validation ---
+    def validate_branching(self):
+        branches = [b.strip() for b in self.branching_entry.get().split(",") if b.strip()]
+        current_block = f"{self.section_entry.get()}{self.block_num_entry.get()}"
+        valid_pattern = re.compile(r"^[A-K][0-9]+$")
+        for b in branches:
+            if not valid_pattern.match(b):
+                messagebox.showerror("Invalid Branch", f"Invalid branch '{b}' — must match format like F7 and section A–K.")
+                return False
+            if b.upper() == current_block.upper():
+                messagebox.showerror("Invalid Branch", f"Invalid branch '{b}' — a block cannot branch to itself.")
+                return False
+        return True
+
+    # --- General Validation ---
     def validate_inputs(self):
         try:
-            speed = int(self.speed_entry.get())
-            if not (0 <= speed <= 120):
-                raise ValueError("Speed must be between 0–120 mph")
+            if not self.validate_branching():
+                return False
 
-            authority = int(self.authority_entry.get())
-            if not (0 <= authority <= 1000):
-                raise ValueError("Authority must be between 0–1000 yards")
+            def get_int(entry, min_val=None, max_val=None):
+                val = entry.get().strip()
+                if val == "":
+                    return None
+                num = int(float(val))
+                if (min_val is not None and num < min_val) or (max_val is not None and num > max_val):
+                    raise ValueError(f"Value {num} out of bounds [{min_val}, {max_val}]")
+                return num
 
-            temp = int(self.track_closures_entry.get())
-            if not (-50 <= temp <= 150):
-                raise ValueError("Temperature must be between -50–150 °F")
+            def get_float(entry, min_val=None, max_val=None):
+                val = entry.get().strip()
+                if val == "":
+                    return None
+                num = float(val)
+                if (min_val is not None and num < min_val) or (max_val is not None and num > max_val):
+                    raise ValueError(f"Value {num} out of bounds [{min_val}, {max_val}]")
+                return num
 
-            p_disembark = int(self.passengers_disembark_entry.get())
-            p_board = int(self.passengers_board_entry.get())
-            if p_disembark < 0 or p_board < 0:
-                raise ValueError("Passenger counts cannot be negative")
-            if p_disembark > 412 or p_board > 412:
-                raise ValueError("Passenger counts exceeds maximum occupancy")
-
-            speed_limit = int(self.speed_limit_entry.get())
-            if not (0 <= speed_limit <= 120):
-                raise ValueError("Speed limit must be between 0–120 mph")
-
-            block_num = int(self.block_num_entry.get())
-            if not (0 <= block_num <= 500):
-                raise ValueError("Block number must be between 0–500")
-
-            block_len = int(self.block_len_entry.get().split()[0])
-            if not (0 <= block_len <= 50):
-                raise ValueError("Block length must be between 0–50 miles")
+            get_int(self.speed_entry, 0, 120)
+            get_int(self.authority_entry, 0, 1000)
+            get_int(self.temp_entry, -50, 150)
+            get_int(self.passengers_board_entry, 0, 412)
+            get_int(self.passengers_disembark_entry, 0, 412)
+            get_int(self.speed_limit_entry, 0, 120)
+            get_int(self.block_num_entry, 0, 500)
+            get_int(self.block_len_entry, 0, 50)
+            get_float(self.grade_entry, 0, 100)
+            get_float(self.elevation_entry, 0, 100)
 
         except ValueError as e:
             messagebox.showerror("Invalid Input", str(e))
             return False
-
         return True
 
-    # --- Functional logic ---
+    # --- Update JSON ---
     def simulate(self):
         if not self.validate_inputs():
-            return  # stop if invalid
+            return
 
-        # Copy inputs to outputs (all outputs are labels only)
-        self.speed_output.set(f"{self.speed_entry.get()} mph")
-        self.authority_output.set(f"{self.authority_entry.get()} yards")
-        self.temp_output.set(f"{self.track_closures_entry.get()} °F")
-        self.route_output.set(self.route_entry.get())
-        self.failure_output.set(self.failure_entry.get())
-        self.gate_output.set(self.train_positions_entry.get())
-        self.passengers_disembark_output.set(self.passengers_disembark_entry.get())
-        self.passengers_board_output.set(self.passengers_board_entry.get())
-        self.speed_limit_output.set(f"{self.speed_limit_entry.get()} mph")
-        self.block_num_output.set(self.block_num_entry.get())
-        self.block_len_output.set(f"{self.block_len_entry.get()} miles")
-        self.section_output.set(self.section_entry.get())
-        self.failure_modes_output.set(self.failure_modes_entry.get())
+        data = {}
+        if os.path.exists("track_model_state.json"):
+            with open("track_model_state.json", "r") as f:
+                data = json.load(f)
 
-    def stop_simulation(self):
-        # Reset outputs
-        for var in [
-            self.speed_output, self.authority_output, self.temp_output,
-            self.route_output, self.failure_output, self.gate_output,
-            self.passengers_disembark_output, self.passengers_board_output,
-            self.speed_limit_output, self.block_num_output, self.block_len_output,
-            self.section_output, self.failure_modes_output
-        ]:
-            var.set("")
+        boarding = int(float(self.passengers_board_entry.get() or 0))
+        disembarking = int(float(self.passengers_disembark_entry.get() or 0))
+
+        block = data.get("block", {})
+        block.update({
+            "name": f"{self.section_entry.get()}{self.block_num_entry.get()} GREEN",
+            "direction": self.direction_entry.get(),
+            "traffic_light": self.traffic_entry.get(),
+            "speed_limit": int(float(self.speed_limit_entry.get() or block.get("speed_limit", 0))),
+            "switch": self.route_entry.get(),
+            "grade": float(self.grade_entry.get() or block.get("grade", 0)),
+            "crossing": self.crossing_entry.get(),
+            "station_side": "RidgeWood/Left",
+            "branching": self.branching_entry.get(),
+            "beacon": "Ridgewood",
+            "elevation": float(self.elevation_entry.get() or block.get("elevation", 0)),
+            "track_heating": int(float(self.temp_entry.get() or 0)) < 32
+        })
+
+        environment = data.get("environment", {})
+        environment["temperature"] = int(float(self.temp_entry.get() or environment.get("temperature", 0)))
+
+        station = data.get("station", {})
+        station.update({
+            "ticket_sales": 42,
+            "boarding": boarding,
+            "disembarking": disembarking
+        })
+
+        failures = {
+            "power": self.failure_vars["power"].get(),
+            "circuit": self.failure_vars["circuit"].get(),
+            "broken_track": self.failure_vars["broken_track"].get()
+        }
+
+        commanded = {
+            "speed": int(float(self.speed_entry.get() or 0)),
+            "authority": int(float(self.authority_entry.get() or 0)),
+            "gate": self.gate_entry.get()
+        }
+
+        data.update({
+            "block": block,
+            "environment": environment,
+            "station": station,
+            "failures": failures,
+            "commanded": commanded,
+            "totals": data.get("totals", {"green": 150, "red": 76, "combined": 226})
+        })
+
+        try:
+            with open("track_model_state.json", "w") as f:
+                json.dump(data, f, indent=4)
+            if not self.output_initialized:
+                self.initialize_output_fields()
+                self.output_initialized = True
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to write JSON: {e}")
+
+    def initialize_output_fields(self):
+        self.placeholder.destroy()
+        ttk.Label(self.outputFrame, text="Commanded Speed (mph):").grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        ttk.Label(self.outputFrame, textvariable=self.generated_speed).grid(row=0, column=1, sticky="w", padx=10, pady=5)
+        ttk.Label(self.outputFrame, text="Commanded Authority (yards):").grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        ttk.Label(self.outputFrame, textvariable=self.generated_authority).grid(row=1, column=1, sticky="w", padx=10, pady=5)
+        ttk.Label(self.outputFrame, text="Gate:").grid(row=2, column=0, sticky="w", padx=10, pady=5)
+        ttk.Label(self.outputFrame, textvariable=self.generated_gate).grid(row=2, column=1, sticky="w", padx=10, pady=5)
+
+    def read_json_outputs(self):
+        if os.path.exists("track_model_state.json"):
+            try:
+                with open("track_model_state.json", "r") as f:
+                    data = json.load(f)
+                commanded = data.get("commanded", {})
+                self.generated_speed.set(commanded.get("speed", ""))
+                self.generated_authority.set(commanded.get("authority", ""))
+                self.generated_gate.set(commanded.get("gate", ""))
+            except Exception:
+                pass
+        self.after(500, self.read_json_outputs)
 
     def upload_schedule(self):
-        filedialog.askopenfilename(title="Select Schedule File")
+        file_path = filedialog.askopenfilename(
+            title="Select Track Layout File",
+            filetypes=[("CSV Files", "*.csv")]
+        )
+
+        if not file_path:
+            return
+        if not file_path.lower().endswith(".csv"):
+            messagebox.showerror("Invalid File", "Please select a valid CSV file.")
+            return
+
+        try:
+            data = {"block": {}, "environment": {}, "totals": {}, "failures": {}, "station": {}, "commanded": {}}
+            with open(file_path, "r", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    section = row["section"].strip().lower()
+                    key = row["key"].strip().lower()
+                    value = row["value"].strip()
+
+                    if section == "block":
+                        data["block"][key] = value
+                    elif section.startswith("environ"):
+                        data["environment"][key] = float(value)
+                    elif section == "totals":
+                        data["totals"][key] = int(value)
+                    elif section == "failures":
+                        data["failures"][key] = value.lower() == "true"
+                    elif section == "station":
+                        data["station"][key] = value
+                    elif section == "commanded":
+                        data["commanded"][key] = value
+
+            with open("track_model_state.json", "w") as f:
+                json.dump(data, f, indent=4)
+
+            self.load_json_inputs()
+            messagebox.showinfo("Success", "CSV successfully loaded into Track Model.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to process CSV file:\n{e}")
 
 
 if __name__ == "__main__":
