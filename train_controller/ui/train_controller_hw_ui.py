@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 import os
 import sys
+import time
 
 try:
     from gpiozero import LED, Button
@@ -66,8 +67,8 @@ class hw_train_controller_ui(tk.Tk):
             "right_door_status_led": 26,
             "announcement_button": 22,
             "announcement_status_led": 20,
-            "service_brake_button": 5, #temp replacement for pot issue
-            "service_brake_status_led": 16, #temp replacement for pot issue
+            #"service_brake_button": 5, #temp replacement for pot issue
+            #"service_brake_status_led": 16, #temp replacement for pot issue
             "emergency_brake_button": 6,
             "emergency_brake_status_led": 21,
         }
@@ -257,9 +258,9 @@ class hw_train_controller_ui(tk.Tk):
             elif name == "service_brake_button": #temp replacement for pot issue
                 current = self.api.get_state().get('service_brake', False)
                 self.api.update_state({'service_brake': not current})
-            elif name == "emergency_brake_button":
-                self.api.update_state({'emergency_brake': True})
-                self.after(5000, lambda: self.api.update_state({'emergency_brake': False}))
+            #elif name == "emergency_brake_button":
+            #    self.api.update_state({'emergency_brake': True})
+            #    self.after(5000, lambda: self.api.update_state({'emergency_brake': False}))
         except Exception as e:
             print(f"GPIO Callback Error: {e}")
 
@@ -337,30 +338,68 @@ class hw_train_controller_ui(tk.Tk):
         if (not I2C_AVAILABLE) or (not self.i2c_devices.get('adc', False)) or (not self.i2c_bus):
             return
         try:
-            address = self.i2c_address['adc']
-            try:
-                data = self.i2c_bus.read_i2c_block_data(address, 0, 3)
-                a0, a4, a7 = data[0], data[1], data[2]
-                # Set speed bounded within 0 to commanded speed (max)
-                state = self.api.get_state()
-                commanded_speed = state.get('commanded_speed', 0)
-                set_speed = round((a0 / 255.00) * commanded_speed, 2)
-                power = self.calculate_power_command(state)
-                self.api.update_state({
-                    'set_speed': set_speed,
-                    'power_command': power
-                })
-                # # Temperature bounded within 55 to 95 F (honestly dont know what range to use, probably wrong)
-                # set_temp = int(55 + (a4 / 255.00) * 40)
-                # # Service brake bounded from 0% to 100%
-                # service_brake = int((a7 / 255.00) * 100)
-                # self.api.update_state({
-                #     'set_speed': set_speed,
-                #     'set_temperature': set_temp,
-                #     'service_brake': service_brake
-                # })
-            except Exception:
-                return
+            addr = self.i2c_address['adc']
+            
+            def _read_ads1115_single_ended(channel):
+                """Start single-shot conversion on ADS1115 channel (0-3) and return raw signed int."""
+                OS_SINGLE = 0x8000
+                MUX_BASE = {0: 0x4000, 1: 0x5000, 2: 0x6000, 3: 0x7000}
+                PGA_2_048 = 0x0200  # +/-2.048V
+                MODE_SINGLE = 0x0100
+                DR_128 = 0x0080     # 128 SPS
+                COMP_QUE_DISABLE = 0x0003
+
+                mux = MUX_BASE.get(channel, 0x4000)
+                config = OS_SINGLE | mux | PGA_2_048 | MODE_SINGLE | DR_128 | COMP_QUE_DISABLE
+
+                hi = (config >> 8) & 0xFF
+                lo = config & 0xFF
+                # Write config to config register (pointer 0x01)
+                try:
+                    self.i2c_bus.write_i2c_block_data(addr, 0x01, [hi, lo])
+                except Exception as e:
+                    # if write fails, raise to outer except
+                    raise
+                # Wait for conversion (128 SPS -> ~7.8ms). use small margin
+                time.sleep(0.01)
+                # Read conversion register (pointer 0x00), 2 bytes
+                data = self.i2c_bus.read_i2c_block_data(addr, 0x00, 2)
+                raw = (data[0] << 8) | data[1]
+                # Convert to signed 16-bit
+                if raw & 0x8000:
+                    raw -= 1 << 16
+                return raw
+
+            raw0 = _read_ads1115_single_ended(0)
+            raw1 = _read_ads1115_single_ended(1)
+            raw3 = _read_ads1115_single_ended(3)
+
+            # ADS1115 single-ended raw range 0..32767 -> map to 0.0..1.0
+            ratio0 = max(0.0, min(1.0, raw0 / 32767.0))
+            ratio1 = max(0.0, min(1.0, raw1 / 32767.0))
+            ratio3 = max(0.0, min(1.0, raw3 / 32767.0))
+
+            state = self.api.get_state()
+            commanded_speed = state.get('commanded_speed', 0.0)
+            set_speed = round(ratio0 * commanded_speed, 2)
+            # Map channel1 to temperature range 55..95 F
+            set_temp = int(round(55 + (ratio1 * 40)))
+            service_brake = int(round(ratio3 * 100))  # 0..100%
+
+            new_state = state.copy()
+            new_state['set_speed'] = set_speed
+            new_state['set_temperature'] = set_temp
+            new_state['service_brake'] = service_brake
+
+            # Update API with set values; also refresh power command (PI controller uses set_speed)
+            power = self.calculate_power_command(state)
+
+            self.api.update_state({
+                'set_speed': set_speed,
+                'set_temperature': set_temp,
+                'service_brake': service_brake,
+                'power_command': power
+            })
         except Exception as e:
             print(f"ADC Read Error: {e}")
 
