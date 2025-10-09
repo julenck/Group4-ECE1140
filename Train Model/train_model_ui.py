@@ -10,7 +10,7 @@ class TrainModelUI(tk.Tk):
 
         # === Window setup ===
         self.title("Train Model - UI")
-        self.geometry("1200x1000")
+        self.geometry("1200x950")
         os.chdir(os.path.dirname(os.path.abspath(__file__)))  
 
         # === Load JSON data (shared data file) ===
@@ -148,7 +148,7 @@ class TrainModelUI(tk.Tk):
             ttk.Label(map_frame, text="Map image not found.").pack(pady=20)
 
         # === Failures ===
-        fail_frame = ttk.LabelFrame(frame, text="Failure Status (Editable)")
+        fail_frame = ttk.LabelFrame(frame, text="Failure Status")
         fail_frame.pack(fill="x", padx=10, pady=10)
         self.failure_vars = {}
 
