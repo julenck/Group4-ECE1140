@@ -58,7 +58,7 @@ class TrainModelUI(tk.Tk):
         """Left section divided into station, movement, passengers, and specs."""
         self.labels = {}
 
-        # ===== Station & Schedule (新增三项) =====
+        # ===== Station & Schedule  =====
         station_frame = ttk.LabelFrame(frame, text="Station & Schedule")
         station_frame.pack(fill="x", padx=5, pady=5)
 
