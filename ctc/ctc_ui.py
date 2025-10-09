@@ -231,7 +231,7 @@ maint_block_box = ttk.Combobox(block_frame, values=["1", "2", "3", "4"], font=in
 maint_line_box2.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 maint_block_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
 
-close_block_button = tk.Button(block_frame, text='Close Block', **button_style)
+close_block_button = tk.Button(block_frame, text='Close Block', command=lambda:close_block(),**button_style)
 close_block_button.grid(row=2, column=0, columnspan=2, padx=100,pady=10, sticky='ew')
 
 def move_switch():
@@ -239,16 +239,34 @@ def move_switch():
     switch = maint_switch_box.get()
 
     data = load_data()
-    maintenance = data.get("MaintenenceModeOutputs",{})
 
-    maintenance = {
-        "Switch Line": switch_line,
-        "Switch Position": switch,
-    }
+    # Get existing section or create if missing
+    maintenance_outputs = data.get("MaintenenceModeOutputs", {})
 
-    data["MaintenenceModeOutputs"] = maintenance
+    # Update only switch data
+    maintenance_outputs["Switch Line"] = switch_line
+    maintenance_outputs["Switch Position"] = switch
 
+    data["MaintenenceModeOutputs"] = maintenance_outputs
     save_data(data)
+
+
+def close_block(): 
+    block_line = maint_line_box2.get()
+    closed_block = maint_block_box.get()
+
+    data = load_data()
+
+    # Get existing section or create if missing
+    maintenance_outputs = data.get("MaintenenceModeOutputs", {})
+
+    # Update only block data
+    maintenance_outputs["Block Line"] = block_line
+    maintenance_outputs["Closed Block"] = closed_block
+
+    data["MaintenenceModeOutputs"] = maintenance_outputs
+    save_data(data)
+
 
 # Auto Frame UI 
 auto_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
