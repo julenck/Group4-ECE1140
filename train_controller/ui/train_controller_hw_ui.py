@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 import os
 import sys
+import time
 
 try:
     from gpiozero import LED, Button
@@ -66,8 +67,8 @@ class hw_train_controller_ui(tk.Tk):
             "right_door_status_led": 26,
             "announcement_button": 22,
             "announcement_status_led": 20,
-            "service_brake_button": 5, #temp replacement for pot issue
-            "service_brake_status_led": 16, #temp replacement for pot issue
+            #"service_brake_button": 5, #temp replacement for pot issue
+            #"service_brake_status_led": 16, #temp replacement for pot issue
             "emergency_brake_button": 6,
             "emergency_brake_status_led": 21,
         }
@@ -229,6 +230,11 @@ class hw_train_controller_ui(tk.Tk):
                     self.i2c_bus.write_byte(self.seven_segment_address, 0x81)
                     self.i2c_bus.write_byte(self.seven_segment_address, 0xE0 | 8)
                     self.seven_segment_present = True
+                    try:
+                        self.seven_segment_raw_write([0] * 16)
+                        self.seven_segment_display_set_speed(0)
+                    except Exception as e:
+                        print(f"I2C 7-Segment Setup Error: {e}")
                     print("I2C 7-Segment Display Initialized")
                 else:
                     self.seven_segment_present = False
@@ -254,6 +260,12 @@ class hw_train_controller_ui(tk.Tk):
             elif name == "announcement_button":
                 current = self.api.get_state().get('announcement', '')
                 self.api.update_state({'announcement': '' if current else 'Next station approaching'})
+                # Toggle announce_pressed boolean (like SW UI) and update announcement text
+                announce_flag = self.api.get_state().get('announce_pressed', False)
+                self.api.update_state({
+                    'announce_pressed': not announce_flag,
+                    'announcement': '' if announce_flag else 'Next station approaching'
+                })
             elif name == "service_brake_button": #temp replacement for pot issue
                 current = self.api.get_state().get('service_brake', False)
                 self.api.update_state({'service_brake': not current})
@@ -324,7 +336,7 @@ class hw_train_controller_ui(tk.Tk):
 
             try:
                 if I2C_AVAILABLE and getattr(self, 'seven_segment_present', False) and self.i2c_bus:
-                    self.seven_segment_display_set_speed(state.get('set_speed', 0))
+                    self.seven_segment_display_set_speed(state.get('velocity', 0))
             except Exception as e:
                 print(f"I2C 7-Segment Update Error: {e}")
 
@@ -337,30 +349,71 @@ class hw_train_controller_ui(tk.Tk):
         if (not I2C_AVAILABLE) or (not self.i2c_devices.get('adc', False)) or (not self.i2c_bus):
             return
         try:
-            address = self.i2c_address['adc']
-            try:
-                data = self.i2c_bus.read_i2c_block_data(address, 0, 3)
-                a0, a4, a7 = data[0], data[1], data[2]
-                # Set speed bounded within 0 to commanded speed (max)
-                state = self.api.get_state()
-                commanded_speed = state.get('commanded_speed', 0)
-                set_speed = round((a0 / 255.00) * commanded_speed, 2)
-                power = self.calculate_power_command(state)
-                self.api.update_state({
-                    'set_speed': set_speed,
-                    'power_command': power
-                })
-                # # Temperature bounded within 55 to 95 F (honestly dont know what range to use, probably wrong)
-                # set_temp = int(55 + (a4 / 255.00) * 40)
-                # # Service brake bounded from 0% to 100%
-                # service_brake = int((a7 / 255.00) * 100)
-                # self.api.update_state({
-                #     'set_speed': set_speed,
-                #     'set_temperature': set_temp,
-                #     'service_brake': service_brake
-                # })
-            except Exception:
-                return
+            addr = self.i2c_address['adc']
+
+            def _read_ads1115_single_ended(channel, pga_bits=0x0200, fsr=4.096):
+                """Single-shot read from ADS1115 single-ended channel.
+                Returns (voltage, raw_code).
+                pga_bits should be the PGA setting (bits shifted into bits 11:9).
+                fsr is the full-scale range in volts corresponding to pga_bits.
+                """
+                OS_SINGLE = 0x8000
+                MUX_BASE = {0: 0x4000, 1: 0x5000, 2: 0x6000, 3: 0x7000}
+                MODE_SINGLE = 0x0100
+                DR_128 = 0x0080
+                COMP_QUE_DISABLE = 0x0003
+
+                mux = MUX_BASE.get(channel, 0x4000)
+                config = OS_SINGLE | mux | pga_bits | MODE_SINGLE | DR_128 | COMP_QUE_DISABLE
+                hi = (config >> 8) & 0xFF
+                lo = config & 0xFF
+                self.i2c_bus.write_i2c_block_data(addr, 0x01, [hi, lo])
+                # wait for conversion: 128SPS -> ~7.8ms
+                time.sleep(0.01)
+                data = self.i2c_bus.read_i2c_block_data(addr, 0x00, 2)
+                raw = (data[0] << 8) | data[1]
+                # convert to signed 16-bit (should be non-negative for single-ended)
+                if raw & 0x8000:
+                    raw -= 1 << 16
+                # convert raw -> voltage using full-scale range
+                voltage = (raw / 32767.0) * fsr
+                # clamp to 0..fsr for safety
+                voltage = max(0.0, min(voltage, fsr))
+                return voltage, raw
+            
+            PGA_4_096_BITS = 0x0200
+            FSR_4_096 = 4.096
+
+            v0, raw0 = _read_ads1115_single_ended(0, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
+            v1, raw1 = _read_ads1115_single_ended(1, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
+            v3, raw3 = _read_ads1115_single_ended(3, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
+
+            # compute ratio relative to the actual pot supply (3.3V)
+            V_POT = 3.3
+            ratio0 = max(0.0, min(1.0, v0 / V_POT))
+            ratio1 = max(0.0, min(1.0, v1 / V_POT))
+            ratio3 = max(0.0, min(1.0, v3 / V_POT))
+
+            state = self.api.get_state()
+            commanded_speed = state.get('commanded_speed', 0.0)
+            set_speed = round(ratio0 * commanded_speed, 2)
+            set_temp = int(round(55 + (ratio1 * 40)))
+            service_brake = int(round(ratio3 * 100))
+
+            # build updated state and compute power using updated set_speed
+            new_state = state.copy()
+            new_state['set_speed'] = set_speed
+            new_state['set_temperature'] = set_temp
+            new_state['service_brake'] = service_brake
+
+            power = self.calculate_power_command(new_state)
+
+            self.api.update_state({
+                'set_speed': set_speed,
+                'set_temperature': set_temp,
+                'service_brake': service_brake,
+                'power_command': power
+            })
         except Exception as e:
             print(f"ADC Read Error: {e}")
 
@@ -514,11 +567,22 @@ class hw_train_controller_ui(tk.Tk):
         return digits.get(ch, 0x00)
     
     def seven_segment_display_digits(self, digits):
-        data = [0] * 16
-        for i in range(4):
-            seg = self.seven_segment_for_digit(digits[i])
-            data[i*2] = seg
-        self.seven_segment_raw_write(data)
+        try:
+            data = [0] * 16
+            # HT16K33 mapping: use addresses that do NOT overlap the colon (0x04).
+            # Use 0x00,0x02 for left two digits and 0x06,0x08 for right two digits.
+            positions = [0, 2, 6, 8]
+            # ensure digits is a 4-char string
+            s = str(digits).rjust(4)[:4]
+            for i in range(4):
+                ch = s[i]
+                seg = self.seven_segment_for_digit(ch)
+                data[positions[i]] = seg
+            # ensure colon is cleared (colon bit lives in address 0x04)
+            data[4] = data[4] & ~0x02
+            self.seven_segment_raw_write(data)
+        except Exception as e:
+            print(f"7-Segment Display Digits Error: {e}")
 
     def seven_segment_display_set_speed(self, speed):
         try:

@@ -3,162 +3,187 @@ from tkinter import ttk, messagebox
 import json
 import os
 
-
 class TrainModelTestUI(tk.Tk):
     def __init__(self):
         super().__init__()
-
-        # === Window setup ===
-        self.title("Train Model Test UI (Inputs + Outputs)")
-        self.geometry("650x800")
+        self.title("Train Model Test UI")
+        self.geometry("1100x780")
         os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-        # === Data storage ===
-        self.inputs = {}
-        self.outputs = {}
+        # === Load JSON ===
+        self.data = self.load_json()
+        self.status = self.data.get("train_status", {})
+        self.failures = self.data.get("failures", {})
 
-        # === Create UI sections ===
-        self.create_input_section()
-        self.create_output_section()
+        # === Main layout ===
+        main_pane = ttk.PanedWindow(self, orient="horizontal")
+        main_pane.pack(fill="both", expand=True, padx=15, pady=15)
 
-        # === Buttons ===
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(pady=10)
-        ttk.Button(btn_frame, text="Update Inputs", command=self.update_inputs).grid(row=0, column=0, padx=10)
-        ttk.Button(btn_frame, text="Refresh Outputs", command=self.refresh_outputs).grid(row=0, column=1, padx=10)
+        # Left side: Inputs
+        input_frame = ttk.LabelFrame(main_pane, text="Force Input - Track Model")
+        main_pane.add(input_frame, weight=2)
+        self.populate_inputs(input_frame)
 
-    # ----------------------------------------------------------------------
-    def create_input_section(self):
-        """Input parameters area."""
-        frame = ttk.LabelFrame(self, text="Force Input - Train Model")
-        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # Right side: Outputs
+        output_frame = ttk.LabelFrame(main_pane, text="Outputs - Train Model")
+        main_pane.add(output_frame, weight=1)
+        self.populate_outputs(output_frame)
 
-        params = [
-            ("Commanded Speed", "25 mph"),
-            ("Authority", "23 Block#"),
-            ("Beacon", "128 B"),
-            ("Speed Limit", "30 mph"),
-            ("Passengers Boarding", "80"),
-            ("Crew Count", "2"),
-            ("Lights (Bool)", "True"),
-            ("Doors Closed (Bool)", "True"),
-            ("Temperature (°C)", "22"),
-            ("Announcement", "Train approaching Herron Ave"),
-            ("Emergency Brake (Bool)", "False"),
-            ("Train Engine Failure", "False"),
-            ("Signal Pickup Failure", "False"),
-            ("Brake Failure", "False")
-        ]
+        # Bottom: Failures
+        failure_frame = ttk.LabelFrame(self, text="Failure Status (Editable)")
+        failure_frame.pack(fill="x", padx=15, pady=10)
+        self.populate_failures(failure_frame)
 
-        for i, (label, default) in enumerate(params):
-            ttk.Label(frame, text=label).grid(row=i, column=0, sticky="w", padx=5, pady=4)
-            entry = ttk.Entry(frame)
-            entry.insert(0, default)
-            entry.grid(row=i, column=1, padx=5, pady=4)
-            self.inputs[label] = entry
+        # Buttons
+        button_frame = ttk.Frame(self)
+        button_frame.pack(pady=10)
+        ttk.Button(button_frame, text="Update Inputs", command=self.save_changes).grid(row=0, column=0, padx=10)
+        ttk.Button(button_frame, text="Refresh Outputs", command=self.refresh_outputs_once).grid(row=0, column=1, padx=10)
 
-    # ----------------------------------------------------------------------
-    def create_output_section(self):
-        """Output monitoring area."""
-        frame = ttk.LabelFrame(self, text="Train Model Outputs")
-        frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        outputs = [
-            ("Train Velocity", ""),
-            ("Inside Temperature", ""),
-            ("Passengers Onboard", ""),
-            ("Lights Status", ""),
-            ("Door Status", ""),
-            ("Failures Active", "")
-        ]
-
-        for i, (label, default) in enumerate(outputs):
-            ttk.Label(frame, text=label).grid(row=i, column=0, sticky="w", padx=5, pady=4)
-            entry = ttk.Entry(frame, state="readonly")
-            entry.grid(row=i, column=1, padx=5, pady=4, sticky="ew")
-            self.outputs[label] = entry
-
-    # ----------------------------------------------------------------------
-    def update_inputs(self):
-        """Collect all input values and write them into train_data.json."""
-        values = {label: widget.get() for label, widget in self.inputs.items()}
-
-        new_data = {
-            "train_status": {
-                "commanded_speed": values.get("Commanded Speed", "N/A"),
-                "authority": values.get("Authority", "N/A"),
-                "beacon": values.get("Beacon", "N/A"),
-                "speed_limit": values.get("Speed Limit", "N/A"),
-                "passengers_boarding": int(values.get("Passengers Boarding", 0)),
-                "crew_count": int(values.get("Crew Count", 2)),
-                "lights_on": values.get("Lights (Bool)", "False") == "True",
-                "doors_closed": values.get("Doors Closed (Bool)", "False") == "True",
-                "temperature_inside": int(values.get("Temperature (°C)", 22)),
-                "announcement": values.get("Announcement", ""),
-                "emergency_brake": values.get("Emergency Brake (Bool)", "False") == "True"
-            },
-            "failures": {
-                "train_engine_failure": values.get("Train Engine Failure", "False") == "True",
-                "signal_pickup_failure": values.get("Signal Pickup Failure", "False") == "True",
-                "brake_failure": values.get("Brake Failure", "False") == "True"
-            }
-        }
-
-        # Load existing JSON and update
+    # ==========================================================
+    def load_json(self):
         try:
-            with open("train_data.json", "r") as f:
-                data = json.load(f)
-        except:
-            data = {}
-
-        data.update(new_data)
-
-        # Save updated JSON
-        with open("train_data.json", "w") as f:
-            json.dump(data, f, indent=2)
-
-        messagebox.showinfo("Inputs Updated", "Inputs have been written to train_data.json.\nThe main UI will refresh automatically.")
-
-    # ----------------------------------------------------------------------
-    def refresh_outputs(self):
-        """Read and display the current output values from JSON."""
-        try:
-            with open("train_data.json", "r") as f:
-                data = json.load(f)
+            with open("train_data.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            messagebox.showerror("Error", "train_data.json not found.")
+            return {}
         except Exception as e:
-            messagebox.showerror("Error", f"Unable to read JSON file.\n{e}")
-            return
+            messagebox.showerror("Error", str(e))
+            return {}
 
-        status = data.get("train_status", {})
-        failures = data.get("failures", {})
+    # ==========================================================
+    def populate_inputs(self, frame):
+        """Inputs according to reference image"""
+        self.entries = {}
+        self.bool_vars = {}
 
-        # Derived/Calculated fields
-        onboard = status.get("passengers_boarding", 0) - status.get("passengers_disembarking", 0)
-        lights = "ON" if status.get("lights_on") else "OFF"
-        doors = "Closed" if status.get("doors_closed") else "Open"
-        active_failures = [k.replace("_", " ").title() for k, v in failures.items() if v]
-        failures_text = ", ".join(active_failures) if active_failures else "None"
+        fields = [
+            ("Commanded Speed (mph)", "commanded_speed"),
+            ("Authority", "authority"),
+            ("Beacon", "beacon"),
+            ("Speed Limit (mph)", "speed_limit"),
+            ("Number of Passengers Boarding", "passengers_boarding"),
+            ("Train Positions", "train_positions"),
+            ("Crew Count", "crew_count"),
+            ("Mass (lb)", "mass_lb"),
+            ("Length (ft)", "length_ft"),
+            ("Width (ft)", "width_ft"),
+            ("Height (ft)", "height_ft"),
+            ("Right Door (Bool)", "right_door"),
+            ("Left Door (Bool)", "left_door"),
+            ("Lights (Bool)", "lights_on"),
+            ("Temperature UP (°F)", "temp_up"),
+            ("Temperature DOWN (°F)", "temp_down"),
+            ("Announcement / Dispatch System (String)", "announcement"),
+            ("Service Brake (Bool)", "service_brake"),
+            ("Power Availability (W)", "power_availability"),
+            ("Deceleration Limit (mph/s)", "decel_limit_mphps"),
+            ("Emergency Brake (Bool)", "emergency_brake"),
+            ("Train Temperature (°F)", "train_temperature"),
+        ]
 
-        # Update display fields
-        outputs = {
-            "Train Velocity": status.get("commanded_speed", "N/A"),
-            "Inside Temperature": f"{status.get('temperature_inside', 'N/A')} °C",
-            "Passengers Onboard": onboard,
-            "Lights Status": lights,
-            "Door Status": doors,
-            "Failures Active": failures_text
-        }
+        for i, (label, key) in enumerate(fields):
+            ttk.Label(frame, text=label).grid(row=i, column=0, sticky="w", padx=10, pady=3)
+            if "Bool" in label:
+                var = tk.BooleanVar(value=self.status.get(key, False))
+                chk = ttk.Checkbutton(frame, variable=var)
+                chk.grid(row=i, column=1, sticky="w", padx=5)
+                self.bool_vars[key] = var
+            else:
+                entry = ttk.Entry(frame, width=25)
+                entry.insert(0, str(self.status.get(key, "")))
+                entry.grid(row=i, column=1, sticky="w", padx=5)
+                self.entries[key] = entry
 
-        for label, value in outputs.items():
-            widget = self.outputs[label]
-            widget.config(state="normal")
-            widget.delete(0, tk.END)
-            widget.insert(0, str(value))
-            widget.config(state="readonly")
+        frame.columnconfigure(1, weight=1)
 
-        messagebox.showinfo("Outputs Refreshed", "Output values have been refreshed from train_data.json.")
+    # ==========================================================
+    def populate_outputs(self, frame):
+        """Outputs refreshed manually"""
+        self.output_labels = {}
+        outputs = [
+            ("Commanded Speed", "commanded_speed"),
+            ("Authority", "authority"),
+            ("Beacon", "beacon"),
+            ("Train Velocity (mph)", "velocity"),
+            ("Train Temperature (°F)", "train_temperature"),
+            ("Speed Limit (mph)", "speed_limit"),
+            ("Passengers Boarding", "passengers_boarding"),
+            ("Passengers Disembarking", "passengers_disembarking"),
+        ]
+        for i, (label, key) in enumerate(outputs):
+            ttk.Label(frame, text=f"{label}:").grid(row=i, column=0, sticky="w", padx=10, pady=3)
+            lbl = ttk.Label(frame, text="N/A")
+            lbl.grid(row=i, column=1, sticky="w", padx=10, pady=3)
+            self.output_labels[label] = (lbl, key)
 
+        frame.columnconfigure(1, weight=1)
+        self.update_outputs()
 
+    # ==========================================================
+    def populate_failures(self, frame):
+        """Failure checkboxes"""
+        self.failure_vars = {}
+        for i, (key, val) in enumerate(self.failures.items()):
+            var = tk.BooleanVar(value=val)
+            ttk.Checkbutton(frame, text=key.replace("_", " ").title(), variable=var).grid(
+                row=i, column=0, sticky="w", padx=15, pady=3
+            )
+            self.failure_vars[key] = var
+
+    # ==========================================================
+    def save_changes(self):
+        """Save all modified input and failure data"""
+        try:
+            for k, e in self.entries.items():
+                val = e.get().strip()
+                try:
+                    if "." in val:
+                        val = float(val)
+                    else:
+                        val = int(val)
+                except Exception:
+                    pass
+                self.status[k] = val
+
+            for k, v in self.bool_vars.items():
+                self.status[k] = v.get()
+
+            for k, v in self.failure_vars.items():
+                self.failures[k] = v.get()
+
+            self.data["train_status"] = self.status
+            self.data["failures"] = self.failures
+            with open("train_data.json", "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=2)
+
+            messagebox.showinfo("Success", "Inputs updated successfully!")
+            self.update_outputs()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save: {e}")
+
+    # ==========================================================
+    def update_outputs(self):
+        """Refresh outputs from self.status"""
+        for label, (lbl, key) in self.output_labels.items():
+            val = self.status.get(key, "N/A")
+            lbl.config(text=str(val))
+
+    # ==========================================================
+    def refresh_outputs_once(self):
+        """Manual refresh from JSON"""
+        try:
+            new_data = self.load_json()
+            if new_data:
+                self.status = new_data.get("train_status", {})
+                self.failures = new_data.get("failures", {})
+                self.update_outputs()
+            messagebox.showinfo("Refreshed", "Outputs updated from train_data.json.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Refresh failed: {e}")
+
+# ==========================================================
 if __name__ == "__main__":
     app = TrainModelTestUI()
     app.mainloop()

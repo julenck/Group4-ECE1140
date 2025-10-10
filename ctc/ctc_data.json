@@ -3,13 +3,15 @@
         "Trains": {
             "Train 1": {
                 "Line": "Red",
-                "Suggested Speed": "12",
-                "Authority": "12"
+                "Suggested Speed": "34",
+                "Authority": "3"
             },
             "Train 2": {
-                "Line": "Green",
-                "Station Destination": "Pioneer",
-                "Arrival Time": "12"
+                "Line": "Red",
+                "Authority": 3401.137,
+                "Suggested Speed": 24.855,
+                "Station Destination": "Steel Plaza",
+                "Arrival Time": "0:10"
             },
             "Train 3": {
                 "Line": "Blue",
@@ -40,6 +42,6 @@
         "Block Line": "Green",
         "Closed Block": "1",
         "Switch Line": "Green",
-        "Switch Position": "3"
+        "Switch Position": "2"
     }
 }

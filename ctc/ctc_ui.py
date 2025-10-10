@@ -313,11 +313,32 @@ auto_train_box = ttk.Combobox(dispatch_frame, values=["Train 1", "Train 2", "Tra
 auto_train_box.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 
 tk.Label(dispatch_frame, text="Select a Line", font=label_font, bg="lightblue").grid(row=1, column=0, sticky='w', padx=5, pady=5)
-auto_line_box = ttk.Combobox(dispatch_frame, values=["Red", "Green"], font=input_font)
+auto_line_box = ttk.Combobox(dispatch_frame, values=["Red", "Green","Blue"], font=input_font)
 auto_line_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
 
 tk.Label(dispatch_frame, text="Select a Destination Station", font=label_font, bg="lightblue").grid(row=2, column=0, sticky='w', padx=5, pady=5)
-auto_dest_box = ttk.Combobox(dispatch_frame, values=["Shadyside", "Pioneer", "Edgeworth", "Herron Ave", "Whited"], font=input_font)
+auto_dest_box = ttk.Combobox(dispatch_frame, values=["Station B",
+                                                     "Station C",
+                                                     "Shadyside",
+                                                     "Herron Ave",
+                                                     "Swissville",
+                                                     "Penn Station",
+                                                     "Steel Plaza",
+                                                     "First Ave",
+                                                     "Station Square",
+                                                     "South Hills Junction",
+                                                     "Pioneer",
+                                                     "Edgebrook",
+                                                     "Whited",
+                                                     "South Bank",
+                                                     "Central",
+                                                     "Inglewood",
+                                                     "Overbrook",
+                                                     "Glenbury",
+                                                     "Dormont",
+                                                     "Mt. Lebanon",
+                                                     "Poplar",
+                                                     "Castle Shannon"], font=input_font)
 auto_dest_box.grid(row=2, column=1, padx=5, pady=5, sticky='ew')
 
 tk.Label(dispatch_frame, text="Enter Arrival Time", font=label_font, bg="lightblue").grid(row=3, column=0, sticky='w', padx=5, pady=5)
@@ -327,16 +348,88 @@ auto_arrival_box.grid(row=3, column=1, padx=5, pady=5, sticky='ew')
 dispatch_button = tk.Button(dispatch_frame, text="DISPATCH", command=lambda: auto_dispatch(), **button_style)
 dispatch_button.grid(row=4, column=0, columnspan=2, padx=50, pady=10, sticky='ew')
 
+
 def auto_dispatch():
     train = auto_train_box.get()
     line = auto_line_box.get()
     dest = auto_dest_box.get()
     arrival = auto_arrival_box.get()
 
-    if not train or not line or not dest or not arrival:
-        print("Please fill out all fields.")
-        return
-
+    #if not train or not line or not dest or not arrival:
+       # print("Please fill out all fields.")
+        #return
+    
+    # Calculate suggested speed and authority 
+    if(auto_line_box.get()) == "Blue":
+        if(auto_dest_box.get()) == "Station B":
+            authority = 546.807
+            speed = 31.069
+        if(auto_dest_box.get()) == "Station C":
+            authority = 820.21
+            speed = 31.069
+    if(auto_line_box.get()) == "Red":
+        if(auto_dest_box.get()) == "Shadyside": 
+            authority = 410.105
+            speed = 24.855
+        if(auto_dest_box.get()) == "Herron Ave": 
+            authority = 1082.68
+            speed = 24.855
+        if(auto_dest_box.get()) == "Swissville": 
+            authority = 2504.374
+            speed = 24.855
+        if(auto_dest_box.get()) == "Penn Station": 
+            authority = 2832.458
+            speed = 24.855
+        if(auto_dest_box.get()) == "Steel Plaza": 
+            authority = 3401.137
+            speed = 24.855
+        if(auto_dest_box.get()) == "First Ave": 
+            authority = 3969.816
+            speed = 24.855
+        if(auto_dest_box.get()) == "Station Square": 
+            authority = 4215.879
+            speed = 24.855
+        if(auto_dest_box.get()) == "South Hills Junction": 
+            authority = 5028.653
+            speed = 24.855
+    if(auto_line_box.get()) == "Green": 
+        if(auto_dest_box.get()) == "Pioneer": 
+            authority = 218.723
+            speed = 62.137
+        if(auto_dest_box.get()) == "Edgebrook": 
+            authority = 984.252
+            speed = 27.962
+        if(auto_dest_box.get()) == "Whited": 
+            authority = 3280.84
+            speed = 27.962
+        if(auto_dest_box.get()) == "South Bank": 
+            authority = 4538.495
+            speed = 18.641
+        if(auto_dest_box.get()) == "Central": 
+            authority = 4647.857
+            speed = 18.641
+        if(auto_dest_box.get()) == "Inglewood": 
+            authority = 5249.344
+            speed = 18.641
+        if(auto_dest_box.get()) == "Overbrook": 
+            authority = 5940.192
+            speed = 18.641
+        if(auto_dest_box.get()) == "Glenbury": 
+            authority = 6671.041
+            speed = 18.64
+        if(auto_dest_box.get()) == "Dormont": 
+            authority = 7655.293
+            speed = 18.641
+        if(auto_dest_box.get()) == "Mt. Lebanon": 
+            authority = 8311.461
+            speed = 18.641
+        if(auto_dest_box.get()) == "Poplar": 
+            authority = 11249.563
+            speed = 15.534
+        if(auto_dest_box.get()) == "Castle Shannon": 
+            authority = 11905.73
+            speed = 15.534
+        
     data = load_data()
     dispatcher = data.get("Dispatcher", {})
     trains = dispatcher.get("Trains", {})
@@ -344,8 +437,11 @@ def auto_dispatch():
     # Add or update train info
     trains[train] = {
         "Line": line,
+        "Authority": authority,
+        "Suggested Speed": speed,
         "Station Destination": dest,
         "Arrival Time": arrival,
+        
     }
 
     dispatcher["Trains"] = trains
@@ -383,7 +479,7 @@ def create_table_section(parent, title, columns, data):
 active_trains_frame, active_trains_table = create_table_section(
     bottom_frame,
     "Active Trains",
-    ("Train", "Line", "Block", "State", "Suggested Speed", "Authority", "Direction", "Station", "Arrival Time"),
+    ("Train", "Line", "Block", "State", "Suggested Speed (mph)", "Authority (yards)", "Direction", "Station", "Arrival Time"),
     []
 )
 active_trains_frame.grid(row=0, column=0, sticky='nsew', padx=5)
