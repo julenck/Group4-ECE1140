@@ -3,7 +3,7 @@ from tkinter import ttk
 import json
 import os
 
-# ✅ Always switch to script directory
+# Always switch to script directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 JSON_FILE = "train_data.json"
