@@ -25,8 +25,8 @@ import plc_parser
 
 
 # Constants for window size
-WINDOW_WIDTH = 1200
-WINDOW_HEIGHT = 700
+WINDOW_WIDTH = 1400
+WINDOW_HEIGHT = 800
 
 
 class sw_track_controller_ui(tk.Tk):

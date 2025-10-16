@@ -1,15 +1,15 @@
 {
     "switches": {
-        "5": "DIVERGING"
+        "5": "STRAIGHT"
     },
     "lights": {
-        "6": "GREEN",
-        "11": "GREEN"
+        "6": "RED",
+        "11": "RED"
     },
     "crossings": {
-        "3": "OPEN"
+        "3": "CLOSED"
     },
-    "commanded_speed": 31,
-    "commanded_authority": 500,
-    "failure_signal": 0
+    "commanded_speed": 0,
+    "commanded_authority": 0,
+    "failure_signal": 1
 }
