@@ -12,23 +12,26 @@
         "crew_count": 2
     },
     "inputs": {
-        "commanded_power": 60000,
-        "authority": 300,
+        "commanded_power": 60000.0,
+        "authority": 300.0,
         "doors_open": false,
         "lights_on": true,
         "temperature_F": 68,
-        "emergency_brake": false
+        "emergency_brake": false,
+        "speed_limit": "",
+        "commanded_speed": "",
+        "passengers_boarding": "",
+        "crew_count": 2.0,
+        "beacon_data": ""
     },
     "outputs": {
-        "velocity_mps": 1.106548760443231,
-        "acceleration_mps2": 0.006673129013974207,
-        "position_m": 26.541968639064827,
-        "authority_m": 299.44672561977836,
+        "velocity_mps": 0.86,
+        "acceleration_mps2": 0.5,
+        "position_m": 4.3,
+        "authority_m": 295.7,
         "temperature_F": 68.0,
-        "doors_open": false,
-        "lights_on": true,
-        "engine_failure": false,
-        "brake_failure": false,
-        "signal_failure": false
+        "eta_s": 345.3,
+        "current_station": "Downtown",
+        "next_station": "Midtown"
     }
 }
