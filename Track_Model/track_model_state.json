@@ -2,24 +2,24 @@
     "Green": {
         "A1": {
             "block": {
-                "direction": "Reverse",
+                "direction": "",
                 "occupancy": 0
             },
             "environment": {
-                "temperature": 67
+                "temperature": 85
             },
             "failures": {
-                "power": false,
+                "power": true,
                 "circuit": false,
                 "broken_track": false
             },
             "station": {
-                "boarding": 243,
-                "disembarking": 167
+                "boarding": 0,
+                "disembarking": 0
             },
             "commanded": {
-                "speed": 25,
-                "authority": 101
+                "speed": 0,
+                "authority": 10
             }
         },
         "B6": {
@@ -42,6 +42,28 @@
             "commanded": {
                 "speed": 21,
                 "authority": 9
+            }
+        },
+        "C9": {
+            "block": {
+                "direction": "Forward",
+                "occupancy": 0
+            },
+            "environment": {
+                "temperature": 32
+            },
+            "failures": {
+                "power": false,
+                "circuit": false,
+                "broken_track": false
+            },
+            "station": {
+                "boarding": 12,
+                "disembarking": 3
+            },
+            "commanded": {
+                "speed": 23,
+                "authority": 45
             }
         }
     },
@@ -114,5 +136,10 @@
                 "authority": 17
             }
         }
+    },
+    "failures": {
+        "power": false,
+        "circuit": false,
+        "broken_track": true
     }
 }

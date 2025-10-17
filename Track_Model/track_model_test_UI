@@ -5,12 +5,11 @@ import pandas as pd
 import os
 import re
 
-
 class TrackBuilder(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Track Model Test UI")
-        self.geometry("780x520")
+        self.geometry("780x380")
         self.resizable(False, False)
 
         # === LINE AND BLOCK SELECTION === #
@@ -96,12 +95,6 @@ class TrackBuilder(tk.Tk):
                 variable=self.failure_vars[label],
             ).pack(anchor="w", padx=15, pady=2)
 
-        # === OUTPUT FRAME === #
-        self.outputFrame = ttk.LabelFrame(self, text="Generated Outputs")
-        self.outputFrame.pack(fill="x", expand=False, padx=10, pady=(5, 5))
-        self.placeholder = ttk.Label(self.outputFrame, text=" ")
-        self.placeholder.pack()
-
         # === BUTTONS === #
         button_frame = ttk.Frame(self)
         button_frame.pack(pady=(0, 10))
@@ -115,14 +108,6 @@ class TrackBuilder(tk.Tk):
             button_frame, text="Update Inputs", command=self.simulate, width=20
         ).grid(row=0, column=1, padx=10)
 
-        # === VARIABLES === #
-        self.generated_speed = tk.StringVar(value="")
-        self.generated_authority = tk.StringVar(value="")
-        self.output_initialized = False
-        self.static_data = {}
-
-        self.load_json_inputs()
-        self.read_json_outputs()
 
     # === INFRASTRUCTURE HELPERS === #
     def extract_station(self, value):
@@ -321,22 +306,6 @@ class TrackBuilder(tk.Tk):
             self.initialize_output_fields()
             self.output_initialized = True
 
-    # === DISPLAY === #
-    def initialize_output_fields(self):
-        self.placeholder.destroy()
-        ttk.Label(self.outputFrame, text="Commanded Speed (mph):").grid(
-            row=0, column=0, sticky="w", padx=10, pady=5
-        )
-        ttk.Label(self.outputFrame, textvariable=self.generated_speed).grid(
-            row=0, column=1, sticky="w", padx=10, pady=5
-        )
-        ttk.Label(self.outputFrame, text="Commanded Authority (yards):").grid(
-            row=1, column=0, sticky="w", padx=10, pady=5
-        )
-        ttk.Label(self.outputFrame, textvariable=self.generated_authority).grid(
-            row=1, column=1, sticky="w", padx=10, pady=5
-        )
-
     def load_json_inputs(self):
         try:
             with open("track_model_state.json", "r") as f:
@@ -349,39 +318,6 @@ class TrackBuilder(tk.Tk):
         except Exception:
             pass
 
-    def read_json_outputs(self):
-        try:
-            selected_line = self.line_selection.get()
-            selected_block = self.block_selection.get()
-
-            if not selected_line or not selected_block:
-                # skip until a valid selection exists
-                self.after(500, self.read_json_outputs)
-                return
-
-            if not os.path.exists("track_model_state.json"):
-                self.after(500, self.read_json_outputs)
-                return
-
-            with open("track_model_state.json", "r") as f:
-                data = json.load(f)
-
-            # Navigate nested structure safely
-            line_data = data.get(selected_line, {})
-            block_data = line_data.get(selected_block, {})
-
-            commanded = block_data.get("commanded", {})
-            speed = commanded.get("speed", "")
-            authority = commanded.get("authority", "")
-
-            self.generated_speed.set(speed)
-            self.generated_authority.set(authority)
-
-        except Exception:
-            pass
-
-        # Continue refreshing every 500ms without blocking
-        self.after(500, self.read_json_outputs)
 
 if __name__ == "__main__":
     TrackBuilder().mainloop()
