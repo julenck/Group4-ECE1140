@@ -1,0 +1,58 @@
+
+
+
+
+{
+    "blue_line":{
+        "A":{
+            "railway_crossing":{
+                               "block_id":3,
+                               "state":{
+                               "closed_if_occupied":[1,2,3,4,5]
+                                }
+
+            },
+            "switch":{
+                      "block_id":5,
+                       "state":{
+                               "straight":{
+                                      "occupied":[11,12,13,14,15],
+                                      "unoccupied":[1,2,3,4,5],
+                                      "destination":[10,1]
+                                },
+                               "diverging":{
+                                      "occupied":[6,7,8,9,10],
+                                      "unoccupied":[1,2,3,4,5],
+                                      "destination":[15,1]
+                               }
+                        }
+            },
+            "block_nums":[1,2,3,4,5]
+        },
+        "B":{
+            "light":{
+                    "block_id":6,
+                    "state":{
+                            "green_if_unoccupied":[6,7,8,9,10]
+                    }
+            },
+            "station":{
+                      "block_id":10
+            },
+            "block_nums":[6,7,8,9,10]
+        },
+        "C":{
+            "light":{
+                    "block_id":11,
+                    "state":{
+                            "green_if_unoccupied":[11,12,13,14,15]
+                    }
+            },
+            "station":{
+                      "block_id":15
+            },
+            "block_nums":[11,12,13,14,15]
+        }
+    }
+}
+        

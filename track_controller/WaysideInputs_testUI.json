@@ -1,0 +1,24 @@
+{
+<<<<<<< HEAD
+  "block_occupancies":[3,4],
+  "destination":10,
+  "suggested_speed": 100,
+  "suggested_authority": 50
+=======
+  "switches": [
+    "SW1",
+    "SW2",
+    "SW3",
+    "SW4"
+  ],
+  "switch_states": [
+    "Straight",
+    "Straight",
+    "Diverging",
+    "Straight"
+  ],
+  "suggested_speed": 67,
+  "suggested_authority": 700,
+  "passengers_disembarking": 0
+>>>>>>> 87d4615cc2b7e075c4a1d1e809646351d8d33675
+}
