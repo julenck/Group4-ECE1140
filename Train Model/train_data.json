@@ -1,46 +1,37 @@
 {
-  "train_status": {
-    "current_station": "",
-    "next_station": "",
-    "eta_min": 3,
-    "commanded_speed": "25 mph",
-    "authority": "23 Block#",
-    "beacon": "128 B",
-    "speed_limit": "30 mph",
-    "velocity": "25 mph",
-    "acceleration": "1.5 mph/s",
-    "passengers_boarding": 80,
-    "passengers_disembarking": 5,
-    "crew_count": 2,
-    "temperature_inside": 22,
-    "lights_on": true,
-    "doors_closed": true,
-    "announcement": "Train approaching next station.",
-    "train_positions": "",
-    "mass_lb": "",
-    "length_ft": "",
-    "width_ft": "",
-    "height_ft": "",
-    "temp_up": "",
-    "temp_down": "",
-    "power_availability": "",
-    "decel_limit_mphps": "",
-    "train_temperature": "",
-    "right_door": false,
-    "left_door": false,
-    "service_brake": false,
-    "emergency_brake": false
-  },
-  "train_specs": {
-    "decel_limit_mphps": 2.4,
-    "length_ft": 66,
-    "width_ft": 10,
-    "height_ft": 11.5,
-    "mass_lb": 91
-  },
-  "failures": {
-    "train_engine_failure": false,
-    "signal_pickup_failure": false,
-    "brake_failure": false
-  }
+    "specs": {
+        "length_ft": 66.0,
+        "width_ft": 10.0,
+        "height_ft": 11.5,
+        "mass_kg": 40900,
+        "max_power_w": 120000,
+        "max_accel_mps2": 0.5,
+        "service_brake_mps2": -1.2,
+        "emergency_brake_mps2": -2.7,
+        "capacity": 222,
+        "crew_count": 2
+    },
+    "inputs": {
+        "commanded_power": 60000.0,
+        "authority": 300.0,
+        "doors_open": false,
+        "lights_on": true,
+        "temperature_F": 68,
+        "emergency_brake": false,
+        "speed_limit": "",
+        "commanded_speed": "",
+        "passengers_boarding": "",
+        "crew_count": 2.0,
+        "beacon_data": ""
+    },
+    "outputs": {
+        "velocity_mps": 0.86,
+        "acceleration_mps2": 0.5,
+        "position_m": 4.3,
+        "authority_m": 295.7,
+        "temperature_F": 68.0,
+        "eta_s": 345.3,
+        "current_station": "Downtown",
+        "next_station": "Midtown"
+    }
 }

@@ -1,245 +1,279 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from PIL import Image, ImageTk
 import json
 import os
+import math
 
+# Ensure working directory
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+JSON_FILE = "train_data.json"
+
+
+# === TRAIN MODEL CORE ===
+class TrainModel:
+    def __init__(self, specs):
+        self.length = specs["length_ft"]
+        self.width = specs["width_ft"]
+        self.height = specs["height_ft"]
+        self.mass = specs["mass_kg"]
+        self.max_power = specs["max_power_w"]
+        self.max_accel = specs["max_accel_mps2"]
+        self.max_service_brake = specs["service_brake_mps2"]
+        self.max_emergency_brake = specs["emergency_brake_mps2"]
+        self.capacity = specs["capacity"]
+        self.crew_count = specs["crew_count"]
+
+        # Dynamic states
+        self.velocity = 0.0
+        self.acceleration = 0.0
+        self.position = 0.0
+        self.temperature = 68.0
+        self.authority = 300.0
+
+        # Failures
+        self.engine_failure = False
+        self.brake_failure = False
+        self.signal_failure = False
+
+        # Emergency brake
+        self.emergency_brake = False
+
+        # Route data
+        self.current_station = "Downtown"
+        self.next_station = "Midtown"
+        self.station_positions = {"Downtown": 0, "Midtown": 500, "Uptown": 1000}
+
+        self.dt = 0.5
+
+    def update(self, power, authority):
+        """Core update logic for train motion and basic environment."""
+        if self.engine_failure:
+            traction_force = 0
+        else:
+            traction_force = power / max(self.velocity, 0.1)
+
+        resistance = 5000 + 30 * self.velocity + 0.5 * self.velocity**2
+
+        if self.emergency_brake:
+            brake_force = abs(self.max_emergency_brake) * self.mass
+        elif self.brake_failure:
+            brake_force = 0
+        else:
+            brake_force = abs(self.max_service_brake) * self.mass if self.velocity > 0 else 0
+
+        net_force = traction_force - resistance - brake_force
+        self.acceleration = max(min(net_force / self.mass, self.max_accel), self.max_emergency_brake)
+
+        # Kinematics
+        self.velocity += self.acceleration * self.dt
+        self.velocity = max(self.velocity, 0)
+        self.position += self.velocity * self.dt + 0.5 * self.acceleration * self.dt**2
+        self.authority = max(authority - self.velocity * self.dt, 0)
+
+        self.update_stations()
+        return {
+            "velocity_mps": self.velocity,
+            "acceleration_mps2": self.acceleration,
+            "position_m": self.position,
+            "authority_m": self.authority,
+            "current_station": self.current_station,
+            "next_station": self.next_station,
+            "eta_s": self.calculate_eta(),
+        }
+
+    def update_stations(self):
+        pos = self.position
+        if pos < self.station_positions["Midtown"]:
+            self.current_station = "Downtown"
+            self.next_station = "Midtown"
+        elif pos < self.station_positions["Uptown"]:
+            self.current_station = "Midtown"
+            self.next_station = "Uptown"
+        else:
+            self.current_station = "Uptown"
+            self.next_station = "End of Line"
+
+    def calculate_eta(self):
+        next_pos = self.station_positions.get(self.next_station, None)
+        if next_pos is None or self.velocity <= 0:
+            return None
+        distance = max(next_pos - self.position, 0)
+        return distance / max(self.velocity, 0.1)
+
+
+# === TRAIN MODEL MAIN UI ===
 class TrainModelUI(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.title("Train Model UI - Real-Time Simulation")
+        self.geometry("1400x850")
 
-        # === Window setup ===
-        self.title("Train Model - UI")
-        self.geometry("1200x950")
-        os.chdir(os.path.dirname(os.path.abspath(__file__)))  
+        self.json_path = JSON_FILE
+        self.data = self.load_or_create_json()
+        self.model = TrainModel(self.data["specs"])
 
-        # === Load JSON data (shared data file) ===
-        self.data = self.load_json()
-        self.status = self.data.get("train_status", {})
-        self.specs = self.data.get("train_specs", {})
-        self.failures = self.data.get("failures", {})
-
-        # === Layout configuration (2-column grid) ===
+        # Layout: left (info & controls), right (map)
         self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=1)
+        self.columnconfigure(1, weight=2)
         self.rowconfigure(0, weight=1)
-        self.rowconfigure(1, weight=0)
 
-        # === LEFT SIDE: Info panels ===
-        left_frame = ttk.Frame(self)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        self.populate_left(left_frame)
+        self.left_frame = ttk.Frame(self)
+        self.left_frame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
 
-        # === RIGHT SIDE: Map, Failures, and Controls ===
-        right_frame = ttk.LabelFrame(self, text="Map, Failures & Control")
-        right_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-        self.populate_right(right_frame)
+        self.right_frame = ttk.Frame(self)
+        self.right_frame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
 
-        # === BOTTOM: Announcements ===
-        announce_frame = ttk.LabelFrame(self, text="Announcements")
-        announce_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
-        self.populate_announcement(announce_frame)
+        # Left-side panels
+        self.create_info_panel(self.left_frame)
+        self.create_specs_panel(self.left_frame)
+        self.create_failure_panel(self.left_frame)
+        self.create_control_panel(self.left_frame)
+        self.create_announcements_panel(self.left_frame)
 
-        # === Auto refresh ===
-        self.after(2000, self.refresh_data)
+        # Right-side map
+        self.create_map_panel(self.right_frame)
 
-    # ----------------------------------------------------------------------
-    def load_json(self):
-        """Load train data from the shared JSON file."""
-        try:
-            with open("train_data.json", "r") as f:
-                return json.load(f)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load train_data.json\n{e}")
-            return {}
+        self.update_loop()
 
-    # ----------------------------------------------------------------------
-    def populate_left(self, frame):
-        """Left section divided into station, movement, passengers, and specs."""
-        self.labels = {}
+    # ==== JSON LOADERS ====
+    def load_or_create_json(self):
+        if not os.path.exists(self.json_path):
+            default_data = {
+                "specs": {
+                    "length_ft": 66.0,
+                    "width_ft": 10.0,
+                    "height_ft": 11.5,
+                    "mass_kg": 40900,
+                    "max_power_w": 120000,
+                    "max_accel_mps2": 0.5,
+                    "service_brake_mps2": -1.2,
+                    "emergency_brake_mps2": -2.7,
+                    "capacity": 222,
+                    "crew_count": 2
+                },
+                "inputs": {
+                    "commanded_power": 60000,
+                    "authority": 300,
+                    "emergency_brake": False,
+                    "beacon_data": "128B",
+                    "commanded_speed": 25,
+                    "speed_limit": 30,
+                    "crew_count": 2,
+                    "passengers_boarding": 80
+                },
+                "outputs": {}
+            }
+            with open(self.json_path, "w") as f:
+                json.dump(default_data, f, indent=4)
+            return default_data
+        with open(self.json_path, "r") as f:
+            return json.load(f)
 
-        # ===== Station & Schedule  =====
-        station_frame = ttk.LabelFrame(frame, text="Station & Schedule")
-        station_frame.pack(fill="x", padx=5, pady=5)
+    def write_json(self, outputs):
+        self.data["outputs"] = outputs
+        with open(self.json_path, "w") as f:
+            json.dump(self.data, f, indent=4)
 
-        station_info = [
-            ("Current Station", self.status.get("current_station", "N/A")),
-            ("Next Station", self.status.get("next_station", "N/A")),
-            ("ETA (min)", self.status.get("eta_min", "N/A")),
-        ]
-        for i, (label, value) in enumerate(station_info):
-            lbl = ttk.Label(station_frame, text=f"{label}: {value}")
-            lbl.grid(row=i, column=0, sticky="w", padx=10, pady=3)
-            self.labels[label] = lbl
+    # ==== PANELS ====
+    def create_info_panel(self, parent):
+        info = ttk.LabelFrame(parent, text="Train Information & Dynamics")
+        info.pack(fill="x", pady=5)
+        self.info_labels = {}
+        for key in [
+            "Velocity", "Acceleration", "Position",
+            "Authority Remaining", "Current Station", "ETA to Next Station"
+        ]:
+            label = ttk.Label(info, text=f"{key}: --")
+            label.pack(anchor="w", padx=10, pady=2)
+            self.info_labels[key] = label
 
-        # =====  Train Movement Info =====
-        movement_frame = ttk.LabelFrame(frame, text="Train Movement Information")
-        movement_frame.pack(fill="x", padx=5, pady=5)
+    def create_specs_panel(self, parent):
+        specs = ttk.LabelFrame(parent, text="Train Specifications")
+        specs.pack(fill="x", pady=5)
+        for k, v in self.data["specs"].items():
+            ttk.Label(specs, text=f"{k}: {v}").pack(anchor="w", padx=10, pady=1)
 
-        movement_info = [
-            ("Commanded Speed", self.status.get("commanded_speed", "N/A")),
-            ("Authority", self.status.get("authority", "N/A")),
-            ("Beacon", self.status.get("beacon", "N/A")),
-            ("Speed Limit", self.status.get("speed_limit", "N/A")),
-            ("Velocity", self.status.get("velocity", "N/A")),
-            ("Acceleration", self.status.get("acceleration", "N/A")),
-            ("Deceleration Limit", f"{self.specs.get('decel_limit_mphps', 'N/A')} mph/s"),
-        ]
-        for i, (label, value) in enumerate(movement_info):
-            lbl = ttk.Label(movement_frame, text=f"{label}: {value}")
-            lbl.grid(row=i, column=0, sticky="w", padx=10, pady=3)
-            self.labels[label] = lbl
+    def create_failure_panel(self, parent):
+        fail = ttk.LabelFrame(parent, text="Failure Status")
+        fail.pack(fill="x", pady=5)
+        self.engine_fail = tk.BooleanVar()
+        self.brake_fail = tk.BooleanVar()
+        self.signal_fail = tk.BooleanVar()
+        ttk.Checkbutton(fail, text="Engine Failure", variable=self.engine_fail).pack(anchor="w", padx=15, pady=2)
+        ttk.Checkbutton(fail, text="Brake Failure", variable=self.brake_fail).pack(anchor="w", padx=15, pady=2)
+        ttk.Checkbutton(fail, text="Signal Pickup Failure", variable=self.signal_fail).pack(anchor="w", padx=15, pady=2)
 
-        # =====  Passenger Info =====
-        passenger_frame = ttk.LabelFrame(frame, text="Passenger Information")
-        passenger_frame.pack(fill="x", padx=5, pady=5)
+    def create_control_panel(self, parent):
+        ctrl = ttk.LabelFrame(parent, text="Controls")
+        ctrl.pack(fill="x", pady=10)
+        self.emergency_button = ttk.Button(ctrl, text="EMERGENCY BRAKE", command=self.toggle_emergency)
+        self.emergency_button.pack(fill="x", padx=20, pady=10)
 
-        boarding = self.status.get("passengers_boarding", 0)
-        disembarking = self.status.get("passengers_disembarking", 0)
-        onboard = boarding - disembarking
-        crew = self.status.get("crew_count", 2)
-
-        passenger_info = [
-            ("Passengers Boarding", boarding),
-            ("Passengers Disembarking", disembarking),
-            ("Passengers Onboard", onboard),
-            ("Crew Count", crew)
-        ]
-        for i, (label, value) in enumerate(passenger_info):
-            lbl = ttk.Label(passenger_frame, text=f"{label}: {value}")
-            lbl.grid(row=i, column=0, sticky="w", padx=10, pady=3)
-            self.labels[label] = lbl
-
-        # =====  Train Specs =====
-        specs_frame = ttk.LabelFrame(frame, text="Train Specifications")
-        specs_frame.pack(fill="x", padx=5, pady=5)
-
-        specs_info = [
-            ("Inside Temperature", f"{self.status.get('temperature_inside', 'N/A')} °C"),
-            ("Lights", "ON" if self.status.get("lights_on") else "OFF"),
-            ("Doors", "Closed" if self.status.get("doors_closed") else "Open"),
-            ("Length", f"{self.specs.get('length_ft', 'N/A')} ft"),
-            ("Width", f"{self.specs.get('width_ft', 'N/A')} ft"),
-            ("Height", f"{self.specs.get('height_ft', 'N/A')} ft"),
-            ("Mass", f"{self.specs.get('mass_lb', 'N/A')} lb")
-        ]
-        for i, (label, value) in enumerate(specs_info):
-            lbl = ttk.Label(specs_frame, text=f"{label}: {value}")
-            lbl.grid(row=i, column=0, sticky="w", padx=10, pady=3)
-            self.labels[label] = lbl
-
-    # ----------------------------------------------------------------------
-    def populate_right(self, frame):
-        """Right section: map, failures, and emergency brake."""
-        map_frame = ttk.LabelFrame(frame, text="Track Map")
-        map_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        map_path = "map.png"
-        if os.path.exists(map_path):
-            img = Image.open(map_path)
-            orig_w, orig_h = img.size
-            max_w, max_h = 550, 400
-            ratio = min(max_w / orig_w, max_h / orig_h)
-            new_size = (int(orig_w * ratio), int(orig_h * ratio))
-            img = img.resize(new_size, Image.LANCZOS)
-            self.map_img = ImageTk.PhotoImage(img)
-            ttk.Label(map_frame, image=self.map_img).pack(pady=5)
+    def toggle_emergency(self):
+        """Activate or deactivate emergency brake."""
+        self.model.emergency_brake = not self.model.emergency_brake
+        if self.model.emergency_brake:
+            self.emergency_button.config(text="EMERGENCY BRAKE ACTIVE", style="Danger.TButton")
         else:
-            ttk.Label(map_frame, text="Map image not found.").pack(pady=20)
+            self.emergency_button.config(text="EMERGENCY BRAKE", style="TButton")
 
-        # === Failures ===
-        fail_frame = ttk.LabelFrame(frame, text="Failure Status")
-        fail_frame.pack(fill="x", padx=10, pady=10)
-        self.failure_vars = {}
+    def create_announcements_panel(self, parent):
+        ann = ttk.LabelFrame(parent, text="Announcements / Advertisements")
+        ann.pack(fill="both", expand=True, pady=5)
+        self.announcement_box = tk.Text(ann, height=6, wrap="word")
+        self.announcement_box.insert("end", "Train Model Running...\n")
+        self.announcement_box.pack(fill="both", expand=True, padx=5, pady=5)
 
-        for key, val in self.failures.items():
-            label = key.replace("_", " ").title()
-            var = tk.BooleanVar(value=val)
-            self.failure_vars[key] = var
-            chk = ttk.Checkbutton(
-                fail_frame,
-                text=label,
-                variable=var,
-                command=lambda k=key, v=var: self.toggle_failure(k, v)
-            )
-            chk.pack(anchor="w")
+    def create_map_panel(self, parent):
+        map_frame = ttk.LabelFrame(parent, text="Train Position Map")
+        map_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        map_path = os.path.join(os.path.dirname(__file__), "map.png")
+        img = Image.open(map_path).resize((850, 650))
+        self.map_img = ImageTk.PhotoImage(img)
+        self.map_canvas = tk.Canvas(map_frame, width=850, height=650)
+        self.map_canvas.pack(fill="both", expand=True)
+        self.map_canvas.create_image(0, 0, anchor="nw", image=self.map_img)
+        self.map_canvas.create_text(80, 620, text="Downtown", fill="black", font=("Arial", 10, "bold"))
+        self.map_canvas.create_text(420, 620, text="Midtown", fill="black", font=("Arial", 10, "bold"))
+        self.map_canvas.create_text(760, 620, text="Uptown", fill="black", font=("Arial", 10, "bold"))
+        self.train_dot = self.map_canvas.create_oval(10, 300, 30, 320, fill="red")
 
-        # === Emergency Brake ===
-        eb_frame = ttk.LabelFrame(frame, text="Emergency Brake")
-        eb_frame.pack(fill="x", padx=10, pady=10)
-        self.eb_button = ttk.Button(eb_frame, text="ACTIVATE", command=self.activate_emergency)
-        self.eb_button.pack(pady=10, ipadx=20, ipady=5)
+    # ==== UPDATE LOOP ====
+    def update_loop(self):
+        inputs = self.data["inputs"]
+        self.model.engine_failure = self.engine_fail.get()
+        self.model.brake_failure = self.brake_fail.get()
+        self.model.signal_failure = self.signal_fail.get()
+        self.model.emergency_brake = self.model.emergency_brake  # stays persistent
 
-    # ----------------------------------------------------------------------
-    def populate_announcement(self, frame):
-        """Bottom section for announcements."""
-        self.announcement_box = tk.Text(frame, height=4, width=100)
-        self.announcement_box.insert("end", self.status.get("announcement", "No announcements available."))
-        self.announcement_box.pack(fill="both", expand=True, padx=10, pady=5)
+        outputs = self.model.update(
+            inputs["commanded_power"],
+            inputs["authority"]
+        )
+        self.write_json(outputs)
 
-    # ----------------------------------------------------------------------
-    def toggle_failure(self, key, var):
-        """Triggered when user toggles a failure checkbox."""
-        self.failures[key] = var.get()
-        self.save_json()
-        print(f"[Updated] {key} -> {self.failures[key]}")
+        self.info_labels["Velocity"].config(text=f"Velocity: {outputs['velocity_mps']:.2f} m/s")
+        self.info_labels["Acceleration"].config(text=f"Acceleration: {outputs['acceleration_mps2']:.2f} m/s²")
+        self.info_labels["Position"].config(text=f"Position: {outputs['position_m']:.1f} m")
+        self.info_labels["Authority Remaining"].config(text=f"Authority Remaining: {outputs['authority_m']:.1f} m")
+        self.info_labels["Current Station"].config(
+            text=f"Current Station: {outputs['current_station']} | Next: {outputs['next_station']}"
+        )
+        if outputs["eta_s"]:
+            self.info_labels["ETA to Next Station"].config(text=f"ETA to Next Station: {outputs['eta_s']:.1f} s")
+        else:
+            self.info_labels["ETA to Next Station"].config(text="ETA to Next Station: --")
 
-    # ----------------------------------------------------------------------
-    def activate_emergency(self):
-        """Activate emergency brake and save state."""
-        messagebox.showwarning("Emergency Brake", "Emergency Brake Activated!")
-        self.status["emergency_brake"] = True
-        self.save_json()
+        # Move train on map
+        canvas_width = 850
+        track_length = 1000
+        x_pos = min(max((outputs["position_m"] / track_length) * canvas_width, 10), 830)
+        self.map_canvas.coords(self.train_dot, x_pos - 10, 300, x_pos + 10, 320)
 
-    # ----------------------------------------------------------------------
-    def refresh_data(self):
-        """Reload JSON and update the displayed train information periodically."""
-        new_data = self.load_json()
-        new_status = new_data.get("train_status", {})
-        new_failures = new_data.get("failures", {})
+        self.after(int(self.model.dt * 1000), self.update_loop)
 
-        # Special key mapping for labels that don't convert 1:1 to json keys
-        label_key_map = {
-            "ETA (min)": "eta_min"
-        }
 
-        # Update all dynamic labels
-        for label, widget in self.labels.items():
-            if label == "Passengers Onboard":
-                boarding = new_status.get("passengers_boarding", 0)
-                disembarking = new_status.get("passengers_disembarking", 0)
-                val = boarding - disembarking
-            elif label == "Inside Temperature":
-                val = f"{new_status.get('temperature_inside', 'N/A')} °C"
-            elif label == "Lights":
-                val = "ON" if new_status.get("lights_on") else "OFF"
-            elif label == "Doors":
-                val = "Closed" if new_status.get("doors_closed") else "Open"
-            else:
-                # map label -> json key (handles spaces and the ETA special case)
-                key = label_key_map.get(label, label.lower().replace(" ", "_"))
-                val = new_status.get(key, self.specs.get(key, "N/A"))
-            widget.config(text=f"{label}: {val}")
-
-        # Update Failures checkboxes
-        for k, v in new_failures.items():
-            if k in self.failure_vars:
-                self.failure_vars[k].set(v)
-
-        self.after(2000, self.refresh_data)
-
-    # ----------------------------------------------------------------------
-    def save_json(self):
-        """Save modified data to JSON."""
-        try:
-            self.data["train_status"] = self.status
-            self.data["failures"] = self.failures
-            with open("train_data.json", "w") as f:
-                json.dump(self.data, f, indent=2)
-        except Exception as e:
-            print("Error saving JSON:", e)
-
-# ----------------------------------------------------------------------
 if __name__ == "__main__":
     app = TrainModelUI()
     app.mainloop()
