@@ -1,0 +1,28 @@
+
+{
+    "A":{
+        "block":{
+            "1":{
+                "railway_crossing":{},
+                "switch":{},
+                "light":{},
+                "station":{},
+                "speed_limit":45
+            },
+            "2":{
+                "railway_crossing":{},
+                "switch":{},
+                "light":{},
+                "station":{},
+                "speed_limit":45
+            },
+            "3":{
+                "railway_crossing":{},
+                "switch":{},
+                "light":{},
+                "station":{},
+                "speed_limit":45
+            }
+        }
+    }
+}
