@@ -11,7 +11,7 @@ class TrackModelUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Track Model Software Module")
-        self.geometry("1240x820")
+        self.geometry("1240x750")
         self.configure(bg="white")
 
         # === LEFT PANEL === #
@@ -25,9 +25,8 @@ class TrackModelUI(tk.Tk):
                   font=("Segoe UI", 9, "italic")).pack(pady=(0, 5))
         legend_frame = ttk.Frame(self.left_frame)
         legend_frame.pack(pady=5)
-        ttk.Label(legend_frame, text="Train Live Position:").pack(side=tk.LEFT, padx=5)
-        ttk.Label(legend_frame, text="Green Line", foreground="green").pack(side=tk.LEFT, padx=5)
-        ttk.Label(legend_frame, text="Red Line", foreground="red").pack(side=tk.LEFT, padx=5)
+        ttk.Label(legend_frame, text="Train Live Position:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Label(legend_frame, text="★", foreground="gold", font=("Segoe UI", 12)).pack(side=tk.LEFT, padx=3)
 
         # === RIGHT PANEL === #
         right_frame = ttk.Frame(self)
@@ -40,16 +39,18 @@ class TrackModelUI(tk.Tk):
         ttk.Button(control_frame, text="Upload Track Layout File", width=25,
                    command=self.upload_track_file).pack(side=tk.LEFT, padx=10, pady=5)
         ttk.Label(control_frame, text="Select Line:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=5)
-        self.line_selector = ttk.Combobox(control_frame, state="readonly", width=10,
-                                          values=["Red", "Green", "Blue"])
+
+        # Initialize line selector empty; populate dynamically after upload
+        self.line_selector = ttk.Combobox(control_frame, state="readonly", width=10, values=[])
         self.line_selector.pack(side=tk.LEFT, padx=5)
         self.line_selector.bind("<<ComboboxSelected>>", self.on_line_selected)
+
         ttk.Label(control_frame, text="Select Block:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=5)
         self.block_selector = ttk.Combobox(control_frame, state="readonly", width=10)
         self.block_selector.pack(side=tk.LEFT, padx=5)
         self.block_selector.bind("<<ComboboxSelected>>", self.on_block_selected)
 
-        # --- Currently Selected Block (2-column layout) --- #
+        # --- Currently Selected Block --- #
         block_frame = ttk.LabelFrame(right_frame, text="Currently Selected Block")
         block_frame.grid(row=1, column=0, sticky="EW", padx=5, pady=5)
         block_frame.grid_columnconfigure(0, weight=1)
@@ -60,7 +61,7 @@ class TrackModelUI(tk.Tk):
             "Speed Limit (mph):", "Grade (%):"
         ]
         right_fields = [
-            "Elevation (M):", "Block Length (ft):", "Station:", "Switch:", "Crossing:", "Branching:"
+            "Elevation (M):", "Block Length (ft):", "Station:", "Switch Position:", "Crossing:", "Branching:"
         ]
 
         self.block_labels = {f: tk.StringVar(value="N/A") for f in (left_fields + right_fields)}
@@ -87,7 +88,6 @@ class TrackModelUI(tk.Tk):
         dynamic_frame = ttk.LabelFrame(right_frame, text="Block Information")
         dynamic_frame.grid(row=2, column=0, sticky="EW", padx=5, pady=5)
         dyn_fields = ["Commanded Speed (mph):", "Commanded Authority (yards):", "Occupancy:"]
-
         self.dynamic_labels = {f: tk.StringVar(value="N/A") for f in dyn_fields}
         for field in dyn_fields:
             frame = ttk.Frame(dynamic_frame)
@@ -95,16 +95,14 @@ class TrackModelUI(tk.Tk):
             ttk.Label(frame, text=field, font=("Segoe UI", 10, "bold"), width=28).pack(side=tk.LEFT)
             ttk.Label(frame, textvariable=self.dynamic_labels[field], font=("Segoe UI", 10)).pack(side=tk.LEFT)
 
-        # --- Environment Line (aligned properly, extra spacing) --- #
+        # --- Environment Line --- #
         env_line = ttk.Frame(right_frame)
         env_line.grid(row=3, column=0, sticky="EW", padx=5, pady=(0, 5))
-
         ttk.Label(env_line, text="Track Heating:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=(10, 2))
         self.heating_status = ttk.Label(env_line, text="OFF", foreground="red")
-        self.heating_status.pack(side=tk.LEFT, padx=(0, 40))  # increased spacing here
-
+        self.heating_status.pack(side=tk.LEFT, padx=(0, 40))
         ttk.Label(env_line, text="Environment Temperature (°F):", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT)
-        self.temperature = tk.IntVar(value=18)
+        self.temperature = tk.StringVar(value="N/A")
         ttk.Button(env_line, text="-", width=3, command=self.decrease_temp_immediate).pack(side=tk.LEFT, padx=2)
         ttk.Label(env_line, textvariable=self.temperature, font=("Segoe UI", 10), width=5, anchor="center").pack(side=tk.LEFT)
         ttk.Button(env_line, text="+", width=3, command=self.increase_temp_immediate).pack(side=tk.LEFT, padx=2)
@@ -140,7 +138,6 @@ class TrackModelUI(tk.Tk):
         # Internal Data
         self.static_data = {}
         self.block_selected = False
-
         self.load_json_data()
 
     # === Upload Excel File === #
@@ -149,49 +146,29 @@ class TrackModelUI(tk.Tk):
             title="Select Track Layout File",
             filetypes=[("Excel Files", "*.xlsx *.xls")]
         )
-
         if not file_path:
             messagebox.showerror("No File Selected", "Please select a valid track layout file before continuing.")
             return
 
-        selected_line = self.line_selector.get()
-        if not selected_line:
-            messagebox.showerror("No Line Selected", "Please select a line (Red, Green, or Blue) before loading.")
-            return
-
         try:
-            df = pd.read_excel(file_path, sheet_name=f"{selected_line} Line")
-            required_cols = [
-                "Line", "Section", "Block Number", "Block Length (m)",
-                "Block Grade (%)", "Speed Limit (Km/Hr)", "Infrastructure",
-                "ELEVATION (M)"
-            ]
-            for col in required_cols:
-                if col not in df.columns:
-                    messagebox.showerror("Invalid File", f"Missing required column: {col}")
-                    return
+            xl = pd.ExcelFile(file_path)
+            sheet_names = xl.sheet_names
+            available_lines = [name.replace(" Line", "").strip() for name in sheet_names if name.endswith(" Line")]
 
-            df = df.fillna("N/A")
-            df["Station"] = df["Infrastructure"].apply(self.extract_station)
-            df["Switch"] = df["Infrastructure"].apply(self.extract_switch)
-            df["Crossing"] = df["Infrastructure"].apply(lambda x: "Yes" if "CROSSING" in str(x).upper() else "No")
-            df["Branching"] = df["Infrastructure"].apply(self.extract_branching)
-            static_data = df.to_dict(orient="records")
+            self.line_selector["values"] = available_lines
+            if available_lines:
+                self.line_selector.current(0)
+            else:
+                self.line_selector.set("")
 
-            all_lines_data = {selected_line: static_data}
-            for line in ["Red", "Green", "Blue"]:
-                if line == selected_line:
-                    continue
-                try:
-                    alt_df = pd.read_excel(file_path, sheet_name=f"{line} Line")
-                    alt_df = alt_df.fillna("N/A")
-                    alt_df["Station"] = alt_df["Infrastructure"].apply(self.extract_station)
-                    alt_df["Switch"] = alt_df["Infrastructure"].apply(self.extract_switch)
-                    alt_df["Crossing"] = alt_df["Infrastructure"].apply(lambda x: "Yes" if "CROSSING" in str(x).upper() else "No")
-                    alt_df["Branching"] = alt_df["Infrastructure"].apply(self.extract_branching)
-                    all_lines_data[line] = alt_df.to_dict(orient="records")
-                except Exception:
-                    continue
+            all_lines_data = {}
+            for line in available_lines:
+                df = pd.read_excel(file_path, sheet_name=f"{line} Line")
+                df = df.fillna("N/A")
+                df["Station"] = df["Infrastructure"].apply(self.extract_station)
+                df["Crossing"] = df["Infrastructure"].apply(lambda x: "Yes" if "CROSSING" in str(x).upper() else "No")
+                df["Branching"] = df["Infrastructure"].apply(self.extract_branching)
+                all_lines_data[line] = df.to_dict(orient="records")
 
             data = {
                 "static_data": all_lines_data,
@@ -205,11 +182,8 @@ class TrackModelUI(tk.Tk):
             with open("track_model_static.json", "w") as f:
                 json.dump(data, f, indent=4)
 
-            messagebox.showinfo("Success", f"Track layout for all lines loaded. Displaying {selected_line} line.")
-            self.load_static_after_upload(selected_line)
+            messagebox.showinfo("Success", "Track layout successfully loaded. Please select a line to display.")
 
-        except ValueError:
-            messagebox.showerror("Invalid Sheet", f"The Excel file does not contain a sheet named '{selected_line} Line'.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process Excel file:\n{e}")
 
@@ -218,11 +192,6 @@ class TrackModelUI(tk.Tk):
         text = str(value).upper()
         match = re.search(r"STATION[:;]?\s*([A-Z\s]+)", text)
         return match.group(1).strip().title() if match else "N/A"
-
-    def extract_switch(self, value):
-        text = str(value).upper()
-        match = re.search(r"SWITCH\s*\(([^)]+)\)", text)
-        return match.group(1).strip() if match else ("Yard" if "YARD" in text else "N/A")
 
     def extract_branching(self, value):
         text = str(value).upper()
@@ -235,8 +204,10 @@ class TrackModelUI(tk.Tk):
     # === Reload on Line Change === #
     def on_line_selected(self, event=None):
         selected_line = self.line_selector.get()
-        if os.path.exists("track_model_static.json"):
-            self.load_static_after_upload(selected_line)
+        if not os.path.exists("track_model_static.json"):
+            self.block_selector["values"] = []
+            return
+        self.load_static_after_upload(selected_line)
         self.update_track_image()
 
     # === Load Static Data After Upload === #
@@ -284,7 +255,7 @@ class TrackModelUI(tk.Tk):
                 self.block_labels["Elevation (M):"].set(b.get("ELEVATION (M)", "N/A"))
                 self.block_labels["Block Length (ft):"].set(feet)
                 self.block_labels["Station:"].set(b.get("Station", "N/A"))
-                self.block_labels["Switch:"].set(b.get("Switch", "N/A"))
+                self.block_labels["Switch Position:"].set("N/A")
                 self.block_labels["Crossing:"].set(b.get("Crossing", "N/A"))
                 self.block_labels["Branching:"].set(b.get("Branching", "N/A"))
                 break
@@ -315,17 +286,62 @@ class TrackModelUI(tk.Tk):
             station = block_data.get("station", {})
             commanded = block_data.get("commanded", {})
 
-            direction = block.get("direction", "Forward")
             temp = env.get("temperature", 0)
             occupancy = block.get("occupancy", 0)
             authority = commanded.get("authority", 0)
             speed = commanded.get("speed", 0)
-            any_failure = any(failures.values())
 
+            # --- Dynamic Switch Position Logic --- #
+            switch_position = block_data.get("switch_position", "N/A")
+            branching_value = next(
+                (b["Branching"] for b in self.static_data if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
+                "No"
+            )
+            if branching_value in ["No", "N/A", "To/From Yard"]:
+                switch_position = "N/A"
+            self.block_labels["Switch Position:"].set(switch_position)
+
+            failures_active = any(failures.values())
             heating_on = temp < 32
-            if any_failure:
+
+            # --- Power Failure Logic --- #
+            if failures.get("power"):
+                traffic_light = "OFF"
+                crossing_value = next(
+                    (b["Crossing"] for b in self.static_data
+                    if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
+                    "No"
+                )
+                gate_status = "Closed" if crossing_value == "Yes" else "N/A"
+
+            # --- Circuit Failure Logic --- #
+            elif failures.get("circuit"):
+                occupancy = 0
+                displayed_occupancy = "--"
+                # Beacons disabled (placeholder)
+                if authority > 0:
+                    traffic_light = "Green"
+                    gate_status = "Open"
+                else:
+                    traffic_light = "Red"
+                    gate_status = "Open"
+
+            # --- Broken Track Logic --- #
+            elif failures.get("broken_track"):
+                # Prevent train movement
+                authority = 0
+                speed = 0
                 traffic_light = "Red"
-                gate_status = "Closed"
+
+                # Close gate if a crossing exists
+                crossing_value = next(
+                    (b["Crossing"] for b in self.static_data
+                    if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
+                    "No"
+                )
+                gate_status = "Closed" if crossing_value == "Yes" else "N/A"
+
+            # --- Normal Operating Logic --- #
             elif occupancy:
                 traffic_light = "Yellow"
                 gate_status = "Closed"
@@ -336,15 +352,15 @@ class TrackModelUI(tk.Tk):
                 traffic_light = "Red"
                 gate_status = "Open"
 
-            self.block_labels["Direction of Travel:"].set(direction)
+
+            self.block_labels["Direction of Travel:"].set("--")
             self.block_labels["Traffic Light:"].set(traffic_light)
             self.block_labels["Gate:"].set(gate_status)
             self.dynamic_labels["Commanded Speed (mph):"].set(speed)
             self.dynamic_labels["Commanded Authority (yards):"].set(authority)
             self.dynamic_labels["Occupancy:"].set("OCCUPIED" if occupancy else "CLEAR")
 
-            # Correctly reflect environment temperature
-            self.temperature.set(temp)
+            self.temperature.set(str(temp))
             self.heating_status.config(
                 text="ON" if heating_on else "OFF",
                 foreground="green" if heating_on else "red"
@@ -357,7 +373,7 @@ class TrackModelUI(tk.Tk):
                 state_key = key.split()[0].lower()
                 self.failure_vars[key].set(failures.get(state_key, False))
 
-            if any_failure:
+            if failures_active:
                 active = []
                 if failures.get("power"):
                     active.append("Power Failure")
@@ -397,7 +413,6 @@ class TrackModelUI(tk.Tk):
             selected_block = self.block_selector.get()
             temp = self.temperature.get()
 
-            # Write to nested JSON
             if selected_line in data and selected_block in data[selected_line]:
                 data[selected_line][selected_block]["environment"]["temperature"] = temp
 
@@ -413,22 +428,25 @@ class TrackModelUI(tk.Tk):
         try:
             with open("track_model_state.json", "r") as f:
                 data = json.load(f)
-            data.setdefault("failures", {})
-            data["failures"]["power"] = self.failure_vars["Power Failure"].get()
-            data["failures"]["circuit"] = self.failure_vars["Circuit Failure"].get()
-            data["failures"]["broken_track"] = self.failure_vars["Broken Track"].get()
-            with open("track_model_state.json", "w") as f:
-                json.dump(data, f, indent=4)
+            selected_line = self.line_selector.get()
+            selected_block = self.block_selector.get()
+            if selected_line and selected_block:
+                data.setdefault(selected_line, {})
+                data[selected_line].setdefault(selected_block, {})
+                data[selected_line][selected_block].setdefault("failures", {})
+                data[selected_line][selected_block]["failures"]["power"] = self.failure_vars["Power Failure"].get()
+                data[selected_line][selected_block]["failures"]["circuit"] = self.failure_vars["Circuit Failure"].get()
+                data[selected_line][selected_block]["failures"]["broken_track"] = self.failure_vars["Broken Track"].get()
+                with open("track_model_state.json", "w") as f:
+                    json.dump(data, f, indent=4)
         except Exception:
             pass
 
 
 if __name__ == "__main__":
-    try:
+    if not os.path.exists("track_model_static.json"):
         with open("track_model_static.json", "w") as f:
             json.dump({}, f, indent=4)
-    except Exception:
-        pass
 
     app = TrackModelUI()
     app.mainloop()

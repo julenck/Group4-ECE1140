@@ -4,12 +4,17 @@ import json
 import pandas as pd
 import os
 import re
+from track_model_UI import TrackModelUI
+import threading
+
+
 
 class TrackBuilder(tk.Tk):
     def __init__(self):
         super().__init__()
+        
         self.title("Track Model Test UI")
-        self.geometry("780x380")
+        self.geometry("780x360")
         self.resizable(False, False)
 
         # === LINE AND BLOCK SELECTION === #
@@ -17,9 +22,7 @@ class TrackBuilder(tk.Tk):
         selection_frame.pack(fill="x", padx=10, pady=(10, 2))
 
         ttk.Label(selection_frame, text="Line:").pack(side="left", padx=5, pady=5)
-        self.line_selection = ttk.Combobox(
-            selection_frame, values=["Red", "Green", "Blue"], state="readonly", width=15
-        )
+        self.line_selection = ttk.Combobox(selection_frame, state="readonly", width=15)
         self.line_selection.pack(side="left", padx=5, pady=5)
 
         ttk.Label(selection_frame, text="Block:").pack(side="left", padx=5, pady=5)
@@ -53,30 +56,10 @@ class TrackBuilder(tk.Tk):
             current_row += 1
             return entry
 
-        def make_dropdown(label, values):
-            nonlocal current_row
-            ttk.Label(input_frame, text=label).grid(
-                row=current_row // 2,
-                column=(current_row % 2) * 2,
-                sticky="w",
-                padx=5,
-                pady=5,
-            )
-            combo = ttk.Combobox(input_frame, values=values, state="readonly", width=18)
-            combo.grid(
-                row=current_row // 2,
-                column=(current_row % 2) * 2 + 1,
-                padx=5,
-                pady=5,
-            )
-            current_row += 1
-            return combo
-
         # === ENTRIES === #
         self.speed_entry = make_entry("Commanded Speed (mph)")
         self.authority_entry = make_entry("Commanded Authority (yards)")
         self.temp_entry = make_entry("Environmental Temperature (°F)")
-        self.direction_entry = make_dropdown("Direction of Travel", ["Forward", "Reverse"])
         self.passengers_disembark_entry = make_entry("Passengers Disembarking")
         self.passengers_board_entry = make_entry("Passengers Boarding")
 
@@ -108,17 +91,11 @@ class TrackBuilder(tk.Tk):
             button_frame, text="Update Inputs", command=self.simulate, width=20
         ).grid(row=0, column=1, padx=10)
 
-
     # === INFRASTRUCTURE HELPERS === #
     def extract_station(self, value):
         text = str(value).upper()
         match = re.search(r"STATION[:;]?\s*([A-Z\s]+)", text)
         return match.group(1).strip().title() if match else "N/A"
-
-    def extract_switch(self, value):
-        text = str(value).upper()
-        match = re.search(r"SWITCH\s*\(([^)]+)\)", text)
-        return match.group(1).strip() if match else ("Yard" if "YARD" in text else "N/A")
 
     def extract_branching(self, value):
         text = str(value).upper()
@@ -128,8 +105,19 @@ class TrackBuilder(tk.Tk):
             return "Yes"
         return "No"
 
-    # === UPLOAD (EXACTLY LIKE MAIN UI) === #
+    # === UPLOAD (DYNAMIC LINE DETECTION, NO OVERWRITE) === #
     def upload_schedule(self):
+        if os.path.exists("track_model_static.json"):
+            try:
+                with open("track_model_static.json", "r") as f:
+                    existing = json.load(f)
+                # Treat as "already loaded" only if file has real content
+                if existing.get("static_data"):
+                    messagebox.showinfo("Info", "Track layout already loaded for this session.")
+                    return
+            except Exception:
+                pass
+
         file_path = filedialog.askopenfilename(
             title="Select Track Layout File",
             filetypes=[("Excel Files", "*.xlsx *.xls")],
@@ -138,59 +126,38 @@ class TrackBuilder(tk.Tk):
             messagebox.showerror("No File Selected", "Please select a valid file.")
             return
 
-        selected_line = self.line_selection.get()
-        if not selected_line:
-            messagebox.showerror("No Line Selected", "Please select a line before loading.")
-            return
-
         try:
-            df = pd.read_excel(file_path, sheet_name=f"{selected_line} Line")
-            required_cols = [
-                "Line",
-                "Section",
-                "Block Number",
-                "Block Length (m)",
-                "Block Grade (%)",
-                "Speed Limit (Km/Hr)",
-                "Infrastructure",
-                "ELEVATION (M)",
+            xl = pd.ExcelFile(file_path)
+            sheet_names = xl.sheet_names
+            available_lines = [
+                name.replace(" Line", "").strip()
+                for name in sheet_names
+                if name.endswith(" Line")
             ]
-            for col in required_cols:
-                if col not in df.columns:
-                    messagebox.showerror("Invalid File", f"Missing required column: {col}")
-                    return
 
-            df = df.fillna("N/A")
-            df["Station"] = df["Infrastructure"].apply(self.extract_station)
-            df["Switch"] = df["Infrastructure"].apply(self.extract_switch)
-            df["Crossing"] = df["Infrastructure"].apply(
-                lambda x: "Yes" if "CROSSING" in str(x).upper() else "No"
-            )
-            df["Branching"] = df["Infrastructure"].apply(self.extract_branching)
-            static_data = df.to_dict(orient="records")
+            self.line_selection["values"] = available_lines
+            if available_lines:
+                self.line_selection.current(0)
+            else:
+                self.line_selection.set("")
 
-            all_lines_data = {selected_line: static_data}
-            for line in ["Red", "Green", "Blue"]:
-                if line == selected_line:
-                    continue
-                try:
-                    alt_df = pd.read_excel(file_path, sheet_name=f"{line} Line")
-                    alt_df = alt_df.fillna("N/A")
-                    alt_df["Station"] = alt_df["Infrastructure"].apply(self.extract_station)
-                    alt_df["Switch"] = alt_df["Infrastructure"].apply(self.extract_switch)
-                    alt_df["Crossing"] = alt_df["Infrastructure"].apply(
-                        lambda x: "Yes" if "CROSSING" in str(x).upper() else "No"
-                    )
-                    alt_df["Branching"] = alt_df["Infrastructure"].apply(self.extract_branching)
-                    all_lines_data[line] = alt_df.to_dict(orient="records")
-                except Exception:
-                    continue
+            all_lines_data = {}
+            for line in available_lines:
+                df = pd.read_excel(file_path, sheet_name=f"{line} Line")
+                df = df.fillna("N/A")
+                df["Station"] = df["Infrastructure"].apply(self.extract_station)
+                df["Crossing"] = df["Infrastructure"].apply(
+                    lambda x: "Yes" if "CROSSING" in str(x).upper() else "No"
+                )
+                df["Branching"] = df["Infrastructure"].apply(self.extract_branching)
+                all_lines_data[line] = df.to_dict(orient="records")
 
             data = {"static_data": all_lines_data}
 
             with open("track_model_static.json", "w") as f:
                 json.dump(data, f, indent=4)
 
+            selected_line = self.line_selection.get()
             self.static_data = all_lines_data.get(selected_line, [])
             blocks = [
                 f"{r['Section']}{int(float(r['Block Number']))}"
@@ -201,14 +168,12 @@ class TrackBuilder(tk.Tk):
             if blocks:
                 self.block_selection.current(0)
 
-            messagebox.showinfo(
-                "Success", f"Track layout for all lines loaded. Displaying {selected_line} line."
-            )
+            messagebox.showinfo("Success", "Track layout successfully loaded.")
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process Excel file:\n{e}")
 
-    # === VALIDATION (READS FROM STATIC FILE) === #
+    # === VALIDATION === #
     def validate_inputs(self):
         try:
             selected_line = self.line_selection.get()
@@ -259,7 +224,7 @@ class TrackBuilder(tk.Tk):
             messagebox.showerror("Missing File", "Please upload a track layout file first.")
             return False
 
-    # === SIMULATE (WRITES TO STATE.JSON) === #
+    # === SIMULATE (WRITE TO STATE FILE) === #
     def simulate(self):
         if not self.validate_inputs():
             return
@@ -282,14 +247,22 @@ class TrackBuilder(tk.Tk):
         disembarking = int(float(self.passengers_disembark_entry.get() or 0))
         temperature = int(float(self.temp_entry.get() or 0))
 
-        block = {"direction": self.direction_entry.get(), "occupancy": 0}
+        # === Failures === #
+        failures = {k: v.get() for k, v in self.failure_vars.items()}
+
+        # === Commanded Values === #
+        commanded_speed = int(float(self.speed_entry.get() or 0))
+        commanded_authority = int(float(self.authority_entry.get() or 0))
+
+        # === Apply Broken Track Rules === #
+        if failures.get("broken_track"):
+            commanded_speed = 0
+            commanded_authority = 0
+
+        block = {"occupancy": 0}
         environment = {"temperature": temperature}
         station = {"boarding": boarding, "disembarking": disembarking}
-        failures = {k: v.get() for k, v in self.failure_vars.items()}
-        commanded = {
-            "speed": int(float(self.speed_entry.get() or 0)),
-            "authority": int(float(self.authority_entry.get() or 0)),
-        }
+        commanded = {"speed": commanded_speed, "authority": commanded_authority}
 
         data[selected_line][selected_block] = {
             "block": block,
@@ -302,22 +275,18 @@ class TrackBuilder(tk.Tk):
         with open("track_model_state.json", "w") as f:
             json.dump(data, f, indent=4)
 
-        if not self.output_initialized:
-            self.initialize_output_fields()
-            self.output_initialized = True
+        # === Circuit Failure Placeholder (Suppress Beacons / Occupancy Updates) === #
+        # NOTE: When circuit failure = True, Track Model UI ignores occupancy updates and beacon outputs.
 
-    def load_json_inputs(self):
-        try:
-            with open("track_model_state.json", "r") as f:
-                data = json.load(f)
-            commanded = data.get("commanded", {})
-            env = data.get("environment", {})
-            self.speed_entry.insert(0, commanded.get("speed", ""))
-            self.authority_entry.insert(0, commanded.get("authority", ""))
-            self.temp_entry.insert(0, env.get("temperature", ""))
-        except Exception:
-            pass
+        messagebox.showinfo("Update Successful", f"Inputs updated for {selected_line} - {selected_block}.")
 
 
 if __name__ == "__main__":
-    TrackBuilder().mainloop()
+    app = TrackBuilder()
+    app.mainloop()
+
+    # === Dump empty static file after exit (for next session) === #
+    if not os.path.exists("track_model_static.json"):
+        with open("track_model_static.json", "w") as f:
+            json.dump({}, f, indent=4)
+
