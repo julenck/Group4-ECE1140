@@ -18,9 +18,9 @@
         "lights_on": true,
         "temperature_F": 68,
         "emergency_brake": false,
-        "speed_limit": "",
-        "commanded_speed": "",
-        "passengers_boarding": "",
+        "speed_limit": 10.0,
+        "commanded_speed": 10.0,
+        "passengers_boarding": 40.0,
         "crew_count": 2.0,
         "beacon_data": ""
     },
@@ -29,9 +29,11 @@
         "acceleration_mps2": 0.5,
         "position_m": 4.3,
         "authority_m": 295.7,
-        "temperature_F": 68.0,
         "eta_s": 345.3,
         "current_station": "Downtown",
-        "next_station": "Midtown"
+        "next_station": "Midtown",
+        "passengers_boarding": 40.0,
+        "passengers_disembarking": 0,
+        "passengers_onboard": 40.0
     }
 }
