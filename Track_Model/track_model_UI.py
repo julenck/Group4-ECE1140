@@ -109,7 +109,6 @@ class TrackModelUI(tk.Tk):
 
         # --- Station Information --- #
         self.station_vars = {
-            "Boarding:": tk.StringVar(value="N/A"),
             "Disembarking:": tk.StringVar(value="N/A")
         }
         station_frame = ttk.LabelFrame(right_frame, text="Station Information")
@@ -140,7 +139,30 @@ class TrackModelUI(tk.Tk):
         self.block_selected = False
         self.load_json_data()
 
-    # === Upload Excel File === #
+        # === Added check for pre-existing static.json === #
+        self.check_existing_static_data()
+
+    def check_existing_static_data(self):
+        """Check if static JSON file already contains data and load it."""
+        if not os.path.exists("track_model_static.json"):
+            self.after(500, self.check_existing_static_data)
+            return
+        try:
+            with open("track_model_static.json", "r") as f:
+                data = json.load(f)
+            static_data = data.get("static_data", {})
+            if static_data:
+                available_lines = list(static_data.keys())
+                self.line_selector["values"] = available_lines
+                if available_lines:
+                    self.line_selector.current(0)
+                    self.on_line_selected()
+                    messagebox.showinfo("Success", "Track layout successfully loaded.")
+            else:
+                self.after(500, self.check_existing_static_data)
+        except Exception:
+            self.after(500, self.check_existing_static_data)
+
     def upload_track_file(self):
         file_path = filedialog.askopenfilename(
             title="Select Track Layout File",
@@ -166,7 +188,7 @@ class TrackModelUI(tk.Tk):
                 df = pd.read_excel(file_path, sheet_name=f"{line} Line")
                 df = df.fillna("N/A")
                 df["Station"] = df["Infrastructure"].apply(self.extract_station)
-                df["Crossing"] = df["Infrastructure"].apply(lambda x: "Yes" if "CROSSING" in str(x).upper() else "No")
+                df["Crossing"] = df["Infrastructure"].apply(self.extract_crossing)
                 df["Branching"] = df["Infrastructure"].apply(self.extract_branching)
                 all_lines_data[line] = df.to_dict(orient="records")
 
@@ -182,26 +204,35 @@ class TrackModelUI(tk.Tk):
             with open("track_model_static.json", "w") as f:
                 json.dump(data, f, indent=4)
 
-            messagebox.showinfo("Success", "Track layout successfully loaded. Please select a line to display.")
-
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process Excel file:\n{e}")
 
-    # === Infrastructure Parsing === #
+    def extract_crossing(self, value):
+        text = str(value).upper()
+        if "RAILWAY CROSSING" in text:
+            return "Yes"
+        return "No"
+
     def extract_station(self, value):
         text = str(value).upper()
         match = re.search(r"STATION[:;]?\s*([A-Z\s]+)", text)
         return match.group(1).strip().title() if match else "N/A"
 
     def extract_branching(self, value):
-        text = str(value).upper()
-        if "YARD" in text:
-            return "To/From Yard"
-        elif "SWITCH" in text:
-            return "Yes"
-        return "No"
+        text = str(value).upper().strip()
+        if "SWITCH TO YARD" in text or "SWITCH FROM YARD" in text:
+            return "N/A"
+        if "SWITCH" not in text:
+            return "N/A"
+        match = re.search(r"\(([^)]+)\)", text)
+        if not match:
+            return "N/A"
+        contents = match.group(1)
+        connected = [c.strip() for c in re.split(r"[;,]", contents) if c.strip()]
+        if not connected:
+            return "N/A"
+        return ", ".join(connected)
 
-    # === Reload on Line Change === #
     def on_line_selected(self, event=None):
         selected_line = self.line_selector.get()
         if not os.path.exists("track_model_static.json"):
@@ -210,7 +241,6 @@ class TrackModelUI(tk.Tk):
         self.load_static_after_upload(selected_line)
         self.update_track_image()
 
-    # === Load Static Data After Upload === #
     def load_static_after_upload(self, selected_line):
         if not os.path.exists("track_model_static.json"):
             return
@@ -218,13 +248,13 @@ class TrackModelUI(tk.Tk):
             data = json.load(f)
         records = data.get("static_data", {}).get(selected_line, [])
         self.static_data = records
-        blocks = [f"{r['Section']}{int(float(r['Block Number']))}" for r in records if str(r['Block Number']).replace('.', '', 1).isdigit()]
+        blocks = [f"{r['Section']}{int(float(r['Block Number']))}" for r in records if
+                  str(r['Block Number']).replace('.', '', 1).isdigit()]
         self.block_selector["values"] = blocks
         if blocks:
             self.block_selector.current(0)
             self.on_block_selected(None)
 
-    # === Track Image === #
     def update_track_image(self, event=None):
         selected_line = self.line_selector.get().lower()
         image_file = "track.png" if selected_line != "blue" else "track_blue.png"
@@ -236,7 +266,6 @@ class TrackModelUI(tk.Tk):
         except Exception:
             self.track_label.config(text="Unable to load track image")
 
-    # === Block Selection === #
     def on_block_selected(self, event=None):
         self.block_selected = True
         block_id = self.block_selector.get()
@@ -260,9 +289,8 @@ class TrackModelUI(tk.Tk):
                 self.block_labels["Branching:"].set(b.get("Branching", "N/A"))
                 break
 
-    # === Dynamic Data Update Loop === #
     def load_json_data(self):
-        if not self.block_selected or not os.path.exists("track_model_state.json"):
+        if not os.path.exists("track_model_state.json"):
             self.after(500, self.load_json_data)
             return
 
@@ -287,11 +315,12 @@ class TrackModelUI(tk.Tk):
             commanded = block_data.get("commanded", {})
 
             temp = env.get("temperature", 0)
-            occupancy = block.get("occupancy", 0)
-            authority = commanded.get("authority", 0)
-            speed = commanded.get("speed", 0)
+            occupancy = block.get("occupancy", "NA")
+            authority = commanded.get("authority", "NA")
+            speed = commanded.get("speed", "NA")
+            light_input = block.get("light", "N/A")
+            gate_input = block.get("gate", "N/A")
 
-            # --- Dynamic Switch Position Logic --- #
             switch_position = block_data.get("switch_position", "N/A")
             branching_value = next(
                 (b["Branching"] for b in self.static_data if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
@@ -304,21 +333,18 @@ class TrackModelUI(tk.Tk):
             failures_active = any(failures.values())
             heating_on = temp < 32
 
-            # --- Power Failure Logic --- #
             if failures.get("power"):
                 traffic_light = "OFF"
                 crossing_value = next(
                     (b["Crossing"] for b in self.static_data
-                    if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
+                     if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
                     "No"
                 )
                 gate_status = "Closed" if crossing_value == "Yes" else "N/A"
 
-            # --- Circuit Failure Logic --- #
             elif failures.get("circuit"):
                 occupancy = 0
                 displayed_occupancy = "--"
-                # Beacons disabled (placeholder)
                 if authority > 0:
                     traffic_light = "Green"
                     gate_status = "Open"
@@ -326,32 +352,24 @@ class TrackModelUI(tk.Tk):
                     traffic_light = "Red"
                     gate_status = "Open"
 
-            # --- Broken Track Logic --- #
             elif failures.get("broken_track"):
-                # Prevent train movement
                 authority = 0
                 speed = 0
                 traffic_light = "Red"
-
-                # Close gate if a crossing exists
                 crossing_value = next(
                     (b["Crossing"] for b in self.static_data
-                    if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
+                     if f"{b['Section']}{int(float(b['Block Number']))}" == selected_block),
                     "No"
                 )
                 gate_status = "Closed" if crossing_value == "Yes" else "N/A"
 
-            # --- Normal Operating Logic --- #
-            elif occupancy:
-                traffic_light = "Yellow"
-                gate_status = "Closed"
-            elif authority > 0:
-                traffic_light = "Green"
-                gate_status = "Open"
-            else:
-                traffic_light = "Red"
-                gate_status = "Open"
+            #elif occupancy:
+                #traffic_light = "Yellow"
+                #gate_status = "Closed"
 
+            else:
+                traffic_light = light_input
+                gate_status = gate_input
 
             self.block_labels["Direction of Travel:"].set("--")
             self.block_labels["Traffic Light:"].set(traffic_light)
@@ -366,7 +384,7 @@ class TrackModelUI(tk.Tk):
                 foreground="green" if heating_on else "red"
             )
 
-            self.station_vars["Boarding:"].set(station.get("boarding", "N/A"))
+            # Boarding removed
             self.station_vars["Disembarking:"].set(station.get("disembarking", "N/A"))
 
             for key in self.failure_vars:
@@ -394,13 +412,20 @@ class TrackModelUI(tk.Tk):
 
         self.after(500, self.load_json_data)
 
-    # === Temperature Controls === #
     def increase_temp_immediate(self):
-        self.temperature.set(self.temperature.get() + 1)
+        try:
+            current_temp = float(self.temperature.get())
+        except ValueError:
+            current_temp = 0
+        self.temperature.set(str(int(current_temp + 1)))
         self.update_json_temperature()
 
     def decrease_temp_immediate(self):
-        self.temperature.set(self.temperature.get() - 1)
+        try:
+            current_temp = float(self.temperature.get())
+        except ValueError:
+            current_temp = 0
+        self.temperature.set(str(int(current_temp - 1)))
         self.update_json_temperature()
 
     def update_json_temperature(self):
@@ -413,15 +438,17 @@ class TrackModelUI(tk.Tk):
             selected_block = self.block_selector.get()
             temp = self.temperature.get()
 
-            if selected_line in data and selected_block in data[selected_line]:
-                data[selected_line][selected_block]["environment"]["temperature"] = temp
+            data.setdefault(selected_line, {})
+            data[selected_line].setdefault(selected_block, {})
+            data[selected_line][selected_block].setdefault("environment", {})
+            data[selected_line][selected_block]["environment"]["temperature"] = temp
+
 
             with open("track_model_state.json", "w") as f:
                 json.dump(data, f, indent=4)
         except Exception:
             pass
 
-    # === Failure Update === #
     def update_failures(self):
         if not os.path.exists("track_model_state.json"):
             return
@@ -431,6 +458,7 @@ class TrackModelUI(tk.Tk):
             selected_line = self.line_selector.get()
             selected_block = self.block_selector.get()
             if selected_line and selected_block:
+
                 data.setdefault(selected_line, {})
                 data[selected_line].setdefault(selected_block, {})
                 data[selected_line][selected_block].setdefault("failures", {})
@@ -444,9 +472,9 @@ class TrackModelUI(tk.Tk):
 
 
 if __name__ == "__main__":
-    if not os.path.exists("track_model_static.json"):
-        with open("track_model_static.json", "w") as f:
-            json.dump({}, f, indent=4)
-
     app = TrackModelUI()
     app.mainloop()
+
+    if os.path.exists("track_model_static.json"):
+        with open("track_model_static.json", "w") as f:
+            json.dump({}, f, indent=4)

@@ -1,0 +1,88 @@
+{
+    "Blue": {
+        "A1": {
+            "block": {
+                "switch_position": "N/A",
+                "light": "Red",
+                "gate": "Closed"
+            },
+            "environment": {
+                "temperature": 78
+            },
+            "failures": {
+                "power": true,
+                "circuit": true,
+                "broken_track": true
+            },
+            "station": {
+                "disembarking": 45
+            },
+            "commanded": {
+                "speed": 30,
+                "authority": 9
+            }
+        },
+        "A4": {
+            "failures": {
+                "power": true,
+                "circuit": true,
+                "broken_track": true
+            }
+        },
+        "A5": {
+            "environment": {
+                "temperature": "79"
+            }
+        },
+        "B6": {
+            "block": {
+                "switch_position": "F7",
+                "light": "Yellow",
+                "gate": "Closed"
+            },
+            "environment": {
+                "temperature": 12
+            },
+            "failures": {
+                "power": false,
+                "circuit": true,
+                "broken_track": false
+            },
+            "station": {
+                "disembarking": 90
+            },
+            "commanded": {
+                "speed": 30,
+                "authority": 3
+            }
+        },
+        "B9": {
+            "environment": {
+                "temperature": "34"
+            }
+        }
+    },
+    "Red": {
+        "D11": {
+            "failures": {
+                "power": true,
+                "circuit": true,
+                "broken_track": false
+            }
+        },
+        "A1": {
+            "failures": {
+                "power": false,
+                "circuit": false,
+                "broken_track": false
+            }
+        }
+    },
+    "Green": {
+        "A1": {
+            "environment": {
+                "temperature": "7"
+            }
+        }
+    }
+}

@@ -8,13 +8,12 @@ from track_model_UI import TrackModelUI
 import threading
 
 
-
 class TrackBuilder(tk.Tk):
     def __init__(self):
         super().__init__()
         
         self.title("Track Model Test UI")
-        self.geometry("780x360")
+        self.geometry("780x370")
         self.resizable(False, False)
 
         # === LINE AND BLOCK SELECTION === #
@@ -61,7 +60,18 @@ class TrackBuilder(tk.Tk):
         self.authority_entry = make_entry("Commanded Authority (yards)")
         self.temp_entry = make_entry("Environmental Temperature (°F)")
         self.passengers_disembark_entry = make_entry("Passengers Disembarking")
-        self.passengers_board_entry = make_entry("Passengers Boarding")
+        self.switch_position_entry = make_entry("Switch Position")
+
+        # === LIGHT AND GATE DROPDOWNS === #
+        ttk.Label(input_frame, text="Light").grid(row=current_row // 2, column=(current_row % 2) * 2, sticky="w", padx=5, pady=5)
+        self.light_entry = ttk.Combobox(input_frame, values=["Red", "Yellow", "Green"], state="readonly", width=18)
+        self.light_entry.grid(row=current_row // 2, column=(current_row % 2) * 2 + 1, padx=5, pady=5)
+        current_row += 1
+
+        ttk.Label(input_frame, text="Gate").grid(row=current_row // 2, column=(current_row % 2) * 2, sticky="w", padx=5, pady=5)
+        self.gate_entry = ttk.Combobox(input_frame, values=["Open", "Closed"], state="readonly", width=18)
+        self.gate_entry.grid(row=current_row // 2, column=(current_row % 2) * 2 + 1, padx=5, pady=5)
+        current_row += 1
 
         # === FAILURES === #
         failure_frame = ttk.LabelFrame(self, text="Failure Modes")
@@ -111,7 +121,6 @@ class TrackBuilder(tk.Tk):
             try:
                 with open("track_model_static.json", "r") as f:
                     existing = json.load(f)
-                # Treat as "already loaded" only if file has real content
                 if existing.get("static_data"):
                     messagebox.showinfo("Info", "Track layout already loaded for this session.")
                     return
@@ -213,7 +222,6 @@ class TrackBuilder(tk.Tk):
             get_int(self.speed_entry, 0, limit_mph)
             get_int(self.authority_entry, 0, block_length_yd)
             get_int(self.temp_entry, -50, 150)
-            get_int(self.passengers_board_entry, 0, 412)
             get_int(self.passengers_disembark_entry, 0, 412)
 
             return True
@@ -243,25 +251,57 @@ class TrackBuilder(tk.Tk):
         if selected_block not in data[selected_line]:
             data[selected_line][selected_block] = {}
 
-        boarding = int(float(self.passengers_board_entry.get() or 0))
-        disembarking = int(float(self.passengers_disembark_entry.get() or 0))
-        temperature = int(float(self.temp_entry.get() or 0))
+        existing = data[selected_line][selected_block]
 
-        # === Failures === #
+        disembarking = self.passengers_disembark_entry.get().strip()
+        if disembarking == "":
+            disembarking = existing.get("station", {}).get("disembarking", 0)
+        else:
+            disembarking = int(float(disembarking))
+
+        temperature = self.temp_entry.get().strip()
+        if temperature == "":
+            temperature = existing.get("environment", {}).get("temperature", 0)
+        else:
+            temperature = int(float(temperature))
+
+        switch_position = self.switch_position_entry.get().strip()
+        if switch_position == "":
+            switch_position = existing.get("block", {}).get("switch_position", "N/A")
+
+        light = self.light_entry.get().strip()
+        if light == "":
+            light = existing.get("block", {}).get("light", "N/A")
+
+        gate = self.gate_entry.get().strip()
+        if gate == "":
+            gate = existing.get("block", {}).get("gate", "N/A")
+
+        commanded_speed = self.speed_entry.get().strip()
+        if commanded_speed == "":
+            commanded_speed = existing.get("commanded", {}).get("speed", 0)
+        else:
+            commanded_speed = int(float(commanded_speed))
+
+        commanded_authority = self.authority_entry.get().strip()
+        if commanded_authority == "":
+            commanded_authority = existing.get("commanded", {}).get("authority", 0)
+        else:
+            commanded_authority = int(float(commanded_authority))
+
         failures = {k: v.get() for k, v in self.failure_vars.items()}
 
-        # === Commanded Values === #
-        commanded_speed = int(float(self.speed_entry.get() or 0))
-        commanded_authority = int(float(self.authority_entry.get() or 0))
-
-        # === Apply Broken Track Rules === #
         if failures.get("broken_track"):
             commanded_speed = 0
             commanded_authority = 0
 
-        block = {"occupancy": 0}
+        block = {
+            "switch_position": switch_position,
+            "light": light,
+            "gate": gate
+        }
         environment = {"temperature": temperature}
-        station = {"boarding": boarding, "disembarking": disembarking}
+        station = {"disembarking": disembarking}
         commanded = {"speed": commanded_speed, "authority": commanded_authority}
 
         data[selected_line][selected_block] = {
@@ -275,9 +315,6 @@ class TrackBuilder(tk.Tk):
         with open("track_model_state.json", "w") as f:
             json.dump(data, f, indent=4)
 
-        # === Circuit Failure Placeholder (Suppress Beacons / Occupancy Updates) === #
-        # NOTE: When circuit failure = True, Track Model UI ignores occupancy updates and beacon outputs.
-
         messagebox.showinfo("Update Successful", f"Inputs updated for {selected_line} - {selected_block}.")
 
 
@@ -285,8 +322,6 @@ if __name__ == "__main__":
     app = TrackBuilder()
     app.mainloop()
 
-    # === Dump empty static file after exit (for next session) === #
-    if not os.path.exists("track_model_static.json"):
+    if os.path.exists("track_model_static.json"):
         with open("track_model_static.json", "w") as f:
             json.dump({}, f, indent=4)
-
