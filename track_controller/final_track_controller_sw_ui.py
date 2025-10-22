@@ -19,6 +19,7 @@ from tkinter import filedialog
 import json
 import os
 from datetime import datetime, timezone
+from Green_Line_PLC_XandKup import process_states_green_xkup
 try:
     from zoneinfo import ZoneInfo
     EASTERN = ZoneInfo("America/New_York")
@@ -107,41 +108,95 @@ class sw_track_controller_ui(tk.Tk):
         style = ttk.Style()
         style.configure("grid.TLabel", font=("Arial", 8), background="white")
         style.configure("grid.TCheckbutton", font=("Arial", 8), background="white")
-        blocks = 20
-
-        # Clear current grid
+        
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
+            
+        occupied = [0]*80
+        switches, signals, crossing = process_states_green_xkup(occupied)
 
-        # Create a variable to store the selected block number
-        self.selected_block_number = tk.IntVar(value=-1)
+        def decode_sig_state(bit1, bit2):
+            if bit1 == 0 and bit2 == 0:
+                return "Supergreen"
+            elif bit1 == 0 and bit2 == 1:
+                return "Green"
+            elif bit1 == 1 and bit2 == 0:
+                return "Yellow"
+            else:
+                return "Red"
+        def get_section_letterG1(block_num):
+            if block_num < 3:
+                return 'A'
+            elif block_num < 6:
+                return 'B'
+            elif block_num < 12:
+                return 'C'
+            elif block_num < 16:
+                return 'D'
+            elif block_num < 20:
+                return 'E'
+            elif block_num < 28:
+                return 'F'
+            elif block_num < 32:
+                return 'G'
+            elif block_num < 35:
+                return 'H'
+            elif block_num < 57:
+                return 'I'
+            elif block_num < 62:
+                return 'J'
+            elif block_num < 68:
+                return 'K'
+            elif block_num < 73:
+                return 'L'
+            elif block_num < 76:
+                return 'X'
+            elif block_num < 79:
+                return 'Y'
+            else:
+                return 'Z'
+            
+        
+        if self.selected_file_str.get() == "Green_Line_PLC_XandKup.py":
+            for i in range(80):
+                if occupied[i] == 1:
+                    occ_state = "Occupied"
+                else:
+                    occ_state = "Unoccupied"
 
-        # Update grid with block information
-        for block in range(blocks):
-            def select_block(block=block):
-                self.selected_block_number.set(block)
-                self.show_selected_block()
+                sec = get_section_letterG1(i)
+                if i <72:
+                    block_label = ttk.Label(self.scrollable_frame, text=f"Block {sec}{i+1}: {occ_state}", style="grid.TLabel")
+                    block_label.grid(row=i, column=0, padx=5, pady=2, sticky="w")
+                else:
+                    block_label = ttk.Label(self.scrollable_frame, text=f"Block {sec}{i+71}: {occ_state}", style="grid.TLabel")
+                    block_label.grid(row=i, column=0, padx=5, pady=2, sticky="w")
+                if i == 12:
+                    if switches[0] == 0:
+                        state = "1-13"
+                    else:
+                        state = "13-12"
+                    switch_label = ttk.Label(self.scrollable_frame, text=f"Switch 1 State: {state}", style="grid.TLabel")
+                    switch_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
+                elif i == 27:
+                    if switches[1] == 0:
+                        state = "28-29"
+                    else:
+                        state = "150-28"
+                    switch_label = ttk.Label(self.scrollable_frame, text=f"Switch 2 State: {state}", style="grid.TLabel")
+                    switch_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
+                elif i == 56:
 
-            block_selection = ttk.Radiobutton(
-            self.scrollable_frame,
-            text=f"Block {block}",
-            style="grid.TCheckbutton",
-            variable=self.selected_block_number,
-            value=block,
-            command=select_block
-            )
-            block_gate = ttk.Label(self.scrollable_frame, text="Gate: N/A", style="grid.TLabel")
-            block_signal = ttk.Label(self.scrollable_frame, text="Signal: N/A", style="grid.TLabel")
-            block_switch = ttk.Label(self.scrollable_frame, text="Switch: N/A", style="grid.TLabel")
-            block_occupancy = ttk.Label(self.scrollable_frame, text="Occupancy: N/A", style="grid.TLabel")
-            block_failure = ttk.Label(self.scrollable_frame, text="Failure: N/A", style="grid.TLabel")
+                
+                
 
-            block_selection.grid(row=block, column=0, padx=5, pady=5)
-            block_gate.grid(row=block, column=1, padx=5, pady=5)
-            block_signal.grid(row=block, column=2, padx=5, pady=5)
-            block_switch.grid(row=block, column=3, padx=5, pady=5)
-            block_occupancy.grid(row=block, column=4, padx=5, pady=5)
-            block_failure.grid(row=block, column=5, padx=5, pady=5)
+            num_sigs = len(signals)//2
+            signal_states = []
+            for i in range(num_sigs):
+                state = decode_sig_state(signals[2*i], signals[2*i+1])
+                signal_states.append(state)
+
+
 
             
 
