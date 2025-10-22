@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import json
 import os
 import math
+import random  # for disembarking simulation
 
 # Ensure working directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -44,10 +45,21 @@ class TrainModel:
         self.next_station = "Midtown"
         self.station_positions = {"Downtown": 0, "Midtown": 500, "Uptown": 1000}
 
+        # Passenger data
+        self.passengers_onboard = 0
+        self.passengers_disembarking = 0
+
         self.dt = 0.5
 
-    def update(self, power, authority):
+    def generate_disembarking(self):
+        """Generate a small random number of passengers disembarking when stopped."""
+        if self.velocity < 0.1:  # only when train is stopped
+            return random.randint(0, int(max(self.passengers_onboard * 0.1, 1)))
+        return 0
+
+    def update(self, power, authority, passengers_boarding):
         """Core update logic for train motion and basic environment."""
+        # --- Physics ---
         if self.engine_failure:
             traction_force = 0
         else:
@@ -71,7 +83,16 @@ class TrainModel:
         self.position += self.velocity * self.dt + 0.5 * self.acceleration * self.dt**2
         self.authority = max(authority - self.velocity * self.dt, 0)
 
+        # Passenger logic
+        self.passengers_disembarking = self.generate_disembarking()
+        self.passengers_onboard = max(
+            min(self.passengers_onboard + passengers_boarding - self.passengers_disembarking, self.capacity),
+            0,
+        )
+
+        # Station + ETA update
         self.update_stations()
+
         return {
             "velocity_mps": self.velocity,
             "acceleration_mps2": self.acceleration,
@@ -80,6 +101,9 @@ class TrainModel:
             "current_station": self.current_station,
             "next_station": self.next_station,
             "eta_s": self.calculate_eta(),
+            "passengers_boarding": passengers_boarding,
+            "passengers_disembarking": self.passengers_disembarking,
+            "passengers_onboard": self.passengers_onboard,
         }
 
     def update_stations(self):
@@ -126,6 +150,7 @@ class TrainModelUI(tk.Tk):
 
         # Left-side panels
         self.create_info_panel(self.left_frame)
+        self.create_passenger_panel(self.left_frame)  # now only onboard
         self.create_specs_panel(self.left_frame)
         self.create_failure_panel(self.left_frame)
         self.create_control_panel(self.left_frame)
@@ -139,34 +164,7 @@ class TrainModelUI(tk.Tk):
     # ==== JSON LOADERS ====
     def load_or_create_json(self):
         if not os.path.exists(self.json_path):
-            default_data = {
-                "specs": {
-                    "length_ft": 66.0,
-                    "width_ft": 10.0,
-                    "height_ft": 11.5,
-                    "mass_kg": 40900,
-                    "max_power_w": 120000,
-                    "max_accel_mps2": 0.5,
-                    "service_brake_mps2": -1.2,
-                    "emergency_brake_mps2": -2.7,
-                    "capacity": 222,
-                    "crew_count": 2
-                },
-                "inputs": {
-                    "commanded_power": 60000,
-                    "authority": 300,
-                    "emergency_brake": False,
-                    "beacon_data": "128B",
-                    "commanded_speed": 25,
-                    "speed_limit": 30,
-                    "crew_count": 2,
-                    "passengers_boarding": 80
-                },
-                "outputs": {}
-            }
-            with open(self.json_path, "w") as f:
-                json.dump(default_data, f, indent=4)
-            return default_data
+            raise FileNotFoundError("train_data.json not found.")
         with open(self.json_path, "r") as f:
             return json.load(f)
 
@@ -187,6 +185,13 @@ class TrainModelUI(tk.Tk):
             label = ttk.Label(info, text=f"{key}: --")
             label.pack(anchor="w", padx=10, pady=2)
             self.info_labels[key] = label
+
+    def create_passenger_panel(self, parent):
+        """New panel: only onboard passengers displayed."""
+        pax = ttk.LabelFrame(parent, text="Passenger Information")
+        pax.pack(fill="x", pady=5)
+        self.pax_label = ttk.Label(pax, text="Passengers Onboard: --")
+        self.pax_label.pack(anchor="w", padx=10, pady=2)
 
     def create_specs_panel(self, parent):
         specs = ttk.LabelFrame(parent, text="Train Specifications")
@@ -245,14 +250,16 @@ class TrainModelUI(tk.Tk):
         self.model.engine_failure = self.engine_fail.get()
         self.model.brake_failure = self.brake_fail.get()
         self.model.signal_failure = self.signal_fail.get()
-        self.model.emergency_brake = self.model.emergency_brake  # stays persistent
 
+        # Update including passenger input
         outputs = self.model.update(
             inputs["commanded_power"],
-            inputs["authority"]
+            inputs["authority"],
+            inputs["passengers_boarding"]
         )
         self.write_json(outputs)
 
+        # Info panel
         self.info_labels["Velocity"].config(text=f"Velocity: {outputs['velocity_mps']:.2f} m/s")
         self.info_labels["Acceleration"].config(text=f"Acceleration: {outputs['acceleration_mps2']:.2f} m/s²")
         self.info_labels["Position"].config(text=f"Position: {outputs['position_m']:.1f} m")
@@ -264,6 +271,9 @@ class TrainModelUI(tk.Tk):
             self.info_labels["ETA to Next Station"].config(text=f"ETA to Next Station: {outputs['eta_s']:.1f} s")
         else:
             self.info_labels["ETA to Next Station"].config(text="ETA to Next Station: --")
+
+        # Passenger panel (only onboard visible)
+        self.pax_label.config(text=f"Passengers Onboard: {outputs['passengers_onboard']}")
 
         # Move train on map
         canvas_width = 850
