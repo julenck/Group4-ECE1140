@@ -198,11 +198,11 @@ class sw_wayside_controller_ui(tk.Tk):
         style.configure("smaller.TLabel", font=("Arial", 12), background="white")
 
         # Title label
-        title_label = ttk.Label(self.input_frame, text="Input/Output Data", style="Input.TLabel")
+        title_label = ttk.Label(self.input_frame, text="Active Train Data", style="Input.TLabel")
         title_label.pack(pady=10)
 
-        # Input/Output data display (placeholder)
-        io_data_label = ttk.Label(self.input_frame, text="Input/Output data will be displayed here.", style="smaller.TLabel")
+        # train data display (placeholder)
+        io_data_label = ttk.Label(self.input_frame, text="Active train data will be displayed here.", style="smaller.TLabel")
         io_data_label.pack(pady=10)
 
     def build_all_blocks_frame(self):
