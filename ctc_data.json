@@ -1,0 +1,45 @@
+{
+    "Dispatcher": {
+        "Trains": {
+            "Train 1": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 2": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 3": {
+                "Line": "",
+                "Suggested Speed": "",
+                "AUthority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            }
+        }
+    },
+    "TrackController": {
+        "Train Position": "",
+        "State of the Train": "",
+        "Train Failure Mode": "",
+        "Section and Block1": "",
+        "Light Color": "",
+        "Section and Block2": "",
+        "Gate": ""
+    },
+    "TrackModel": {
+        "Station": "",
+        "Passengers Leaving Station": "",
+        "Passengers Entering Station": ""
+    },
+    "MaintenenceModeOutputs": {
+        "Block Line": "Green",
+        "Closed Block": "3"
+    }
+}

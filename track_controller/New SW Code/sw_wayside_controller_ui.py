@@ -1,5 +1,6 @@
 
-#final_track_controller_sw_ui.py
+
+
 #Author: Connor Kariotis
 #ECE 1140 - Wayside Controller Software
 #Discription: UI for track controller maintenance and monitoring
@@ -19,43 +20,35 @@ from tkinter import filedialog
 import json
 import os
 from datetime import datetime, timezone
-#from Green_Line_PLC_XandKup import process_states_green_xkup
-try:
-    from zoneinfo import ZoneInfo
-    EASTERN = ZoneInfo("America/New_York")
-except Exception:
-    EASTERN = None
-#import plc_parser
-WIN_WIDTH = 1500
-WIN_HEIGHT = 800
+from Green_Line_PLC_XandLup import process_states_green_xlup
+import sw_wayside_controller
+import sw_vital_check
 
-class sw_track_controller_ui(tk.Tk):
-    """User interface for the Wayside Track Controller.
 
-	Provides frames for maintenance, input/output data, PLC file upload,
-	track map, and status updates. Periodically refreshes inputs and outputs
-	from JSON files and PLC logic.
-	"""
-    def __init__(self,master=None):
-        if master is None:
-            super().__init__()
-        else:
-            super().__init__()
-            self.master = master
 
-        self.title("Track Controller Software Module")
-        self.geometry(f"{WIN_WIDTH}x{WIN_HEIGHT}")
+class sw_wayside_controller_ui(tk.Tk):
+    def __init__(self, controller):
+        super().__init__()
+    # Association
+        self.controller = controller
 
-        #variables
-        self.file_path_var = tk.StringVar(value="blue_line_config.json")
-        self.maintenance_mode = tk.BooleanVar(value=False)
-        self.selected_switch = tk.StringVar()
-        self.select_state = tk.StringVar()
-        self.selected_block = tk.StringVar()
-        self.switch_options = []
-        self.state_options = []
+    # Attributes
+        self.toggle_maintenance_mode: bool = False
+        self.selected_block: int = -1
+        self.selected_block_data: dict = {}
+        self.maintenance_frame: ttk.Frame = None
+        self.input_frame: ttk.Frame = None
+        self.all_blocks_frame: ttk.Frame = None
+        self.map_frame: ttk.Frame = None
+        self.selected_block_frame: ttk.Frame = None
+        self.scrollable_frame: ttk.Frame = None
 
-        
+        #epty options for now
+        self.switch_options: list = []
+        self.state_options: list = ["0", "1"]
+        self.selected_switch: tk.StringVar = tk.StringVar()
+
+
         # Configure grid layout
         self.columnconfigure(0, weight=1)  # Left column
         self.columnconfigure(1, weight=1)  # Middle column
@@ -95,119 +88,43 @@ class sw_track_controller_ui(tk.Tk):
         self.build_map_frame()
         self.build_selected_block_frame()
 
-        self.update_clock()
-        self.after(200, self.load_inputs_outputs())
-
-
     
 
+# Methods
+    def set_light_state(self, block_id: int, state: int):
+        self.controller.override_light(block_id, state)
 
+    def set_gate_state(self, block_id: int, state: int):
+        self.controller.override_gate(block_id, state)
 
+    def set_switch_state(self, block_id: int, state: int):
+        self.controller.override_switch(block_id, state)
 
-    def load_inputs_outputs(self):
-        style = ttk.Style()
-        style.configure("grid.TLabel", font=("Arial", 8), background="white")
-        style.configure("grid.TCheckbutton", font=("Arial", 8), background="white")
-        
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
-            
-        occupied = [0]*80
-        switches, signals, crossing = process_states_green_xkup(occupied)
+    def set_plc(self):
+        #ask for a python file
+        filename = filedialog.askopenfilename(
+            title="Select PLC File",
+            filetypes=[("Python Files", "*.py"), ("All Files", "*.*")]
+        )
+        self.controller.load_plc(filename)
 
-        def decode_sig_state(bit1, bit2):
-            if bit1 == 0 and bit2 == 0:
-                return "Supergreen"
-            elif bit1 == 0 and bit2 == 1:
-                return "Green"
-            elif bit1 == 1 and bit2 == 0:
-                return "Yellow"
-            else:
-                return "Red"
-        def get_section_letterG1(block_num):
-            if block_num < 3:
-                return 'A'
-            elif block_num < 6:
-                return 'B'
-            elif block_num < 12:
-                return 'C'
-            elif block_num < 16:
-                return 'D'
-            elif block_num < 20:
-                return 'E'
-            elif block_num < 28:
-                return 'F'
-            elif block_num < 32:
-                return 'G'
-            elif block_num < 35:
-                return 'H'
-            elif block_num < 57:
-                return 'I'
-            elif block_num < 62:
-                return 'J'
-            elif block_num < 68:
-                return 'K'
-            elif block_num < 73:
-                return 'L'
-            elif block_num < 76:
-                return 'X'
-            elif block_num < 79:
-                return 'Y'
-            else:
-                return 'Z'
-            
-        
-        if self.selected_file_str.get() == "Green_Line_PLC_XandKup.py":
-            for i in range(80):
-                if occupied[i] == 1:
-                    occ_state = "Occupied"
-                else:
-                    occ_state = "Unoccupied"
+    def send_inputs(self, data: dict):
+        #self.controller.load_inputs()
+        pass
 
-                sec = get_section_letterG1(i)
-                if i <72:
-                    block_label = ttk.Label(self.scrollable_frame, text=f"Block {sec}{i+1}: {occ_state}", style="grid.TLabel")
-                    block_label.grid(row=i, column=0, padx=5, pady=2, sticky="w")
-                else:
-                    block_label = ttk.Label(self.scrollable_frame, text=f"Block {sec}{i+71}: {occ_state}", style="grid.TLabel")
-                    block_label.grid(row=i, column=0, padx=5, pady=2, sticky="w")
-                if i == 12:
-                    if switches[0] == 0:
-                        state = "1-13"
-                    else:
-                        state = "13-12"
-                    switch_label = ttk.Label(self.scrollable_frame, text=f"Switch 1 State: {state}", style="grid.TLabel")
-                    switch_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
-                elif i == 27:
-                    if switches[1] == 0:
-                        state = "28-29"
-                    else:
-                        state = "150-28"
-                    switch_label = ttk.Label(self.scrollable_frame, text=f"Switch 2 State: {state}", style="grid.TLabel")
-                    switch_label.grid(row=i, column=1, padx=5, pady=2, sticky="w")
-                elif i == 56:
+    def send_outputs(self, data: dict):
+        pass
 
-                
-                
+    def update_selected_file(self, filename: str):
+        pass
 
-            num_sigs = len(signals)//2
-            signal_states = []
-            for i in range(num_sigs):
-                state = decode_sig_state(signals[2*i], signals[2*i+1])
-                signal_states.append(state)
+    def select_block(self, block_id: int):
+        #self.selected_block = block_id
+        #self.selected_block_data = self.controller.get_block_data(block_id)
+        pass
 
-
-
-            
-
-    def show_selected_block(self):
-        selected = self.selected_block_number.get()
-        if selected != -1:
-            self.block_info_label.config(text=f"Selected Block Info: Block {selected}")
-        else:
-            self.block_info_label.config(text="Selected Block Info: None")
-
-            
+    def show_block_data(self, data: dict):
+        pass
 
     def build_maintenance_frame(self):
 
@@ -226,8 +143,8 @@ class sw_track_controller_ui(tk.Tk):
             self.maintenance_frame,
             text="Toggle Maintenance",
             style="Maintenance.TCheckbutton",
-            variable=self.maintenance_mode,
-            command=self.toggle_maintenance_mode,
+            variable=self.toggle_maintenance_mode,
+            command=self.toggle_maintenance,
         )
         toggle_maintenance.pack(pady=10)
 
@@ -263,7 +180,7 @@ class sw_track_controller_ui(tk.Tk):
         self.upload_button = ttk.Button(
             self.maintenance_frame,
             text="browse",
-            command=self.upload_plc_file,
+            command=self.set_plc,
             state="disabled",
             style="Maintenance.TButton"
         )
@@ -273,11 +190,6 @@ class sw_track_controller_ui(tk.Tk):
 
         self.selected_file_label = ttk.Label(self.maintenance_frame, text=f"currently selected file: {self.selected_file_str.get()}", style="display.TLabel", wraplength=200)
         self.selected_file_label.pack(pady=5)
-
-
-        # Time display
-        self.time_label = ttk.Label(self.maintenance_frame, style="Maintenance.TLabel",text=f"Time (EST): {self._get_est_time_str()}")
-        self.time_label.pack(pady=(200,0))
 
     def build_input_frame(self):
         # Define a style for the input frame widgets
@@ -368,15 +280,11 @@ class sw_track_controller_ui(tk.Tk):
         # Selected block info display (placeholder)
         self.block_info_label = ttk.Label(self.selected_block_frame, text="Selected block information will be displayed here.", style="smaller.TLabel")
         self.block_info_label.pack(pady=10)
-
-        
-
     
-
     def toggle_maintenance(self):
         widgets = [self.switch_menu, self.state_menu, self.upload_button]
 
-        if self.maintenance_mode.get():
+        if self.toggle_maintenance_mode.get():
             state = "readonly"
         else:
             state = "disabled"
@@ -384,32 +292,14 @@ class sw_track_controller_ui(tk.Tk):
         for widget in widgets:
             widget.config(state=state)
 
-    def upload_plc_file(self):
+        
 
-            self.selected_file_label.config(text="Selected File: None")
-
-
-
-    def update_clock(self):
-        self.time_label.config(text=f"Time (EST): {self._get_est_time_str()}")
-        # update every second
-        self.after(1000, self.update_clock)
-
-    def _get_est_time_str(self):
-        now = datetime.now(timezone.utc)
-        if EASTERN:
-            try:
-                now_est = now.astimezone(EASTERN)
-            except Exception:
-                now_est = now
-        else:
-            # best-effort fallback (local time)
-            now_est = now.astimezone()
-        # Format: MM/DD/YYYY h:mmAM/PM (no leading zeros on hour)
-        return now_est.strftime("%m/%d/%Y %-I:%M:%S%p") if os.name != "nt" else now_est.strftime("%m/%d/%Y %#I:%M:%S%p")
-
-
-#main to test setup 
 if __name__ == "__main__":
-    app = sw_track_controller_ui()
-    app.mainloop()
+
+
+    vital = sw_vital_check.sw_vital_check()
+    controller = sw_wayside_controller.sw_wayside_controller(vital)
+    ui = sw_wayside_controller_ui(controller)
+    #make it 1200x800
+    ui.geometry("1200x800")
+    ui.mainloop()

@@ -1,9 +1,9 @@
 
 
-#will be plc for Green line Sections A to L
+#will be plc for Green line Sections X and L up
 
 
-def process_states_green_xkup(occupied):
+def process_states_green_xlup(occupied):
 
     #block_authority = [0]*(80)#80 blocks, 0 - available, 1 - occupied
     switches = [0]*4 #4 switches, 0 - switch connects to lower numbered block of 2 branches, 1 - switch connects to higher numbered block of 2 branches
