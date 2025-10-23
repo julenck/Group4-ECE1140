@@ -544,7 +544,7 @@ throughput_frame = tk.Frame(bottom_frame)
 throughput_frame.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(10, 0))
 throughput_frame.grid_columnconfigure((0, 1), weight=1)
 
-tk.Label(throughput_frame, text=f"Red Line:", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
+tk.Label(throughput_frame, text=f"Red Line: 20 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
 tk.Label(throughput_frame, text="Green Line: 14 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=1, sticky='w', padx=20)
 
 event_handler = FileChangeHandler()
