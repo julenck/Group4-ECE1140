@@ -1,46 +1,30 @@
-from time import sleep
-from hw_display import hw_display
-from hw_wayside_controller import hw_wayside_controller
-from hw_wayside_controller_ui import hw_wayside_controller_ui
+# hw_main.py
+# Main entry point for the Wayside Controller HW module.
+# Oliver Kettelson-Belinkie, 2025
+
+from __future__ import annotations
+import tkinter as tk
+from typing import List
+from hw_wayside_controller import HW_Wayside_Controller
+from hw_display import HW_Display
+from hw_wayside_controller_ui import HW_Wayside_Controller_UI
+
 
 def main() -> None:
-    display = hw_display()
-    controller = hw_wayside_controller()
-    ui = hw_wayside_controller_ui(controller, display)
+    blocks: List[str] = ["A1", "A2", "A3", "A4", "A5"]
 
-    display.init()
+    root = tk.Tk()
+    controller = HW_Wayside_Controller(blocks)
+    display = HW_Display(root, available_blocks=blocks)
+    ui = HW_Wayside_Controller_UI(controller, display)
 
-    # seed blocks and states
-    block_ids = [0, 1, 2, 3, 4, 5]
-    controller.light_states = [0] * len(block_ids)
-    controller.gate_states = [0] * len(block_ids)
-    controller.switch_states = [0] * len(block_ids)
-    display.update_blocks(block_ids)
+    ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
 
-    # Simulated updates (replace later with your runtime feed)
-    ui.apply_vital_inputs(block_ids, {
-        "emergency": False,
-        "speed_mph": 40,
-        "authority_yards": 520,
-        "occupied_blocks": [2, 3],
-    })
-    sleep(0.8)
-    ui.apply_vital_inputs(block_ids, {
-        "emergency": True,
-        "speed_mph": 18,
-        "authority_yards": 200,
-        "occupied_blocks": [3],
-    })
-    sleep(0.8)
-    ui.apply_vital_inputs(block_ids, {
-        "emergency": False,
-        "speed_mph": 35,
-        "authority_yards": 460,
-        "occupied_blocks": [1, 4],
-    })
+    # TODO: add a small timer/loop to read JSON/socket and call:
+    # controller.apply_vital_inputs(blocks, incoming_dict); ui._push_to_display()
 
-    # keep window alive
-    display.run_forever()
+    root.mainloop()
+
 
 if __name__ == "__main__":
     main()
