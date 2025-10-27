@@ -29,7 +29,7 @@ class TrainModel:
         self.acceleration_ftps2 = 0.0
         self.position_yds = 0.0
         self.temperature_F = 68.0
-        self.authority_yds = 328.0  # 300m converted to ~328 yards
+        self.authority_yds = 328.0  # default ~300m
 
         # Passenger system
         self.passengers_boarding = 0
@@ -50,7 +50,11 @@ class TrainModel:
         # Route data
         self.current_station = "Downtown"
         self.next_station = "Midtown"
-        self.station_positions_yds = {"Downtown": 0, "Midtown": 547, "Uptown": 1094}  # 500m, 1000m converted to yards
+        self.station_positions_yds = {
+            "Downtown": 0,
+            "Midtown": 547,
+            "Uptown": 1094
+        }
 
         self.dt = 0.5  # seconds
 
@@ -129,7 +133,7 @@ class TrainModel:
         return distance_yds / max(velocity_yds_per_s, 0.1)
 
 
-# === TRAIN MODEL MAIN UI (Imperial) ===
+# === TRAIN MODEL MAIN UI (Imperial Units) ===
 class TrainModelUI(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -140,7 +144,7 @@ class TrainModelUI(tk.Tk):
         self.data = self.load_or_create_json()
         self.model = TrainModel(self.data["specs"])
 
-        # Layout
+        # Layout setup
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=2)
         self.rowconfigure(0, weight=1)
@@ -159,11 +163,12 @@ class TrainModelUI(tk.Tk):
         self.create_control_panel(self.left_frame)
         self.create_announcements_panel(self.left_frame)
 
-        # Right-side static map
+        # Right map
         self.create_static_map_panel(self.right_frame)
 
         self.update_loop()
 
+    # ==== JSON Handling ====
     def load_or_create_json(self):
         if not os.path.exists(self.json_path):
             default_data = {
@@ -202,11 +207,36 @@ class TrainModelUI(tk.Tk):
             return json.load(f)
 
     def write_json(self, outputs):
+        """Write to main, controller, and track model JSONs."""
         self.data["outputs"] = outputs
         with open(self.json_path, "w") as f:
             json.dump(self.data, f, indent=4)
 
-    # ==== Panels ====
+        # === Export to Train Controller ===
+        controller_data = {
+            "commanded_speed_mph": self.data["inputs"].get("commanded_speed_mph", 0),
+            "commanded_authority_yds": self.data["inputs"].get("authority_yds", 0),
+            "beacon_data": self.data["inputs"].get("beacon_data", ""),
+            "failure_modes": {
+                "engine_failure": self.model.engine_failure,
+                "signal_pickup_failure": self.model.signal_failure,
+                "brake_failure": self.model.brake_failure,
+            },
+            "train_velocity_mph": round(outputs.get("velocity_mph", 0), 2),
+            "train_temperature_F": outputs.get("temperature_F", 68.0),
+            "emergency_brake": self.model.emergency_brake,
+        }
+        with open("train_to_controller.json", "w") as f:
+            json.dump(controller_data, f, indent=4)
+
+        # === Export to Track Model ===
+        track_data = {
+            "number_of_passengers_disembarking": outputs.get("passengers_disembarking", 0)
+        }
+        with open("train_to_trackmodel.json", "w") as f:
+            json.dump(track_data, f, indent=4)
+
+    # ==== UI Panels ====
     def create_info_panel(self, parent):
         info = ttk.LabelFrame(parent, text="Train Information & Dynamics (Imperial Units)")
         info.pack(fill="x", pady=5)
@@ -285,7 +315,6 @@ class TrainModelUI(tk.Tk):
         self.model.brake_failure = self.brake_fail.get()
         self.model.signal_failure = self.signal_fail.get()
 
-        # Update environment
         self.model.lights_on = inputs.get("lights_on", False)
         self.model.left_door_open = inputs.get("left_door_open", False)
         self.model.right_door_open = inputs.get("right_door_open", False)
@@ -298,7 +327,7 @@ class TrainModelUI(tk.Tk):
         )
         self.write_json(outputs)
 
-        # UI updates
+        # UI refresh
         self.info_labels["Velocity (mph)"].config(text=f"Velocity: {outputs['velocity_mph']:.2f} mph")
         self.info_labels["Acceleration (ft/s²)"].config(text=f"Acceleration: {outputs['acceleration_ftps2']:.2f} ft/s²")
         self.info_labels["Position (yds)"].config(text=f"Position: {outputs['position_yds']:.1f} yds")
@@ -318,7 +347,6 @@ class TrainModelUI(tk.Tk):
         else:
             self.info_labels["ETA to Next Station"].config(text="ETA to Next Station: --")
 
-        # Environment
         self.env_labels["Lights On"].config(text=f"Lights On: {'Yes' if self.model.lights_on else 'No'}")
         self.env_labels["Left Door"].config(text=f"Left Door: {'Open' if self.model.left_door_open else 'Closed'}")
         self.env_labels["Right Door"].config(text=f"Right Door: {'Open' if self.model.right_door_open else 'Closed'}")
