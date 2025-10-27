@@ -79,7 +79,7 @@ class TrackBuilder(tk.Tk):
         self.failure_vars = {
             "power": tk.BooleanVar(value=False),
             "circuit": tk.BooleanVar(value=False),
-            "broken_track": tk.BooleanVar(value=False),
+            "broken": tk.BooleanVar(value=False),
         }
         for label in self.failure_vars:
             ttk.Checkbutton(
@@ -291,7 +291,7 @@ class TrackBuilder(tk.Tk):
 
         failures = {k: v.get() for k, v in self.failure_vars.items()}
 
-        if failures.get("broken_track"):
+        if failures.get("broken"):
             commanded_speed = 0
             commanded_authority = 0
 

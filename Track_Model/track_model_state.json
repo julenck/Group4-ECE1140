@@ -12,7 +12,7 @@
             "failures": {
                 "power": true,
                 "circuit": true,
-                "broken_track": true
+                "broken": true
             },
             "station": {
                 "disembarking": 45
@@ -26,12 +26,17 @@
             "failures": {
                 "power": true,
                 "circuit": true,
-                "broken_track": true
+                "broken": true
             }
         },
         "A5": {
             "environment": {
-                "temperature": "79"
+                "temperature": 79
+            },
+            "failures": {
+                "power": false,
+                "circuit": true,
+                "broken": false
             }
         },
         "B6": {
@@ -46,7 +51,7 @@
             "failures": {
                 "power": false,
                 "circuit": true,
-                "broken_track": false
+                "broken": false
             },
             "station": {
                 "disembarking": 90
@@ -58,7 +63,14 @@
         },
         "B9": {
             "environment": {
-                "temperature": "34"
+                "temperature": 34
+            }
+        },
+        "B8": {
+            "failures": {
+                "power": true,
+                "circuit": false,
+                "broken": true
             }
         }
     },
@@ -67,21 +79,21 @@
             "failures": {
                 "power": true,
                 "circuit": true,
-                "broken_track": false
+                "broken": false
             }
         },
         "A1": {
             "failures": {
                 "power": false,
                 "circuit": false,
-                "broken_track": false
+                "broken": false
             }
         }
     },
     "Green": {
         "A1": {
             "environment": {
-                "temperature": "7"
+                "temperature": 7
             }
         }
     }

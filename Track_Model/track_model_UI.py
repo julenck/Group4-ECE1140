@@ -342,7 +342,7 @@ class TrackModelUI(tk.Tk):
                 )
                 gate_status = "Closed" if crossing_value == "Yes" else "N/A"
 
-            elif failures.get("circuit"):
+            if failures.get("circuit"):
                 occupancy = 0
                 displayed_occupancy = "--"
                 if authority > 0:
@@ -352,7 +352,7 @@ class TrackModelUI(tk.Tk):
                     traffic_light = "Red"
                     gate_status = "Open"
 
-            elif failures.get("broken_track"):
+            if failures.get("broken"):
                 authority = 0
                 speed = 0
                 traffic_light = "Red"
@@ -397,8 +397,8 @@ class TrackModelUI(tk.Tk):
                     active.append("Power Failure")
                 if failures.get("circuit"):
                     active.append("Circuit Failure")
-                if failures.get("broken_track"):
-                    active.append("Broken Track Failure")
+                if failures.get("broken"):
+                    active.append("Broken Track")
                 failure_text = ", ".join(active)
                 self.warning_label.config(
                     text=f"Warning: Active Failure - {failure_text}",
@@ -407,8 +407,10 @@ class TrackModelUI(tk.Tk):
             else:
                 self.warning_label.config(text="All Systems Normal", foreground="green")
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error loading block {selected_line}/{selected_block}: {e}")
+
+
 
         self.after(500, self.load_json_data)
 
@@ -447,7 +449,7 @@ class TrackModelUI(tk.Tk):
             with open("track_model_state.json", "w") as f:
                 json.dump(data, f, indent=4)
         except Exception:
-            pass
+            print("Error updating temperature in JSON.")
 
     def update_failures(self):
         if not os.path.exists("track_model_state.json"):
@@ -464,12 +466,11 @@ class TrackModelUI(tk.Tk):
                 data[selected_line][selected_block].setdefault("failures", {})
                 data[selected_line][selected_block]["failures"]["power"] = self.failure_vars["Power Failure"].get()
                 data[selected_line][selected_block]["failures"]["circuit"] = self.failure_vars["Circuit Failure"].get()
-                data[selected_line][selected_block]["failures"]["broken_track"] = self.failure_vars["Broken Track"].get()
+                data[selected_line][selected_block]["failures"]["broken"] = self.failure_vars["Broken Track"].get()
                 with open("track_model_state.json", "w") as f:
                     json.dump(data, f, indent=4)
         except Exception:
-            pass
-
+            print("Error updating failures in JSON.")   
 
 if __name__ == "__main__":
     app = TrackModelUI()
