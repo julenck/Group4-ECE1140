@@ -46,8 +46,14 @@ def parse_excel(filepath: str) -> dict:
             df["Crossing"] = df["Infrastructure"].apply(extract_crossing)
             df["Branching"] = df["Infrastructure"].apply(extract_branching)
         
-        # Block comes from the "Section" column
-        if "Section" in df.columns:
+        # Block = Section + Block Number (e.g., A + 1 = A1, B + 5 = B5)
+        if "Section" in df.columns and "Block Number" in df.columns:
+            df["Block"] = df.apply(lambda row: 
+                str(row["Section"]).strip() + str(row["Block Number"]).strip() 
+                if str(row["Section"]) != "N/A" and str(row["Section"]) != "nan" 
+                and str(row["Block Number"]) != "N/A" and str(row["Block Number"]) != "nan"
+                else "N/A", axis=1)
+        elif "Section" in df.columns:
             df["Block"] = df["Section"].astype(str).str.strip()
             df["Block"] = df["Block"].replace(["nan", ""], "N/A")
         else:
@@ -75,6 +81,7 @@ class RailwayDiagram:
         
         self.show_blocks = True
         self.show_stations = True
+        self.expanded_sections = {}  # Track which sections are expanded per line: {line_name: set(sections)}
         
         self.setup_ui()
         
@@ -164,9 +171,9 @@ class RailwayDiagram:
         self.info_text.pack(fill=tk.BOTH, expand=True)
         self.info_text.insert("1.0", "Load an Excel file to view railway diagram...\n\n"
                              "The diagram shows:\n"
-                             "• Blocks as dashed boundary lines between sections\n"
-                             "• Curved track layout for compact visualization\n"
-                             "• Stations with crossing markers and branching info")
+                             "• Click dashed lines to see block details (A1, A2, B4, etc.)\n"
+                             "• Hover over blocks and stations for tooltips\n"
+                             "• Beautiful curved track layout")
         self.info_text.config(state=tk.DISABLED)
         
         # Bind canvas events
@@ -228,11 +235,11 @@ class RailwayDiagram:
     
     def calculate_curved_path(self, num_points: int, start_x: float, start_y: float, 
                              spacing: float, curve_intensity: float = 0.3) -> List[Tuple[float, float]]:
-        """Generate a curved path with natural-looking bends."""
+        """Generate a curved path with natural-looking bends and uniform spacing."""
         points = []
         
         for i in range(num_points):
-            # Base position
+            # Base position with uniform spacing
             x = start_x + i * spacing
             
             # Add sinusoidal curve for natural look
@@ -273,15 +280,19 @@ class RailwayDiagram:
         
         # Starting position - adjusted for better fit
         start_x, start_y = 150, 400
-        spacing = 110  # Reduced spacing for more compact layout
+        spacing = 65  # Consistent compact spacing throughout
         
-        # Collect all elements
+        # Collect all elements - SKIP rows where BOTH station AND block are N/A
         elements = []
         for idx, row in df.iterrows():
             station = row.get("Station", "N/A")
             block = row.get("Block", "N/A")
             crossing = row.get("Crossing", "No")
             branching = row.get("Branching", "N/A")
+            
+            # Skip completely empty rows
+            if station == "N/A" and block == "N/A":
+                continue
             
             elem = {
                 'station': station,
@@ -303,69 +314,124 @@ class RailwayDiagram:
         # Draw curved track line
         self.draw_smooth_curve(positions, color, 6)
         
-        # Draw block boundaries as dashed lines
+        # Draw block boundaries as clickable arrows (ABSOLUTELY NO vertical lines)
         if show_blocks:
             current_block = None
             block_start_idx = 0
+            block_indices = []  # Track where blocks change
             
+            # First pass: identify all block boundaries
             for i, elem in enumerate(elements):
                 block_id = elem['block']
-                
-                # Detect block change
                 if block_id != "N/A" and block_id != current_block:
-                    if current_block is not None and i > 0:
-                        # Draw block boundary line
-                        x, y = positions[i]
-                        boundary_id = self.canvas.create_line(
-                            x, y - 60, x, y + 60,
-                            fill="#666", width=3, dash=(8, 4), tags="block_boundary"
-                        )
+                    if current_block is not None:
+                        block_indices.append((current_block, block_start_idx, i-1))
+                    current_block = block_id
+                    block_start_idx = i
+            
+            # Add the final block
+            if current_block is not None:
+                block_indices.append((current_block, block_start_idx, len(elements)-1))
+            
+            # Group blocks by section (A, B, C, etc.)
+            sections = {}
+            for block_name, start_idx, end_idx in block_indices:
+                # Extract section letter (first character)
+                section = block_name[0] if block_name != "N/A" else "N/A"
+                if section not in sections:
+                    sections[section] = []
+                sections[section].append((block_name, start_idx, end_idx))
+            
+            # Get expanded sections for current line
+            current_expanded = self.expanded_sections.get(line_name, set())
+            
+            # Second pass: draw sections and blocks
+            for section, blocks in sections.items():
+                # Get overall section range
+                section_start = blocks[0][1]
+                section_end = blocks[-1][2]
+                
+                # Check if this section is expanded
+                is_expanded = section in current_expanded
+                
+                if is_expanded:
+                    # EXPANDED: Show individual blocks with arrows
+                    for idx, (block_name, start_idx, end_idx) in enumerate(blocks):
+                        # Draw arrow at the END of each block (except the very last one in section)
+                        if idx < len(blocks) - 1:
+                            x, y = positions[blocks[idx + 1][1]]  # Position at next block start
+                            
+                            arrow_size = 14
+                            arrow_id = self.canvas.create_polygon(
+                                x + 3, y,
+                                x - arrow_size, y - arrow_size,
+                                x - arrow_size, y + arrow_size,
+                                fill="#555", outline="#333", width=1, tags="block_boundary_arrow"
+                            )
+                            
+                            self.elements.append({
+                                'id': arrow_id,
+                                'type': 'block_boundary',
+                                'data': {'name': block_name, 'start_idx': start_idx, 'end_idx': end_idx, 'section': section}
+                            })
                         
-                        # Draw previous block label
-                        prev_x, prev_y = positions[block_start_idx]
-                        mid_x = (prev_x + x) / 2
-                        mid_y = (prev_y + y) / 2
+                        # Block label
+                        start_x_block = positions[start_idx][0]
+                        end_x_block = positions[end_idx][0]
+                        mid_x = (start_x_block + end_x_block) / 2
+                        mid_y = (positions[start_idx][1] + positions[end_idx][1]) / 2
                         
                         label_id = self.canvas.create_text(
                             mid_x, mid_y - 80,
-                            text=f"Block {current_block}",
-                            font=("Arial", 10, "bold"), fill="#555",
+                            text=block_name,
+                            font=("Arial", 10, "bold"), fill="#222",
                             tags="block_label"
                         )
                         
                         self.elements.append({
-                            'id': boundary_id,
-                            'type': 'block_boundary',
-                            'data': {'name': current_block}
-                        })
-                        self.elements.append({
                             'id': label_id,
                             'type': 'block_label',
-                            'data': {'name': current_block}
+                            'data': {'name': block_name, 'start_idx': start_idx, 'end_idx': end_idx, 'section': section}
                         })
+                else:
+                    # COLLAPSED: Show only section letter - VERY COMPACT
+                    # Just use first position in section
+                    start_x_section = positions[section_start][0]
+                    start_y_section = positions[section_start][1]
                     
-                    current_block = block_id
-                    block_start_idx = i
-            
-            # Draw final block label
-            if current_block is not None:
-                start_x_block, start_y_block = positions[block_start_idx]
-                end_x_block, end_y_block = positions[-1]
-                mid_x = (start_x_block + end_x_block) / 2
-                mid_y = (start_y_block + end_y_block) / 2
+                    # Clickable section label (small)
+                    label_id = self.canvas.create_text(
+                        start_x_section, start_y_section - 80,
+                        text=section,
+                        font=("Arial", 11, "bold"), fill="#0066CC",
+                        tags="section_label"
+                    )
+                    
+                    self.elements.append({
+                        'id': label_id,
+                        'type': 'section_label',
+                        'data': {'section': section, 'blocks': blocks, 'start_idx': section_start, 'end_idx': section_end}
+                    })
                 
-                label_id = self.canvas.create_text(
-                    mid_x, mid_y - 80,
-                    text=f"Block {current_block}",
-                    font=("Arial", 10, "bold"), fill="#555",
-                    tags="block_label"
-                )
-                
-                self.elements.append({
-                    'id': label_id,
-                    'type': 'block_label',
-                    'data': {'name': current_block}
-                })
+                # Draw arrow at end of section if not last section
+                section_list = list(sections.keys())
+                if section != section_list[-1]:
+                    next_section_start = list(sections.values())[section_list.index(section) + 1][0][1]
+                    x, y = positions[next_section_start]
+                    
+                    arrow_size = 16
+                    section_arrow_id = self.canvas.create_polygon(
+                        x + 3, y,
+                        x - arrow_size, y - arrow_size,
+                        x - arrow_size, y + arrow_size,
+                        fill="#333", outline="#000", width=2, tags="section_boundary_arrow"
+                    )
+                    
+                    self.elements.append({
+                        'id': section_arrow_id,
+                        'type': 'section_boundary',
+                        'data': {'section': section}
+                    })
         
         # Draw stations along the curved path
         if show_stations:
@@ -557,16 +623,63 @@ class RailwayDiagram:
         x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
         
-        items = self.canvas.find_overlapping(x-5, y-5, x+5, y+5)
+        items = self.canvas.find_overlapping(x-15, y-15, x+15, y+15)
         
+        # Prioritize stations over everything
         for item in items:
             for element in self.elements:
                 if element['id'] == item:
                     if element['type'] in ['station', 'station_name', 'station_bg']:
                         self.show_station_details(element['data'])
-                    elif element['type'] in ['block_label', 'block_boundary']:
+                        return
+        
+        # Check for section label click (to expand/collapse)
+        for item in items:
+            for element in self.elements:
+                if element['id'] == item:
+                    if element['type'] == 'section_label':
+                        section = element['data']['section']
+                        line_name = self.current_line
+                        
+                        # Initialize set for this line if doesn't exist
+                        if line_name not in self.expanded_sections:
+                            self.expanded_sections[line_name] = set()
+                        
+                        # Toggle expansion for this line
+                        if section in self.expanded_sections[line_name]:
+                            self.expanded_sections[line_name].remove(section)
+                        else:
+                            self.expanded_sections[line_name].add(section)
+                        
+                        # Redraw
+                        self.draw_single_line(line_name)
+                        return
+        
+        # Check for block label click (also toggle collapse)
+        for item in items:
+            for element in self.elements:
+                if element['id'] == item:
+                    if element['type'] == 'block_label':
+                        # Can click block label to collapse section
+                        section = element['data']['section']
+                        line_name = self.current_line
+                        
+                        if line_name in self.expanded_sections and section in self.expanded_sections[line_name]:
+                            self.expanded_sections[line_name].remove(section)
+                            self.draw_single_line(line_name)
+                            return
+                        else:
+                            # Show block details
+                            self.show_block_details(element['data'])
+                            return
+        
+        # Check for block boundary click
+        for item in items:
+            for element in self.elements:
+                if element['id'] == item:
+                    if element['type'] in ['block_boundary', 'block_boundary_arrow']:
                         self.show_block_details(element['data'])
-                    return
+                        return
     
     def on_canvas_hover(self, event):
         x = self.canvas.canvasx(event.x)
@@ -578,37 +691,103 @@ class RailwayDiagram:
                 tags = self.canvas.gettags(self.hover_id)
                 if "station" in tags:
                     self.canvas.itemconfig(self.hover_id, width=3)
+                elif "block_boundary" in tags:
+                    self.canvas.itemconfig(self.hover_id, width=5, fill="#666")
+                elif "section_label" in tags:
+                    self.canvas.itemconfig(self.hover_id, fill="#0066CC")
             except:
                 pass
             self.hover_id = None
         
-        items = self.canvas.find_overlapping(x-5, y-5, x+5, y+5)
+        self.canvas.delete("tooltip")
         
+        items = self.canvas.find_overlapping(x-10, y-10, x+10, y+10)
+        
+        # Prioritize stations in hover
         for item in items:
             for element in self.elements:
                 if element['id'] == item and element['type'] == 'station':
                     self.canvas.itemconfig(item, width=5)
                     self.hover_id = item
                     self.root.config(cursor="hand2")
+                    station_name = element['data']['station']
+                    block_name = element['data'].get('block', 'N/A')
+                    self.show_hover_tooltip(x, y, f"{station_name} ({block_name})")
                     return
         
+        # Check for section label
+        for item in items:
+            for element in self.elements:
+                if element['id'] == item and element['type'] == 'section_label':
+                    section = element['data']['section']
+                    self.canvas.itemconfig(item, fill="#FF6600")
+                    self.hover_id = item
+                    self.root.config(cursor="hand2")
+                    self.show_hover_tooltip(x, y, f"Section {section} (click to expand)")
+                    return
+        
+        # Check for block boundary if no station
+        for item in items:
+            for element in self.elements:
+                if element['id'] == item:
+                    if element['type'] in ['block_boundary', 'block_boundary_arrow']:
+                        block_name = element['data']['name']
+                        self.canvas.itemconfig(item, width=7, fill="#FF6B6B")
+                        self.hover_id = item
+                        self.root.config(cursor="hand2")
+                        self.show_hover_tooltip(x, y, block_name)
+                        return
+                    elif element['type'] == 'block_label':
+                        block_name = element['data']['name']
+                        self.root.config(cursor="hand2")
+                        self.show_hover_tooltip(x, y, block_name)
+                        return
+        
         self.root.config(cursor="")
+    
+    def show_hover_tooltip(self, x, y, text):
+        """Show a hover tooltip near the cursor."""
+        tooltip_width = len(text) * 8 + 20
+        tooltip_bg = self.canvas.create_rectangle(
+            x + 15, y - 30, x + 15 + tooltip_width, y - 5,
+            fill="#FFFACD", outline="#333", width=2, tags="tooltip"
+        )
+        tooltip_text = self.canvas.create_text(
+            x + 15 + tooltip_width // 2, y - 17,
+            text=text, font=("Arial", 10, "bold"), tags="tooltip"
+        )
     
     def show_station_details(self, station_data):
         info = f"STATION: {station_data['station']}\n"
         info += f"Block: {station_data.get('block', 'N/A')}\n"
         info += f"Railway Crossing: {station_data['crossing']}\n"
-        info += f"Branching: {station_data['branching']}\n"
-        
-        if 'line' in station_data:
-            info += f"Line: {station_data['line']}"
-        
+        info += f"Branching: {station_data['branching']}"
         self.update_info(info)
     
     def show_block_details(self, block_data):
-        info = f"BLOCK: {block_data['name']}\n"
-        info += f"Track section identifier\n"
-        info += "Click on stations within this block for more details"
+        block_name = block_data['name']
+        info = f"BLOCK: {block_name}\n"
+        info += f"Individual block identifier (Section + Block Number)\n"
+        
+        # Get all stations in this block
+        if 'start_idx' in block_data and 'end_idx' in block_data:
+            start = block_data['start_idx']
+            end = block_data['end_idx']
+            
+            if self.current_line and self.current_line in self.track_data:
+                df = self.track_data[self.current_line]
+                block_stations = []
+                for idx in range(start, end + 1):
+                    if idx < len(df):
+                        row = df.iloc[idx]
+                        station = row.get("Station", "N/A")
+                        if station != "N/A":
+                            block_stations.append(station)
+                
+                if block_stations:
+                    info += f"\nStations: {', '.join(block_stations)}"
+                else:
+                    info += f"\nNo stations in this block"
         
         self.update_info(info)
     
