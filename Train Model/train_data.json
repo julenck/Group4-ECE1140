@@ -28,11 +28,11 @@
     "outputs": {
         "velocity_mph": 0.55909076,
         "acceleration_ftps2": 1.64,
-        "position_yds": 0.8812159365183864,
+        "position_yds": 0.35527020811519694,
         "authority_yds": 327.795,
         "current_station": "Downtown",
         "next_station": "Midtown",
-        "eta_s": 1997.9960842507178,
+        "eta_s": 1999.9202764531158,
         "passengers_boarding": 80.0,
         "passengers_disembarking": 11,
         "passengers_onboard": 222,
