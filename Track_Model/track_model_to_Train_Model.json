@@ -1,0 +1,11 @@
+{
+    "block": {
+        "commanded speed": 0,
+        "commanded authority": 0
+    },
+    "beacon": {
+        "speed limit": 30,
+        "side_door": "Right",
+        "station name": "Central Station"
+    }
+}
