@@ -23,13 +23,18 @@
         "lights_on": true,
         "left_door_open": false,
         "right_door_open": false,
-        "temperature_F": 68
+        "temperature_F": 68,
+        "commanded speed": 0,
+        "commanded authority": 0,
+        "speed limit": 30,
+        "station name": "Unknown",
+        "side_door": "Right"
     },
     "outputs": {
-        "velocity_mph": 0.55909076,
-        "acceleration_ftps2": 1.64,
-        "position_yds": 0.43040531217279543,
-        "authority_yds": 327.795,
+        "velocity_mph": 0,
+        "acceleration_ftps2": -2.504541337234345,
+        "position_yds": 0.5032205547428448,
+        "authority_yds": 0,
         "current_station": "Downtown",
         "next_station": "Midtown",
         "eta_s": 1999.6453918527732,
@@ -39,6 +44,9 @@
         "left_door_open": false,
         "right_door_open": false,
         "lights_on": true,
-        "temperature_F": 68
+        "temperature_F": 68,
+        "speed_limit": 30,
+        "station_name": "Unknown",
+        "door_side": "Right"
     }
 }
