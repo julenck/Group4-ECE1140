@@ -2,36 +2,32 @@
     "Dispatcher": {
         "Trains": {
             "Train 1": {
-                "Line": "Red",
-                "Suggested Speed": "34",
-                "Authority": "3"
+                "Line": "Blue",
+                "Suggested Speed": "13",
+                "Authority": "12"
             },
             "Train 2": {
-                "Line": "Red",
-                "Authority": 3401.137,
-                "Suggested Speed": 24.855,
-                "Station Destination": "Steel Plaza",
-                "Arrival Time": "0:10"
+                "Line": "Blue",
+                "Suggested Speed": "15",
+                "Authority": "15"
             },
             "Train 3": {
                 "Line": "Blue",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": ""
+                "Suggested Speed": "13",
+                "Authority": "12"
             }
         }
     },
     "TrackController": {
-        "Train Position": "",
-        "State of the Train": "",
+        "Train Position": "Q13",
+        "State of the Train": "Running",
         "Train Failure Mode": "",
-        "Section and Block1": "q12",
+        "Section and Block1": "A13",
         "Light Color": "Red",
-        "Section and Block2": "r3",
-        "Gate": "Closed",
-        "Track Failure Mode": "",
-        "Line": "Red"
+        "Section and Block2": "",
+        "Gate": "",
+        "Track Failure Mode": "Broken Track",
+        "Line": "Green"
     },
     "TrackModel": {
         "Station": "",
@@ -39,9 +35,9 @@
         "Passengers Entering Station": ""
     },
     "MaintenenceModeOutputs": {
-        "Block Line": "Green",
-        "Closed Block": "1",
-        "Switch Line": "Green",
+        "Block Line": "",
+        "Closed Block": "",
+        "Switch Line": "Red",
         "Switch Position": "2"
     }
 }

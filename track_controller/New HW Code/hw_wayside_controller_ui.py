@@ -1,63 +1,79 @@
-from typing import List, Dict
-from hw_wayside_controller import hw_wayside_controller
-from hw_display import hw_display
+# hw_wayside_controller_ui.py
+# Wayside Controller HW module UI logic.
+# Oliver Kettelson-Belinkie, 2025
 
-class hw_wayside_controller_ui:
-    """UI orchestrator for HW (screen-only app)."""
-    def __init__(self, controller: hw_wayside_controller, display: hw_display) -> None:
+from __future__ import annotations
+from typing import Dict, List
+from hw_wayside_controller import HW_Wayside_Controller
+from hw_display import HW_Display
+
+class HW_Wayside_Controller_UI:
+
+    toggle_maintenance_mode: bool = False
+    selected_block: int | None = None
+    maintenance_active: bool = False
+
+    def __init__(self, controller: HW_Wayside_Controller, display: HW_Display) -> None:
+
         self.controller = controller
         self.display = display
-        self.maintenance_active: bool = False
 
-        # wire handlers
-        self.display.on_select_block = self._on_select_block
-        self.display.on_upload_plc = self._on_upload_plc
-        self.display.on_set_switch = self._on_set_switch
-        self.display.on_toggle_maintenance = self._on_toggle_maintenance
+    def select_block(self, block_id: str) -> None:
 
-    # ---- public runtime entry
-    def apply_vital_inputs(self, block_ids: List[int], vital_in: Dict) -> None:
-        self.controller.apply_vital_inputs(block_ids, vital_in)
-        outs = self.controller.generate_outputs(block_ids, vital_in)
-        self.display.update_blocks(block_ids or list(range(len(self.controller.light_states))))
-        self.display.show_vital(
-            emergency=outs["emergency"],
-            speed_mph=outs["speed_mph"],
-            authority_yards=outs["authority_yards"],
-            light_states=outs["light_states"],
-            gate_states=outs["gate_states"],
-            switch_states=outs["switch_states"],
-            occupied_blocks=outs["occupied_blocks"],
-        )
-
-    # ---- handlers
-    def _on_select_block(self, block_id: int) -> None:
+        self.selected_block = block_id  # store for UI
         data = self.controller.get_block_data(block_id)
-        self.display.show_block_info(data)
+        self.show_block_data(data)
 
-    def _on_upload_plc(self, path: str) -> None:
-        if not self.maintenance_active:
-            self.display.set_status("Enable maintenance to upload PLC.")
-            return
-        if not self.controller.load_plc(path):
-            self.display.set_status("PLC invalid.")
-            return
-        if self.controller.change_plc(True, path):
-            self.display.set_status(f"PLC activated: {path}")
-        else:
-            self.display.set_status("Failed to activate PLC (maintenance off?).")
+    def show_block_data(self, data: Dict) -> None:
 
-    def _on_set_switch(self, block_id: int, state: int) -> None:
-        if not self.maintenance_active:
-            self.display.set_status("Enable maintenance to set switches.")
-            return
+        print("[BLOCK DATA]", data)
+
+    def update_display(self, emergency: bool, speed_mph: float, authority_yards: int) -> None:
+
+        # Push inputs to controller (these originate from external modules; UI just forwards)
+
+        self.controller.apply_vital_inputs(
+
+            self.controller.block_ids,
+            {"emergency": emergency, "speed_mph": speed_mph, "authority_yards": authority_yards},
+        )
+        self._push_to_display()
+
+    def set_plc(self, path: str) -> bool:
+
+        ok = self.controller.load_plc(path)
+
+        if ok:
+            self.controller.change_plc(True, path)      
+        self._push_to_display()
+        return ok
+
+    def set_switch_state(self, block_id: str, state: int) -> bool:
+
         ok = self.controller.set_switch_state(block_id, state)
-        self.display.set_status("Switch updated." if ok else "Unsafe switch request.")
-        # refresh block view
-        self._on_select_block(block_id)
+        self._push_to_display()
+        return ok
 
-    def _on_toggle_maintenance(self, enabled: bool) -> None:
-        self.maintenance_active = enabled
-        self.controller.maintenance_active = enabled
-        self.display.set_maintenance_enabled(enabled)
-        self.display.set_status("Maintenance ON" if enabled else "Maintenance OFF")
+    def show_safety_report(self, report: Dict) -> None:
+
+        self.display.show_safety(report)
+
+    # frame builders
+    def build_input_frame(self) -> None: pass
+    def build_display_frame(self) -> None: pass
+    def build_maintenance_frame(self) -> None: pass
+
+    # ----- internal helper -----
+
+    def _push_to_display(self) -> None:
+        
+        outs = {
+            "emergency": self.controller.emergency,
+            "speed_mph": int(self.controller.speed_mph),
+            "authority_yards": int(self.controller.authority_yards),
+            "light_states": dict(self.controller.light_states),
+            "gate_states": dict(self.controller.gate_states),
+            "switch_states": dict(self.controller.switch_states),
+            "occupied_blocks": list(self.controller.occupied_blocks),
+        }
+        self.display.show_vital(**outs)

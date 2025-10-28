@@ -1,96 +1,192 @@
-from typing import List, Dict
-from hw_vital_check import hw_vital_check
+# hw_wayside_controller.py
+# Wayside Controller HW module core logic.
+# Oliver Kettelson-Belinkie, 2025
 
-class hw_wayside_controller:
-    def __init__(self) -> None:
-        self.active_plc: str = ""
-        self.maintenance_active: bool = False
-        self.auto_safety_enabled: bool = True
-        self.light_states: List[int] = []
-        self.gate_states: List[int] = []
-        self.switch_states: List[int] = []
-        self.occupied_blocks: List[int] = []
-        self._vital = hw_vital_check()
+from __future__ import annotations
+from typing import Dict, List, Any, Optional
+from hw_vital_check import HW_Vital_Check
 
-    # ---- maintenance
-    def load_plc(self, path: str) -> bool:
-        return self._vital.verify_file(path)
+class HW_Wayside_Controller:
+    
+    light_result: bool = False
+    switch_result: bool = False
+    gate_result: bool = False 
+    plc_result: bool = False
 
-    def change_plc(self, active: bool, plc_path: str) -> bool:
-        if not self.maintenance_active:
-            return False
-        if active and not self._vital.verify_file(plc_path):
-            return False
-        if active:
-            self.active_plc = plc_path
-        return True
+    active_trains: Dict[str, Any]
+    occupied_blocks: List[str]          # Have to add functionality w/o track model
+    light_states: Dict[str, int]
+    gate_states: Dict[str, int]
+    switch_states: Dict[str, int]
 
-    def set_switch_state(self, block_id: int, state: int) -> bool:
-        if not self.maintenance_active:
-            return False
-        self._ensure_size(block_id)
-        if not self._vital.verify_switch_change(self.switch_states, block_id, state):
-            return False
-        self.switch_states[block_id] = state
-        return True
+    active_plc: Optional[str]
+    maintenance_active: bool
+    safety_result: bool
+    safety_report: Dict
+    auto_safety_enabled: bool
 
-    # ---- runtime
-    def apply_vital_inputs(self, block_ids: List[int], vital_in: Dict) -> None:
-        self.occupied_blocks = vital_in.get("occupied_blocks", self.occupied_blocks)
+    # Inputs from other modules 
+    speed_mph: float
+    authority_yards: int
+    emergency: bool
+    closed_blocks: List[str]
 
-    def assess_safety(self, block_ids: List[int], vital_in: Dict) -> Dict:
-        return self._vital.verify_system_safety(
-            block_ids, self.light_states, self.gate_states,
-            self.switch_states, self.occupied_blocks,
-            self.active_plc, vital_in,
-        )
+    def __init__(self, block_ids: List[str]) -> None:
 
-    def enforce_safety(self, actions: Dict) -> None:
-        for b, s in actions.get("lights", []):
-            self._ensure_size(b)
-            self.light_states[b] = s
+        self.block_ids = list(block_ids)
+        self.active_trains = {}
+        self.occupied_blocks = []
+        self.light_states = {b: 0 for b in block_ids}   # 0 = red, 1 = yellow, 2 = green, 3 = very green
+        self.gate_states = {b: 0 for b in block_ids}
+        self.switch_states = {b: 0 for b in block_ids}  # 0 = straight, 1 = diverging
+        self.active_plc = None
+        self.maintenance_active = False
+        self.safety_result = True
+        self.safety_report = {}
+        self.auto_safety_enabled = True
+        self.speed_mph = 0.0
+        self.authority_yards = 0
+        self.emergency = False
+        self.closed_blocks = []
+
+        self.vital = HW_Vital_Check()
+
+    def apply_vital_inputs(self, block_ids: List, vital_in: Dict) -> None:
+
+        """Primary receive point for external inputs."""
+
+        if "speed_mph" in vital_in: self.speed_mph = float(vital_in["speed_mph"])
+        if "authority_yards" in vital_in: self.authority_yards = int(vital_in["authority_yards"])
+        if "emergency" in vital_in: self.emergency = bool(vital_in["emergency"])
+        if "occupied_blocks" in vital_in: self.occupied_blocks = list(vital_in["occupied_blocks"])
+        if "closed_blocks" in vital_in: self.closed_blocks = list(vital_in["closed_blocks"])
+
+        # Mandatory safety assessment after input change
+        self.assess_safety(block_ids, vital_in)
 
     def set_system_safe(self, emergency: bool) -> None:
-        if emergency:
-            for i in range(len(self.light_states)):
-                self.light_states[i] = 2  # RED
 
-    def generate_outputs(self, block_ids: List[int], vital_in: Dict) -> Dict:
-        report = self.assess_safety(block_ids, vital_in)
-        if report.get("unsafe") and self.auto_safety_enabled:
-            self.enforce_safety(report.get("actions", {}))
+        """Failure/Emergency input from external system."""
 
-        for b in block_ids:
-            self._ensure_size(b)
+        self.emergency = bool(emergency)
+        self.assess_safety(self.block_ids, self._current_vital_in())
 
-        return {
-            "emergency": bool(vital_in.get("emergency", False)),
-            "speed_mph": int(vital_in.get("speed_mph", 0)),
-            "authority_yards": int(vital_in.get("authority_yards", 0)),
-            "light_states": [self.light_states[b] for b in block_ids] if block_ids else self.light_states,
-            "gate_states": [self.gate_states[b] if b < len(self.gate_states) else 0 for b in block_ids] if block_ids else self.gate_states,
-            "switch_states": [self.switch_states[b] for b in block_ids] if block_ids else self.switch_states,
-            "occupied_blocks": self.occupied_blocks,
-        }
+    def confirm_switch_state(self, block_id: str, state: int) -> bool:
 
-    # ---- queries
-    def get_block_data(self, block_id: int) -> Dict:
-        self._ensure_size(block_id)
+        return block_id in self.switch_states and self.switch_states[block_id] == int(state)
+
+    # Allow CTC to request a switch change
+    def set_switch_state(self, block_id: str, state: int) -> bool:
+
+        if block_id not in self.switch_states:
+
+            return False
+        
+        self.switch_states[block_id] = int(state)
+        self.assess_safety(self.block_ids, self._current_vital_in())
+        return True
+
+    # ---------------- PLC handling ----------------
+
+    def load_plc(self, path: str) -> bool:
+
+        ok = self.vital.verify_file(path) and self.vital.check_file(path).get("ok", False)
+        self.plc_result = ok
+
+        if ok:
+            self.active_plc = path
+
+        return ok
+
+    def change_plc(self, active: bool, plc_path: str) -> bool:
+
+        if active and plc_path:
+
+            self.active_plc = plc_path
+            return True
+        
+        return False
+
+    # ---------------- logic / outputs ----------------
+    def assess_safety(self, block_ids: List, vital_in: Dict) -> Dict:
+
+        report = self.vital.verify_system_safety(
+            block_ids,
+            list(self.light_states.items()),
+            list(self.gate_states.items()),
+            list(self.switch_states.items()),
+            list(self.occupied_blocks),
+            self.active_plc,
+            {
+                **vital_in,
+                "speed_mph": self.speed_mph,
+                "authority_yards": self.authority_yards,
+                "emergency": self.emergency,
+                "closed_blocks": self.closed_blocks,
+            },
+        )
+
+        self.safety_report = report
+        self.safety_result = bool(report.get("safe", True))
+        self.enforce_safety(report.get("actions", {}))
+        self.send_final_outputs(self._final_outputs())
+        return report
+
+    def enforce_safety(self, actions: Dict) -> bool:
+
+        changed = False
+
+        if actions.get("all_signals") == "RED":
+
+            for b in self.light_states:
+                if self.light_states[b] != 0:
+                    self.light_states[b] = 0
+                    changed = True
+
+        if "speed_override" in actions:
+            self.speed_mph = float(actions["speed_override"])
+        return changed
+
+    def send_final_outputs(self, outputs: Dict) -> None:
+        return
+
+    # ---------------- data accessors ----------------
+
+    def get_block_data(self, block_id: str) -> Dict:
         return {
             "block_id": block_id,
-            "light_state": self.light_states[block_id],
-            "gate_state": self.gate_states[block_id],
-            "switch_state": self.switch_states[block_id],
-            "occupied": (block_id in self.occupied_blocks),
-            "active_plc": self.active_plc or "(none)",
+            "light": self.light_states.get(block_id, 0),
+            "switch": self.switch_states.get(block_id, 0),
+            "gate": self.gate_states.get(block_id, 0),
+            "occupied": block_id in self.occupied_blocks,
+            "closed": block_id in self.closed_blocks,
         }
 
-    # ---- helpers
-    def _ensure_size(self, block_id: int) -> None:
-        target = block_id + 1
-        while len(self.light_states) < target:
-            self.light_states.append(0)
-        while len(self.gate_states) < target:
-            self.gate_states.append(0)
-        while len(self.switch_states) < target:
-            self.switch_states.append(0)
+    # ---------------- internal helpers ----------------
+
+    def _current_vital_in(self) -> Dict:
+
+        return {
+            "speed_mph": self.speed_mph,
+            "authority_yards": self.authority_yards,
+            "emergency": self.emergency,
+            "occupied_blocks": list(self.occupied_blocks),
+            "closed_blocks": list(self.closed_blocks),
+        }
+
+    def _final_outputs(self) -> Dict:
+
+        return {
+            "emergency": self.emergency,
+            "speed_mph": int(self.speed_mph),
+            "authority_yards": int(self.authority_yards),
+            "light_states": dict(self.light_states),
+            "gate_states": dict(self.gate_states),
+            "switch_states": dict(self.switch_states),
+            "occupied_blocks": list(self.occupied_blocks),
+        }
+
+    def generate_outputs(self, block_ids: List, vital_in: Dict) -> Dict:
+
+        self.assess_safety(block_ids, vital_in)
+        return self._final_outputs()
