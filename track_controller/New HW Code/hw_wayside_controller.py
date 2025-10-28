@@ -110,26 +110,26 @@ class HW_Wayside_Controller:
     # ---------------- logic / outputs ----------------
     def assess_safety(self, block_ids: List, vital_in: Dict) -> Dict:
 
+        # Run PLC cycle (no-op placeholder). Real PLC execution would
+        # parse/execute the loaded PLC file and update light/switch/gate
+        # states. Keep this a safe no-op for now to avoid runtime errors
+        # and to make the controller usable during testing.
+        self.run_plc_cycle()
+
+        # --- Step 2: Vital safety verification ---
         report = self.vital.verify_system_safety(
-            block_ids,
-            list(self.light_states.items()),
-            list(self.gate_states.items()),
-            list(self.switch_states.items()),
-            list(self.occupied_blocks),
-            self.active_plc,
-            {
-                **vital_in,
-                "speed_mph": self.speed_mph,
-                "authority_yards": self.authority_yards,
-                "emergency": self.emergency,
-                "closed_blocks": self.closed_blocks,
-            },
+            block_ids=block_ids,
+            light_states=list(self.light_states.items()),
+            gate_states=list(self.gate_states.items()),
+            switch_states=list(self.switch_states.items()),
+            occupied_blocks=self.occupied_blocks,
+            active_plc=self.active_plc,
+            vital_in=vital_in,
         )
 
-        self.safety_report = report
-        self.safety_result = bool(report.get("safe", True))
+        # --- Step 3: Enforce results ---
         self.enforce_safety(report.get("actions", {}))
-        self.send_final_outputs(self._final_outputs())
+        self.safety_report = report
         return report
 
     def enforce_safety(self, actions: Dict) -> bool:
@@ -190,3 +190,19 @@ class HW_Wayside_Controller:
 
         self.assess_safety(block_ids, vital_in)
         return self._final_outputs()
+
+    # ---------------- internal plc/runtime helpers ----------------
+    def run_plc_cycle(self) -> None:
+        """Placeholder for running a loaded PLC file.
+
+        Currently this is intentionally a no-op to avoid importing and
+        executing arbitrary PLC code from disk. If an active PLC is set
+        we keep plc_result True (as set by load_plc); otherwise False.
+        Future work: run PLC in a safe subprocess or restricted eval.
+        """
+        if self.active_plc:
+            # PLC was previously validated by HW_Vital_Check.verify_file()
+            # and check_file(); don't execute it here — just note presence.
+            self.plc_result = True
+        else:
+            self.plc_result = False
