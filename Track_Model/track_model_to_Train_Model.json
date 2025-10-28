@@ -6,6 +6,7 @@
     "beacon": {
         "speed limit": 30,
         "side_door": "Right",
-        "station name": "Central Station"
+        "current station": "Central Station",
+        "next station": "Park Street"
     }
 }
