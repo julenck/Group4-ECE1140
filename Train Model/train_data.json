@@ -21,9 +21,9 @@
         "station name": "Unknown"
     },
     "outputs": {
-        "velocity_mph": 0.55909076,
-        "acceleration_ftps2": 1.64,
-        "position_yds": 0.8088646656914137,
+        "velocity_mph": 0,
+        "acceleration_ftps2": -2.504541337234345,
+        "position_yds": 0.6038646656914137,
         "authority_yds": 0,
         "station_name": "Unknown",
         "next_station": "Park Street",
