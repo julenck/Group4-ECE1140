@@ -21,11 +21,11 @@
         "station name": "Unknown"
     },
     "outputs": {
-        "velocity_mph": 0,
-        "acceleration_ftps2": -2.504541337234345,
-        "position_yds": 0.6038646656914137,
+        "velocity_mph": 0.0,
+        "acceleration_ftps2": 0.0,
+        "position_yds": 0.0,
         "authority_yds": 0,
-        "station_name": "Unknown",
+        "station_name": "Central Station",
         "next_station": "Park Street",
         "left_door_open": false,
         "right_door_open": true,
