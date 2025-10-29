@@ -3,32 +3,28 @@ from tkinter import ttk
 import json
 import os
 
-# === File paths ===
+# === File Paths ===
 TRACK_TO_TRAIN_FILE = "../Track_Model/track_model_to_Train_Model.json"
 TRAIN_DATA_FILE = "train_data.json"
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
-# === Train Model Core (simplified, no specs) ===
+# === Train Model Core (no specs) ===
 class TrainModel:
     def __init__(self):
-        """Simplified Train Model for test UI"""
+        """Core physics and dynamic state."""
         self.velocity_mph = 0.0
         self.acceleration_ftps2 = 0.0
         self.position_yds = 0.0
         self.authority_yds = 0.0
-        self.current_station = "Unknown"
-        self.next_station = "Unknown"
-        self.left_door_open = False
-        self.right_door_open = False
-        self.speed_limit = 0
         self.dt = 0.5
 
-    def update(self, commanded_speed, commanded_authority, speed_limit, current_station, next_station, side_door):
-        """Basic physics + state update from Track Model data"""
+    def update(self, commanded_speed, commanded_authority):
+        """Simple kinematic update simulation."""
         target_speed_ftps = commanded_speed * 1.46667
         accel = (target_speed_ftps - (self.velocity_mph * 1.46667)) / 2.0
+        # Clamp acceleration to realistic range
         self.acceleration_ftps2 = max(min(accel, 1.64), -3.94)
 
         delta_v_ftps = self.acceleration_ftps2 * self.dt
@@ -39,107 +35,149 @@ class TrainModel:
         self.position_yds += delta_x_yds
         self.authority_yds = commanded_authority
 
-        self.left_door_open = side_door.lower() == "left"
-        self.right_door_open = side_door.lower() == "right"
-        self.current_station = current_station
-        self.next_station = next_station
-        self.speed_limit = speed_limit
-
         return {
             "velocity_mph": self.velocity_mph,
             "acceleration_ftps2": self.acceleration_ftps2,
             "position_yds": self.position_yds,
-            "authority_yds": self.authority_yds,
-            "current_station": self.current_station,
-            "next_station": self.next_station,
-            "left_door_open": self.left_door_open,
-            "right_door_open": self.right_door_open,
-            "speed_limit": self.speed_limit
+            "authority_yds": self.authority_yds
         }
 
 
-# === Test UI ===
+# === Train Model Test UI (Integrated + Editable) ===
 class TrainModelTestUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Train Model Test UI - Integrated with Track Model")
-        self.geometry("750x500")
+        self.geometry("850x800")
 
         self.model = TrainModel()
-        self.data = {}
-        self.create_ui()
+        self.inputs = {}
+        self.outputs = {}
 
+        self.create_ui()
+        self.load_from_track_model()
         self.update_loop()
 
+    # ---------- UI Layout ----------
     def create_ui(self):
-        """UI layout setup"""
-        frame = ttk.LabelFrame(self, text="Train Model Data (from Track Model)")
-        frame.pack(fill="both", expand=True, padx=15, pady=15)
+        """Builds all UI panels."""
+        title = ttk.Label(
+            self,
+            text="Train Model Input/Output Testing Interface (Integrated Mode)",
+            font=("Segoe UI", 12, "bold")
+        )
+        title.pack(pady=10)
 
-        self.labels = {}
-        for key in [
-            "Velocity (mph)",
-            "Acceleration (ft/s²)",
-            "Position (yds)",
-            "Authority (yds)",
-            "Current Station",
-            "Next Station",
+        # === INPUT FRAME ===
+        input_frame = ttk.LabelFrame(self, text="Inputs (Editable Fields - From Track Model)")
+        input_frame.pack(fill="x", padx=15, pady=10)
+
+        self.input_fields = {}
+        input_labels = [
+            "Commanded Speed (mph)",
+            "Commanded Authority (yds)",
             "Speed Limit (mph)",
-            "Left Door",
-            "Right Door"
-        ]:
-            lbl = ttk.Label(frame, text=f"{key}: --")
-            lbl.pack(anchor="w", padx=10, pady=3)
-            self.labels[key] = lbl
+            "Side Door (Left/Right)",
+            "Current Station",
+            "Next Station"
+        ]
 
-    def read_from_track_model(self):
-        """Read data from Track Model JSON"""
+        for label in input_labels:
+            frame = ttk.Frame(input_frame)
+            frame.pack(fill="x", pady=3)
+            ttk.Label(frame, text=label, width=25).pack(side="left", padx=5)
+            entry = ttk.Entry(frame, width=20)
+            entry.pack(side="left")
+            self.input_fields[label] = entry
+
+        ttk.Button(
+            self,
+            text="Update Inputs & Compute Outputs",
+            command=self.compute_outputs
+        ).pack(pady=8)
+
+        # === OUTPUT FRAME ===
+        output_frame = ttk.LabelFrame(self, text="Outputs (Generated by Train Model - Imperial Units)")
+        output_frame.pack(fill="both", expand=True, padx=15, pady=10)
+        self.output_box = tk.Text(output_frame, height=18, wrap="word")
+        self.output_box.pack(fill="both", expand=True, padx=5, pady=5)
+
+    # ---------- File Reading ----------
+    def load_from_track_model(self):
+        """Load latest Track Model data and fill the UI fields."""
         try:
             with open(TRACK_TO_TRAIN_FILE, "r") as f:
                 data = json.load(f)
             block = data.get("block", {})
             beacon = data.get("beacon", {})
-            return {
-                "commanded speed": block.get("commanded speed", 0),
-                "commanded authority": block.get("commanded authority", 0),
-                "speed limit": beacon.get("speed limit", 30),
-                "side_door": beacon.get("side_door", "Right"),
-                "current station": beacon.get("current station", "Unknown"),
-                "next station": beacon.get("next station", "Unknown")
-            }
+
+            # Fill UI input fields automatically
+            self.input_fields["Commanded Speed (mph)"].delete(0, "end")
+            self.input_fields["Commanded Speed (mph)"].insert(0, str(block.get("commanded speed", 0)))
+
+            self.input_fields["Commanded Authority (yds)"].delete(0, "end")
+            self.input_fields["Commanded Authority (yds)"].insert(0, str(block.get("commanded authority", 0)))
+
+            self.input_fields["Speed Limit (mph)"].delete(0, "end")
+            self.input_fields["Speed Limit (mph)"].insert(0, str(beacon.get("speed limit", 30)))
+
+            self.input_fields["Side Door (Left/Right)"].delete(0, "end")
+            self.input_fields["Side Door (Left/Right)"].insert(0, beacon.get("side_door", "Right"))
+
+            self.input_fields["Current Station"].delete(0, "end")
+            self.input_fields["Current Station"].insert(0, beacon.get("current station", "Unknown"))
+
+            self.input_fields["Next Station"].delete(0, "end")
+            self.input_fields["Next Station"].insert(0, beacon.get("next station", "Unknown"))
+
         except Exception as e:
             print(f"[Error] Cannot read Track Model JSON: {e}")
-            return None
 
+    # ---------- Compute Outputs ----------
+    def compute_outputs(self):
+        """Run physics model and display results."""
+        try:
+            commanded_speed = float(self.input_fields["Commanded Speed (mph)"].get())
+            commanded_authority = float(self.input_fields["Commanded Authority (yds)"].get())
+            speed_limit = float(self.input_fields["Speed Limit (mph)"].get())
+            side_door = self.input_fields["Side Door (Left/Right)"].get()
+            current_station = self.input_fields["Current Station"].get()
+            next_station = self.input_fields["Next Station"].get()
+        except ValueError:
+            print("[Error] Invalid numeric input.")
+            return
+
+        # Update physics outputs
+        physics = self.model.update(commanded_speed, commanded_authority)
+
+        # Compute door and station outputs
+        left_door_open = side_door.lower() == "left"
+        right_door_open = side_door.lower() == "right"
+
+        outputs = {
+            **physics,
+            "speed_limit_mph": speed_limit,
+            "side_door": side_door,
+            "current_station": current_station,
+            "next_station": next_station,
+            "left_door_open": left_door_open,
+            "right_door_open": right_door_open
+        }
+
+        self.display_outputs(outputs)
+
+    # ---------- Output Display ----------
+    def display_outputs(self, outputs):
+        """Render outputs in the text box."""
+        self.output_box.delete("1.0", "end")
+        for key, value in outputs.items():
+            self.output_box.insert("end", f"{key}: {value}\n")
+
+    # ---------- Auto Refresh ----------
     def update_loop(self):
-        """Periodic update"""
-        inputs = self.read_from_track_model()
-        if inputs:
-            outputs = self.model.update(
-                commanded_speed=inputs["commanded speed"],
-                commanded_authority=inputs["commanded authority"],
-                speed_limit=inputs["speed limit"],
-                current_station=inputs["current station"],
-                next_station=inputs["next station"],
-                side_door=inputs["side_door"]
-            )
-
-            # Refresh UI
-            self.labels["Velocity (mph)"].config(text=f"Velocity: {outputs['velocity_mph']:.2f} mph")
-            self.labels["Acceleration (ft/s²)"].config(text=f"Acceleration: {outputs['acceleration_ftps2']:.2f} ft/s²")
-            self.labels["Position (yds)"].config(text=f"Position: {outputs['position_yds']:.1f} yds")
-            self.labels["Authority (yds)"].config(text=f"Authority: {outputs['authority_yds']:.1f} yds")
-            self.labels["Current Station"].config(text=f"Current Station: {outputs['current_station']}")
-            self.labels["Next Station"].config(text=f"Next Station: {outputs['next_station']}")
-            self.labels["Speed Limit (mph)"].config(text=f"Speed Limit: {outputs['speed_limit']} mph")
-            self.labels["Left Door"].config(
-                text=f"Left Door: {'Open' if outputs['left_door_open'] else 'Closed'}"
-            )
-            self.labels["Right Door"].config(
-                text=f"Right Door: {'Open' if outputs['right_door_open'] else 'Closed'}"
-            )
-
-        self.after(int(self.model.dt * 1000), self.update_loop)
+        """Auto-refresh Track Model inputs every 0.5s."""
+        self.load_from_track_model()
+        self.after(500, self.update_loop)
 
 
 if __name__ == "__main__":
