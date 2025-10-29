@@ -5,10 +5,12 @@
 from __future__ import annotations
 from typing import Dict, List, Any, Optional
 from hw_vital_check import HW_Vital_Check
+import importlib.util
+from types import ModuleType
 
 class HW_Wayside_Controller:
-    
-    light_result: bool = False
+
+    light_result: bool = False          # State change result placeholders
     switch_result: bool = False
     gate_result: bool = False 
     plc_result: bool = False
@@ -35,21 +37,24 @@ class HW_Wayside_Controller:
 
         self.block_ids = list(block_ids)
         self.active_trains = {}
-        self.occupied_blocks = []
-        self.light_states = {b: 0 for b in block_ids}   # 0 = red, 1 = yellow, 2 = green, 3 = very green
-        self.gate_states = {b: 0 for b in block_ids}
-        self.switch_states = {b: 0 for b in block_ids}  # 0 = straight, 1 = diverging
+        self.light_states = getattr(self, "light_states", {b: 0 for b in self.block_ids})
+        self.switch_states = getattr(self, "switch_states", {b: 0 for b in self.block_ids})
+        self.gate_states = getattr(self, "gate_states", {})
         self.active_plc = None
         self.maintenance_active = False
         self.safety_result = True
         self.safety_report = {}
         self.auto_safety_enabled = True
-        self.speed_mph = 0.0
-        self.authority_yards = 0
-        self.emergency = False
-        self.closed_blocks = []
+        self.occupied_blocks = getattr(self, "occupied_blocks", [])     # Rely on external modules to set these
+        self.closed_blocks   = getattr(self, "closed_blocks", [])
+        self.emergency       = getattr(self, "emergency", False)
+        self.speed_mph       = getattr(self, "speed_mph", 0.0)
+        self.authority_yards = getattr(self, "authority_yards", 0)
 
         self.vital = HW_Vital_Check()
+
+        self._plc_module: ModuleType | None = None
+        self.active_plc: str = ""
 
     def apply_vital_inputs(self, block_ids: List, vital_in: Dict) -> None:
 
@@ -90,13 +95,34 @@ class HW_Wayside_Controller:
 
     def load_plc(self, path: str) -> bool:
 
-        ok = self.vital.verify_file(path) and self.vital.check_file(path).get("ok", False)
-        self.plc_result = ok
+        try:
+            spec = importlib.util.spec_from_file_location("user_plc", path)
 
-        if ok:
+            if spec is None or spec.loader is None:
+
+                return False
+            
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+
+            if not hasattr(mod, "tick"):
+
+                return False
+            
+            # optional init
+            if hasattr(mod, "init"):
+                try:
+                    mod.init(self.block_ids)
+                except Exception:
+                    pass
+
+            self._plc_module = mod
             self.active_plc = path
+            return True
+        
+        except Exception:
 
-        return ok
+            return False
 
     def change_plc(self, active: bool, plc_path: str) -> bool:
 
@@ -108,16 +134,16 @@ class HW_Wayside_Controller:
         return False
 
     # ---------------- logic / outputs ----------------
+
     def assess_safety(self, block_ids: List, vital_in: Dict) -> Dict:
 
-        # Run PLC cycle (no-op placeholder). Real PLC execution would
-        # parse/execute the loaded PLC file and update light/switch/gate
-        # states. Keep this a safe no-op for now to avoid runtime errors
-        # and to make the controller usable during testing.
+        # --- Step 1: Run PLC cycle ---
+
         self.run_plc_cycle()
 
         # --- Step 2: Vital safety verification ---
         report = self.vital.verify_system_safety(
+
             block_ids=block_ids,
             light_states=list(self.light_states.items()),
             gate_states=list(self.gate_states.items()),
@@ -144,15 +170,18 @@ class HW_Wayside_Controller:
                     changed = True
 
         if "speed_override" in actions:
+
             self.speed_mph = float(actions["speed_override"])
         return changed
 
     def send_final_outputs(self, outputs: Dict) -> None:
+
         return
 
     # ---------------- data accessors ----------------
 
     def get_block_data(self, block_id: str) -> Dict:
+
         return {
             "block_id": block_id,
             "light": self.light_states.get(block_id, 0),
@@ -193,16 +222,52 @@ class HW_Wayside_Controller:
 
     # ---------------- internal plc/runtime helpers ----------------
     def run_plc_cycle(self) -> None:
-        """Placeholder for running a loaded PLC file.
 
-        Currently this is intentionally a no-op to avoid importing and
-        executing arbitrary PLC code from disk. If an active PLC is set
-        we keep plc_result True (as set by load_plc); otherwise False.
-        Future work: run PLC in a safe subprocess or restricted eval.
-        """
-        if self.active_plc:
-            # PLC was previously validated by HW_Vital_Check.verify_file()
-            # and check_file(); don't execute it here — just note presence.
-            self.plc_result = True
-        else:
-            self.plc_result = False
+        if not self._plc_module:
+            return
+
+        ctx = {
+            "occupied": set(self.occupied_blocks),
+            "closed": set(self.closed_blocks),
+            "emergency": bool(self.emergency),
+            "speed_mph": float(self.speed_mph),
+            "authority_yards": int(self.authority_yards),
+            "blocks": list(self.block_ids),
+        }
+
+        try:
+            proposals = self._plc_module.tick(ctx) or []
+        except Exception:
+            return  # never let PLC crash the vital loop
+
+        for kind, bid, val in proposals:
+            try:
+                val = int(val)
+            except Exception:
+                continue
+        if kind == "light":
+
+            ok = True
+
+            if hasattr(self.vital, "verify_light_change"):
+                ok = self.vital.verify_light_change(list(self.light_states.items()), bid, val)
+            if ok:
+                self.light_states[bid] = val
+
+        elif kind == "switch":
+
+            ok = True
+
+            if hasattr(self.vital, "verify_switch_change"):
+                ok = self.vital.verify_switch_change(list(self.switch_states.items()), bid, val)
+            if ok:
+                self.switch_states[bid] = val
+
+        elif kind == "gate":
+            
+            ok = True
+            
+            if hasattr(self.vital, "verify_gate_change"):
+                ok = self.vital.verify_gate_change(list(self.gate_states.items()), bid, val)
+            if ok:
+                self.gate_states[bid] = val

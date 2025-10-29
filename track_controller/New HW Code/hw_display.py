@@ -5,14 +5,13 @@
 import tkinter as tk
 from tkinter import ttk
 from typing import Callable, Dict, List, Tuple, Optional
-from PIL import Image, ImageTk  # requires Pillow: pip install pillow
+from PIL import Image, ImageTk
 import os
 
 class HW_Display:
 
     is_ready: bool = False
 
-    # --- optional event handlers the UI can set from hw_wayside_controller_ui.py
     _on_upload_plc: Optional[Callable[[], None]] = None
     _on_select_block: Optional[Callable[[str], None]] = None
     _on_set_switch: Optional[Callable[[str, int], None]] = None
@@ -20,14 +19,17 @@ class HW_Display:
 
     def __init__(self, root: tk.Tk, available_blocks=None):
         self.root = root
-        self.root.title("Wayside Controller")
+        self.root.title("Wayside Controller HW")
         self._build_layout()
+
         # preload block list if provided
         if available_blocks:
+
             self.set_blocks(list(available_blocks))
+
         self.is_ready = True
 
-    # ---- public wiring helpers ------------------------------------------------
+    # ---- public helpers ------------------------------------------------
 
     def set_handlers(
             
@@ -48,14 +50,17 @@ class HW_Display:
 
         root = self.root
         for c in range(12):
+
             root.grid_columnconfigure(c, weight=1, uniform="col")
         for r in range(6):
+
             root.grid_rowconfigure(r, weight=1)
 
         # Top row: Map (cols 0-6), Vital (cols 7-11)
         self.map_card = self._card(root, "Map", row=0, col=0, colspan=7, rowspan=3)
         self.map_canvas = tk.Canvas(self.map_card["body"], bg="#E9ECEF", highlightthickness=0)
         self.map_canvas.pack(fill="both", expand=True)
+
         # redraw map when canvas is resized so the image stays centered/scaled
         self.map_canvas.bind("<Configure>", lambda _evt: self._redraw_map())
 
@@ -141,10 +146,12 @@ class HW_Display:
 
     # ---- event handlers (UI side connects to controller UI) -------------------
     def _handle_upload_plc(self):
+
         if self._on_upload_plc:
             self._on_upload_plc()
 
     def _handle_select_block(self, _evt=None):
+
         sel = self.block_list.curselection()
         if not sel:
             return
@@ -153,6 +160,7 @@ class HW_Display:
             self._on_select_block(block_id)
 
     def _handle_set_switch(self):
+
         if not self._on_set_switch:
             return
         bid = self.switch_choice.get().strip()
@@ -165,12 +173,16 @@ class HW_Display:
         self._on_set_switch(bid, state)
 
     def _handle_toggle_maintenance(self):
+
         active = bool(self.maint_var.get())
         self._set_maintenance_enabled(active)
+
         if self._on_toggle_maintenance:
+
             self._on_toggle_maintenance(active)
 
     def _set_maintenance_enabled(self, enabled: bool):
+        
         new_state = "readonly" if enabled else "disabled"
         self.switch_choice.configure(state=new_state)
         self.state_choice.configure(state=new_state)

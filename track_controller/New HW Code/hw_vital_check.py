@@ -7,31 +7,31 @@ from typing import List, Dict, Any, Optional
 
 class HW_Vital_Check:
     
-    def verify_light_change(self, states: List, block_id: str, new_state: int) -> bool:
+    def verify_light_change(self, states: List, block_id: str, new_state: int) -> bool:     #placeholder
         return True
 
-    def verify_switch_change(self, states: List, block_id: str, new_state: int) -> bool:
+    def verify_switch_change(self, states: List, block_id: str, new_state: int) -> bool:    #placeholder
         return True
 
-    def verify_gate_change(self, states: List, block_id: str, new_state: int) -> bool:
+    def verify_gate_change(self, states: List, block_id: str, new_state: int) -> bool:      #placeholder
         return True
 
-    def check_light(self, block_id: str, state: int) -> bool:
+    def check_light(self, block_id: str, state: int) -> bool:                               #placeholder
         return True
 
-    def check_switch(self, block_id: str, state: int) -> bool:
+    def check_switch(self, block_id: str, state: int) -> bool:                              #placeholder 
         return True
 
-    def check_gate(self, block_id: str, state: int) -> bool:
+    def check_gate(self, block_id: str, state: int) -> bool:                                #placeholder
         return True
 
-    def verify_file(self, plc_path: str) -> bool:
+    def verify_file(self, plc_path: str) -> bool:                                           #placeholder
         return True
 
-    def check_file(self, plc_path: str) -> Dict:
+    def check_file(self, plc_path: str) -> Dict:                                            #placeholder
         return {"ok": True, "warnings": [], "errors": []}
 
-    def verify_system_safety(
+    def verify_system_safety(               
         self,
         block_ids: List,
         light_states: List,

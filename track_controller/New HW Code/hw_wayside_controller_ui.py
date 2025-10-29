@@ -11,7 +11,7 @@ from tkinter import filedialog
 
 class HW_Wayside_Controller_UI:
 
-    toggle_maintenance_mode: bool = False
+    toggle_maintenance_mode: bool = False       # UI starting states
     selected_block: int | None = None
     maintenance_active: bool = False
 
@@ -20,7 +20,7 @@ class HW_Wayside_Controller_UI:
         self.controller = controller
         self.display = display
 
-        self.display.set_handlers(
+        self.display.set_handlers(                              # Callbacks for UI actions
             on_upload_plc=self._on_upload_plc_clicked,
             on_select_block=self.select_block,
             on_set_switch=self.set_switch_state,
@@ -59,7 +59,9 @@ class HW_Wayside_Controller_UI:
         ok = self.controller.load_plc(path)
 
         if ok:
-            self.controller.change_plc(True, path)      
+
+            self.controller.change_plc(True, path) 
+
         self._push_to_display()
         return ok
 
@@ -81,32 +83,41 @@ class HW_Wayside_Controller_UI:
     def _ask_plc_path(self) -> str:
 
         return filedialog.askopenfilename(
+
             title="Select PLC file",
             filetypes=[("Python PLC files", "*.py"), ("All files", "*.*")],
         )
 
     def _on_upload_plc_clicked(self):
+
         path = self._ask_plc_path()
+
         if not path:
+
             self.display.show_status("PLC load canceled")
             return
 
         ok = self.controller.load_plc(path)
+
         if ok:
+
             self.display.show_status(f"PLC loaded: {os.path.basename(path)}")
+
             # Run one safety + PLC pass so new states appear
             vital_in = {"speed_mph": 0, "authority_yards": 0, "emergency": False,
                         "occupied_blocks": [], "closed_blocks": []}
+            
             self.controller.assess_safety(list(self.controller.light_states.keys()), vital_in)
             self._push_to_display()
         else:
-            self.display.show_status("PLC load failed (see console)")
+
+            self.display.show_status("PLC load failed")
+
 
     # ----- internal helper -----
 
-    def _push_to_display(self) -> None:
-        # Convert internal dicts to the (bid, state) list-tuples expected
-        # by the display API.
+    def _push_to_display(self) -> None:         # Push current controller state to UI display
+        
         outs = {
             "emergency": self.controller.emergency,
             "speed_mph": int(self.controller.speed_mph),
