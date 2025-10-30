@@ -10,13 +10,13 @@ import sys
 import time
 
 try:
-    from gpiozero import LED, Button
+    from gpiozero import LED, Button # type: ignore
     GPIOZERO_AVAILABLE = True
 except Exception:
     GPIOZERO_AVAILABLE = False
 
 try:
-    from smbus2 import SMBus
+    from smbus2 import SMBus # type: ignore
     I2C_AVAILABLE = True
 except Exception:
     I2C_AVAILABLE = False
@@ -27,8 +27,153 @@ sys.path.append(parent_dir)
 
 #import API
 from api.train_controller_api import train_controller_api
+#import hardware
+from train_controller_hardware import train_controller_hardware
 
-class hw_train_controller_ui(tk.Tk):
+class train_controller:
+
+    #define non-functional controls here, get them from the api with a function?!
+
+    def __init__(self, ui, api, gpio_pins, i2c_bus_number, i2c_address):
+        self.ui = ui
+        self.api = api
+        self.gpio_pins = gpio_pins
+        self.i2c_bus_number = i2c_bus_number
+        self.i2c_address = i2c_address
+        self.hardware = None
+        self.i2c_bus = None
+        self.i2c_devices = {"lcd": False, "adc": False, "seven_segment": False}
+        self.seven_segment_present = False
+        self.gpio_leds = {}
+        self.gpio_buttons = {}
+        self.seven_segment_address = None
+        self.lcd_address = None
+        self.lcd_backlight = 0x08
+        self.lcd_rs = 0x01
+        self.lcd_rw = 0x02
+        self.lcd_enable = 0x04
+        self.validators = [VitalValidatorFirst(), VitalValidatorSecond()] # instantiate validators
+
+    def init_hardware(self):
+        try:
+            self.hardware = train_controller_hardware(
+                ui = self,
+                api = self.api,
+                gpio_pins = self.GPIO_PINS,
+                i2c_bus_number = self.i2c_bus_number,
+                i2c_address = self.i2c_address,
+                controller = self # pass controller reference
+            )
+            self.hardware.init_hardware()
+
+            self.i2c_bus = self.hardware.i2c_bus
+            self.i2c_devices = self.hardware.i2c_devices
+            self.seven_segment_present = getattr(self.hardware, 'seven_segment_present', False)
+            self.gpio_leds = getattr(self.hardware, 'gpio_leds', {})
+            self.gpio_buttons = getattr(self.hardware, 'gpio_buttons', {})
+            self.seven_segment_address = getattr(self.hardware, 'seven_segment_address', None)
+            self.lcd_address = getattr(self.hardware, 'lcd_address', None)
+            self.lcd_backlight = getattr(self.hardware, 'lcd_backlight', 0x08)
+            self.lcd_rs = getattr(self.hardware, 'lcd_rs', 0x01)
+            self.lcd_rw = getattr(self.hardware, 'lcd_rw', 0x02)
+            self.lcd_enable = getattr(self.hardware, 'lcd_enable', 0x04)
+        except Exception as e:
+            print(f"Hardware init error: {e}")
+
+    def vital_control_check_and_update(self, changes: dict):
+        """Run validators and apply vital changes to API only if accepted."""
+        # build a vital_train_controls candidate from current state + changes
+        state = self.api.get_state().copy()
+        candidate = vital_train_controls(
+            kp = state.get('kp', 0.0),
+            ki = state.get('ki', 0.0),
+            train_velocity = state.get('train_velocity', 0.0),
+            driver_velocity = changes.get('driver_velocity', state.get('driver_velocity', 0.0)),
+            emergency_brake = changes.get('emergency_brake', state.get('emergency_brake', False)),
+            service_brake = changes.get('service_brake', state.get('service_brake', 0)),
+            power_command = state.get('power_command', 0.0),
+            commanded_authority = state.get('commanded_authority', 0.0),
+            speed_limit = state.get('speed_limit', 0.0)
+        )
+
+        for v in self.validators:
+            ok, reason = v.validate(candidate)
+            if not ok:
+                print(f"Vital validation failed: {reason}")
+                return False
+
+        # validators passed -> commit only the requested vital fields
+        self.api.update_state({k: v for k, v in changes.items()})
+        return True
+    
+    def calculate_power_command(self, state):
+            """Calculate power command based on speed difference and Kp/Ki values."""
+            current_speed = state['train_velocity']
+            driver_set_speed = state['driver_velocity']
+            kp = state['kp']
+            ki = state['ki']
+            
+            speed_error = driver_set_speed - current_speed
+            
+            power = (kp * speed_error) + (ki * speed_error * 0.5)  # 0.5 is dt
+            
+            power = max(0, min(power, 120000))  # 120kW max power
+            
+            return power
+
+    #not yet completed (still just a placeholder from it #2 feedback)
+    def emergency_brake_activated(self):
+        current_state = self.api.get_state()
+        # if emergency brake is active, decreease speed to 0
+        # another way to do this is when e brake is active, disable usage of set speed potentiometer
+        if current_state['emergency_brake']:
+            self.api.update_state({'driver_velocity': 0, 'emergency_brake': True})
+        else:
+            self.api.update_state({'emergency_brake': False})
+
+    def manual_mode_active(self):
+        current_state = self.api.get_state()
+        # if manual mode is active, disable automatic speed control
+        if current_state['manual_mode']:
+            self.api.update_state({'manual_mode': True})
+        else:
+            self.api.update_state({'manual_mode': False})
+
+    def automatic_mode_active(self):
+        current_state = self.api.get_state()
+        # if automatic mode is active, enable automatic speed control
+        if current_state['manual_mode'] != True:
+            self.api.update_state({'automatic_mode': True})
+        else:
+            self.api.update_state({'automatic_mode': False})
+
+    def detect_failure_mode(self, curr: vital_train_controls, prev: vital_train_controls, dt: float):
+        """Detect engine, brake, or signal failure based on temporal behavior."""
+        # Engine failure: commanded power but no acceleration
+        if curr.power_command > 0 and (curr.current_velocity - prev.current_velocity)/dt < 0.05:
+            return "ENGINE_FAILURE"
+
+        # Brake failure: braking command but not decelerating
+        if (curr.service_brake or curr.emergency_brake) and \
+           (prev.current_velocity - curr.current_velocity)/dt < 0.05:
+            return "BRAKE_FAILURE"
+
+        # Signal failure: stale or inconsistent authority/commanded speed
+        if curr.authority <= 0 and curr.power_command > 0:
+            return "SIGNAL_FAILURE"
+
+        return None
+    
+    def handle_failure_mode(self, mode):
+        if mode == "ENGINE_FAILURE":
+            self.api.update_state({"power_command": 0})
+        elif mode == "BRAKE_FAILURE":
+            self.api.update_state({"emergency_brake": True})
+        elif mode == "SIGNAL_FAILURE":
+            self.api.update_state({"authority": 0, "power_command": 0})
+        self.log_event(f"Failure detected: {mode}")
+
+class train_controller_ui(tk.Tk):
 
     def __init__(self):
         super().__init__()
@@ -79,13 +224,6 @@ class hw_train_controller_ui(tk.Tk):
             "lcd": 0x27,
             "adc": 0x48,
             "seven_segment": 0x70
-        }
-
-        self.i2c_bus = None
-        self.i2c_devices = {
-            "lcd": False,
-            "adc": False,
-            "seven_segment": False
         }
 
         #main frame which shows important train information panel
@@ -155,6 +293,15 @@ class hw_train_controller_ui(tk.Tk):
         self.ki_entry = ttk.Entry(engineering_frame, textvariable=self.ki_var, width=20)
         self.ki_entry.grid(row=1, column=1, pady=(2,6))
 
+        # Create controller instance and hook apply button to controller method
+        self.controller = train_controller(
+            ui = self,
+            api = self.api,
+            gpio_pins = self.GPIO_PINS,
+            i2c_bus_number = self.i2c_bus_number,
+            i2c_address = self.i2c_address
+        )
+
         # setting apply button to only be applied once
         self.apply_button = ttk.Button(engineering_frame, text="Apply", command=self.lock_engineering_values)
         self.apply_button.grid(row=2, column=0, columnspan=2, pady=(8,2), sticky="ew")
@@ -163,133 +310,35 @@ class hw_train_controller_ui(tk.Tk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        self.init_hardware()
+        try:
+            self.controller.init_hardware()
+        except Exception as e:
+            print(f"Controller hardware init error: {e}")
 
         self.update_interval = 500  # 500ms = 0.5 seconds
         self.after(self.update_interval, self.periodic_update)
-
-    def init_hardware(self):
-        if GPIOZERO_AVAILABLE:
-            try:
-                print("gpiozero initialization")
-                # store gpiozero objects
-                self.gpio_buttons = {}
-                self.gpio_leds = {}
-                for name, pin in self.GPIO_PINS.items():
-                    if "button" in name:
-                        btn = Button(pin, pull_up=True)
-                        # small hold to reduce bounce impact
-                        btn.when_pressed = lambda n=name: self.gpio_button_pressed(n)
-                        self.gpio_buttons[name] = btn
-                    elif "status_led" in name:
-                        led = LED(pin)
-                        led.off()
-                        self.gpio_leds[name] = led
-                print("gpiozero Initialized")
-            except Exception as e:
-                print(f"gpiozero Initialization Error: {e}")
-        else:
-            print("gpiozero not available. Running in simulation mode.")
-
-        if I2C_AVAILABLE:
-            try:
-                self.i2c_bus = SMBus(self.i2c_bus_number)
-                for name, addr in self.i2c_address.items():
-                    try:
-                        self.i2c_bus.read_byte(addr)
-                        self.i2c_devices[name] = True
-                        print(f"I2C Device {name} found at address {hex(addr)}")
-                    except Exception:
-                        self.i2c_devices[name] = False
-                        print(f"I2C Device {name} NOT found at address {hex(addr)}")
-                print("I2C Initialized")
-            except Exception as e:
-                print(f"I2C Initialization Error: {e}")
-            # Initialize LCD if available    
-            try:
-                if self.i2c_devices.get('lcd', False) and self.i2c_bus:
-                    self.lcd_address = self.i2c_address['lcd']
-                    self.lcd_backlight = 0x08
-                    self.LCD_RS = 0x01
-                    self.LCD_RW = 0x02
-                    self.LCD_EN = 0x04
-                    self.lcd_write_cmd(0x33)
-                    self.lcd_write_cmd(0x32)
-                    self.lcd_write_cmd(0x28)
-                    self.lcd_write_cmd(0x0C)
-                    self.lcd_write_cmd(0x06)
-                    self.lcd_write_cmd(0x01)
-                    print("I2C LCD Initialized")
-            except Exception as e:
-                print(f"I2C LCD Initialization Error: {e}")
-            # Initialize 4-Digit 7-segment display if available
-            try:
-                if self.i2c_devices.get('seven_segment', False) and self.i2c_bus:
-                    self.seven_segment_address = self.i2c_address['seven_segment']
-                    self.i2c_bus.write_byte(self.seven_segment_address, 0x21)
-                    self.i2c_bus.write_byte(self.seven_segment_address, 0x81)
-                    self.i2c_bus.write_byte(self.seven_segment_address, 0xE0 | 8)
-                    self.seven_segment_present = True
-                    try:
-                        self.seven_segment_raw_write([0] * 16)
-                        self.seven_segment_display_set_speed(0)
-                    except Exception as e:
-                        print(f"I2C 7-Segment Setup Error: {e}")
-                    print("I2C 7-Segment Display Initialized")
-                else:
-                    self.seven_segment_present = False
-            except Exception as e:
-                self.seven_segment_present = False
-                print(f"I2C 7-Segment Initialization Error: {e}")
-        else:
-            print("I2C library not available. Running in simulation mode.")
-
-    def gpio_button_pressed(self, name):
-        """Handle a gpiozero button press by logical name (e.g. 'lights_button')."""
-        try:
-            print(f"gpiozero Button pressed: {name}")
-            if name == "lights_button":
-                current = self.api.get_state().get('lights', False)
-                self.api.update_state({'lights': not current})
-            elif name == "left_door_button":
-                current = self.api.get_state().get('left_door', False)
-                self.api.update_state({'left_door': not current})
-            elif name == "right_door_button":
-                current = self.api.get_state().get('right_door', False)
-                self.api.update_state({'right_door': not current})
-            elif name == "announcement_button":
-                current = self.api.get_state().get('announcement', '')
-                self.api.update_state({'announcement': '' if current else 'Next station approaching'})
-                # Toggle announce_pressed boolean (like SW UI) and update announcement text
-                announce_flag = self.api.get_state().get('announce_pressed', False)
-                self.api.update_state({
-                    'announce_pressed': not announce_flag,
-                    'announcement': '' if announce_flag else 'Next station approaching'
-                })
-            elif name == "service_brake_button": #temp replacement for pot issue
-                current = self.api.get_state().get('service_brake', False)
-                self.api.update_state({'service_brake': not current})
-            elif name == "emergency_brake_button":
-                self.api.update_state({'emergency_brake': True})
-                self.after(5000, lambda: self.api.update_state({'emergency_brake': False}))
-        except Exception as e:
-            print(f"GPIO Callback Error: {e}")
 
     def periodic_update(self):
         try:
             state = self.api.get_state()
 
-            # Read ADC (potentiometer inputs) and update set_speed, temperature, service_brake
-            self.read_and_update_adc_api()
-
-            # Recalculate power command based on current state
-            if not state['emergency_brake'] and state['service_brake'] == 0:
-                power = self.calculate_power_command(state)
-                if power != state['power_command']:
-                    self.api.update_state({'power_command': power})
-            else:
-                # No power when brakes are active
-                self.api.update_state({'power_command': 0})
+            # Read ADC (potentiometer inputs) and update driver_velocity, temperature, service_brake
+            if hasattr(self, 'hardware') and self.hardware:
+                try:
+                    self.hardware.read_current_adc()
+                except Exception as e:
+                    print(f"ADC read/update error: {e}")
+            # try:
+            # # Recalculate power command based on current state
+            #     if not state['emergency_brake'] and state['service_brake'] == 0:
+            #         power = self.calculate_power_command(state)
+            #         if power != state['power_command']:
+            #             self.api.update_state({'power_command': power})
+            #     else:
+            #         # No power when brakes are active
+            #         self.api.update_state({'power_command': 0})
+            # except Exception as e:
+            #     print(f"Power command calculation error: {e}")
 
             # Update important parameters in the treeview
             children = self.info_treeview.get_children()
@@ -302,7 +351,7 @@ class hw_train_controller_ui(tk.Tk):
                 elif param == "Speed Limit":
                     self.info_treeview.set(iid, "value", f"{state['speed_limit']:.1f}")
                 elif param == "Current Speed":
-                    self.info_treeview.set(iid, "value", f"{state['velocity']:.1f}")
+                    self.info_treeview.set(iid, "value", f"{state['train_velocity']:.1f}")
                 elif param == "Power Availability":
                     self.info_treeview.set(iid, "value", f"{state['power_command']:.1f}")
                 elif param == "Cabin Temperature":
@@ -324,19 +373,20 @@ class hw_train_controller_ui(tk.Tk):
             self.update_status_indicators(state)
 
             try:
-                if I2C_AVAILABLE and self.i2c_devices.get('lcd', False) and self.i2c_bus:
+                hw = getattr(self.controller, 'hardware', None)
+                if I2C_AVAILABLE and hw and hw.i2c_devices.get('lcd', False) and hw.i2c_bus:
                     cmd_speed = state.get('commanded_speed', 0.0)
                     cmd_auth = state.get('commanded_authority', 0.0)
                     line0 = f"CmdSped:{cmd_speed:5.1f}mph"
                     line1 = f"CmdAuth:{cmd_auth:5.1f}yds"
-                    self.lcd_write_line(line0, line=0, width=16)
-                    self.lcd_write_line(line1, line=1, width=16)
+                    hw.lcd_write_line(line0, line=0, width=16)
+                    hw.lcd_write_line(line1, line=1, width=16)
             except Exception as e:
                 print(f"I2C LCD Update Error: {e}")
 
             try:
-                if I2C_AVAILABLE and getattr(self, 'seven_segment_present', False) and self.i2c_bus:
-                    self.seven_segment_display_set_speed(state.get('velocity', 0))
+                if I2C_AVAILABLE and hw and hw.i2c_devices.get('seven_segment', False) and hw.i2c_bus:
+                    hw.seven_segment_display_set_speed(state.get('train_velocity', 0))
             except Exception as e:
                 print(f"I2C 7-Segment Update Error: {e}")
 
@@ -344,78 +394,6 @@ class hw_train_controller_ui(tk.Tk):
             print(f"Periodic Update Error: {e}")
         finally:
             self.after(self.update_interval, self.periodic_update)
-
-    def read_and_update_adc_api(self):
-        if (not I2C_AVAILABLE) or (not self.i2c_devices.get('adc', False)) or (not self.i2c_bus):
-            return
-        try:
-            addr = self.i2c_address['adc']
-
-            def _read_ads1115_single_ended(channel, pga_bits=0x0200, fsr=4.096):
-                """Single-shot read from ADS1115 single-ended channel.
-                Returns (voltage, raw_code).
-                pga_bits should be the PGA setting (bits shifted into bits 11:9).
-                fsr is the full-scale range in volts corresponding to pga_bits.
-                """
-                OS_SINGLE = 0x8000
-                MUX_BASE = {0: 0x4000, 1: 0x5000, 2: 0x6000, 3: 0x7000}
-                MODE_SINGLE = 0x0100
-                DR_128 = 0x0080
-                COMP_QUE_DISABLE = 0x0003
-
-                mux = MUX_BASE.get(channel, 0x4000)
-                config = OS_SINGLE | mux | pga_bits | MODE_SINGLE | DR_128 | COMP_QUE_DISABLE
-                hi = (config >> 8) & 0xFF
-                lo = config & 0xFF
-                self.i2c_bus.write_i2c_block_data(addr, 0x01, [hi, lo])
-                # wait for conversion: 128SPS -> ~7.8ms
-                time.sleep(0.01)
-                data = self.i2c_bus.read_i2c_block_data(addr, 0x00, 2)
-                raw = (data[0] << 8) | data[1]
-                # convert to signed 16-bit (should be non-negative for single-ended)
-                if raw & 0x8000:
-                    raw -= 1 << 16
-                # convert raw -> voltage using full-scale range
-                voltage = (raw / 32767.0) * fsr
-                # clamp to 0..fsr for safety
-                voltage = max(0.0, min(voltage, fsr))
-                return voltage, raw
-            
-            PGA_4_096_BITS = 0x0200
-            FSR_4_096 = 4.096
-
-            v0, raw0 = _read_ads1115_single_ended(0, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
-            v1, raw1 = _read_ads1115_single_ended(1, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
-            v3, raw3 = _read_ads1115_single_ended(3, pga_bits=PGA_4_096_BITS, fsr=FSR_4_096)
-
-            # compute ratio relative to the actual pot supply (3.3V)
-            V_POT = 3.3
-            ratio0 = max(0.0, min(1.0, v0 / V_POT))
-            ratio1 = max(0.0, min(1.0, v1 / V_POT))
-            ratio3 = max(0.0, min(1.0, v3 / V_POT))
-
-            state = self.api.get_state()
-            commanded_speed = state.get('commanded_speed', 0.0)
-            set_speed = round(ratio0 * commanded_speed, 2)
-            set_temp = int(round(55 + (ratio1 * 40)))
-            service_brake = int(round(ratio3 * 100))
-
-            # build updated state and compute power using updated set_speed
-            new_state = state.copy()
-            new_state['set_speed'] = set_speed
-            new_state['set_temperature'] = set_temp
-            new_state['service_brake'] = service_brake
-
-            power = self.calculate_power_command(new_state)
-
-            self.api.update_state({
-                'set_speed': set_speed,
-                'set_temperature': set_temp,
-                'service_brake': service_brake,
-                'power_command': power
-            })
-        except Exception as e:
-            print(f"ADC Read Error: {e}")
 
     def update_status_indicators(self, state):
         mapping = {
@@ -439,7 +417,6 @@ class hw_train_controller_ui(tk.Tk):
             # If gpiozero LEDs are present, mirror status to physical LED
             try:
                 if GPIOZERO_AVAILABLE and hasattr(self, 'gpio_leds'):
-                    # map UI name to gpio_led key
                     key = name.lower().replace(' ', '_') + "_status_led"
                     led = self.gpio_leds.get(key)
                     if led is not None:
@@ -451,157 +428,85 @@ class hw_train_controller_ui(tk.Tk):
                 print(f"LED update error for {name}: {e}")
 
     def lock_engineering_values(self):
-            """Lock Kp and Ki values."""
-            try:
-                kp = float(self.kp_entry.get())
-                ki = float(self.ki_entry.get())
-                
-                self.api.update_state({
-                    'kp': kp,
-                    'ki': ki,
-                    'engineering_panel_locked': True
-                })
-                
-                # Disable inputs
-                self.kp_entry.configure(state="disabled")
-                self.ki_entry.configure(state="disabled")
-                self.apply_button.configure(state="disabled")
-                
-            except ValueError:
-                tk.messagebox.showerror("Error", "Kp and Ki must be valid numbers")
+        """Lock Kp and Ki values."""
+        try:
+            kp = float(self.kp_entry.get())
+            ki = float(self.ki_entry.get())
+            
+            self.api.update_state({
+                'kp': kp,
+                'ki': ki,
+                'engineering_panel_locked': True
+            })
+            
+            # Disable inputs
+            self.kp_entry.configure(state="disabled")
+            self.ki_entry.configure(state="disabled")
+            self.apply_button.configure(state="disabled")
+            
+        except ValueError:
+            tk.messagebox.showerror("Error", "Kp and Ki must be valid numbers")
 
-    def calculate_power_command(self, state):
-        """Calculate power command based on speed difference and Kp/Ki values."""
-        # Get current values
-        current_speed = state['velocity']
-        driver_set_speed = state['set_speed']
-        kp = state['kp']
-        ki = state['ki']
+class vital_train_controls:
+    kp: float = 0.0
+    ki: float = 0.0
+    train_velocity: float = 0.0
+    driver_velocity: float = 0.0
+    emergency_brake: bool = False
+    service_brake: int = 0
+    power_command: float = 0.0
+    commanded_authority: float = 0.0
+    speed_limit: float = 0.0
+
+class vital_validator:
+    def validate(self, candidate: vital_train_controls) -> (bool, str):
+        """Validate the given vital train controls.
         
-        # Calculate speed error
-        speed_error = driver_set_speed - current_speed
+        Args:
+            vital_controls (vital_train_controls): The vital controls to validate.
         
-        # Calculate power command using PI control
-        # P = Kp * error + Ki * ∫error dt
-        # For simplicity, we're using a basic implementation
-        power = (kp * speed_error) + (ki * speed_error * 0.5)  # 0.5 is dt
-        
-        # Ensure power is non-negative and within limits
-        power = max(0, min(power, 120000))  # 120kW max power
-        
-        return power
-    
-    def lcd_write_cmd(self, cmd):
-        try:
-            high = cmd & 0xF0
-            low = (cmd << 4) & 0xF0
-            self.lcd_write4bits(high)
-            self.lcd_write4bits(low)
-        except Exception as e:
-            print(f"LCD Write Command Error: {e}")
-    
-    def lcd_write4bits(self, data):
-        self.lcd_expander_write(data)
-        self.lcd_pulse_enable(data)
+        Returns:
+            (bool, str): Tuple of (is_valid, reason). is_valid is True if valid, False otherwise.
+                         reason is a string explaining the validation result.
+        """
+        raise NotImplementedError("Subclasses must implement validate method.")
 
-    def lcd_expander_write(self, data):
-        try:
-            self.i2c_bus.write_byte(self.lcd_address, data | self.lcd_backlight)
-        except Exception as e:
-            print(f"LCD Expander Write Error: {e}")
+class vital_control_first_check:
+    def validate(self, v):
+        if v.velocity > v.speed_limit:
+            return False
+        if v.power_command < 0 or v.power_command > 120000:
+            return False
+        if v.service_brake and v.emergency_brake:
+            return False
+        if v.commanded_authority <= 0 and v.power_command > 0:
+            return False
+        return True
 
-    def lcd_pulse_enable(self, data):
-        self.lcd_expander_write(data | self.LCD_EN)
-        self.after(1, lambda: self.lcd_expander_write(data & ~self.LCD_EN))
+class vital_control_second_check:
+    def validate(self, v):
+        # maybe slightly different implementation or thresholding
+        safe_speed = v.speed_limit * 1.02  # allows 2% margin
+        return (
+            v.velocity <= safe_speed and
+            not (v.service_brake and v.emergency_brake) and
+            (v.commanded_authority > 0 or v.power_command == 0)
+        )
 
-    def lcd_write_char(self, char):
-        try:
-            val = ord(char)
-            mode = self.LCD_RS
-            high = (val & 0xF0) | mode
-            low = (val << 4) & 0xF0 | mode
-            self.lcd_write4bits(high)
-            self.lcd_write4bits(low)
-        except Exception as e:
-            print(f"LCD Write Char Error: {e}")
+class beacon:
+    #define beacon attributes here, get them from the api with a function?!
+    def __init__(self):
+        self.next_stop = 'next_stop'
+        self.station_side = 'station_side'
 
-    def lcd_clear(self):
-        try:
-            self.lcd_write_cmd(0x01)  # Clear display command
-        except Exception as e:
-            print(f"LCD Clear Error: {e}")
+    def get_beacon_info_from_api(self):
+        pass
 
-    def lcd_set_cursor(self, line):
-        try:
-            addr = 0x80 if line == 0 else 0xC0
-            self.lcd_write_cmd(addr)
-        except Exception as e:
-            print(f"LCD Set Cursor Error: {e}")
-
-    def lcd_write_line(self, text, line=0, width=16):
-        try:
-            s = str(text)[:width].ljust(width)
-            self.lcd_set_cursor(line)
-            for char in s:
-                self.lcd_write_char(char)
-        except Exception as e:
-            print(f"LCD Write Line Error: {e}")
-
-    def seven_segment_raw_write(self, data):
-        try:
-            if len(data) != 16:
-                data = (data + [0]*16)[:16]
-            self.i2c_bus.write_i2c_block_data(self.seven_segment_address, 0x00, data)
-        except Exception as e:
-            print(f"7-Segment Raw Write Error: {e}")
-
-    def seven_segment_for_digit(self, ch):
-        digits = {
-            '0' : 0x3F, '1' : 0x06,
-            '2' : 0x5B, '3' : 0x4F,
-            '4' : 0x66, '5' : 0x6D,
-            '6' : 0x7D, '7' : 0x07,
-            '8' : 0x7F, '9' : 0x6F,
-            '-' : 0x40, ' ' : 0x00
-        }
-        return digits.get(ch, 0x00)
-    
-    def seven_segment_display_digits(self, digits):
-        try:
-            data = [0] * 16
-            # HT16K33 mapping: use addresses that do NOT overlap the colon (0x04).
-            # Use 0x00,0x02 for left two digits and 0x06,0x08 for right two digits.
-            positions = [0, 2, 6, 8]
-            # ensure digits is a 4-char string
-            s = str(digits).rjust(4)[:4]
-            for i in range(4):
-                ch = s[i]
-                seg = self.seven_segment_for_digit(ch)
-                data[positions[i]] = seg
-            # ensure colon is cleared (colon bit lives in address 0x04)
-            data[4] = data[4] & ~0x02
-            self.seven_segment_raw_write(data)
-        except Exception as e:
-            print(f"7-Segment Display Digits Error: {e}")
-
-    def seven_segment_display_set_speed(self, speed):
-        try:
-            ival = int(round(speed))
-        except Exception:
-            ival = 0
-        if ival > 9999:
-            ival = 9999
-        s = str(abs(ival)).rjust(4, ' ')
-        if ival < 0:
-            s = '-' + s[1:]
-        self.seven_segment_display_digits(s)
-
-    def seven_segment_clear(self):
-        try:
-            self.seven_segment_raw_write([0]*16)
-        except Exception as e:
-            print(f"7-Segment Clear Error: {e}")
+class commanded_speed_authority:
+    def __init__(self):
+        self.commanded_speed = 'commanded_speed'
+        self.commanded_authority = 'commanded_authority'
 
 if __name__ == "__main__":
-    app = hw_train_controller_ui()
+    app = train_controller_ui()
     app.mainloop()
