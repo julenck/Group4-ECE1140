@@ -17,25 +17,32 @@ def process_states_green_xlup(occupied):
     else:
         crossing[0] = 1
 
+
+
+
+
+
     #light states
-    #light 0 (elements 0,1 in signal array) is light on section C
-    if 1 not in occupied[0:11] and 1 not in occupied[28:74]:
+
+     #light 0 (elements 0,1 in signal array) is light on section yard to k
+    if 1 not in occupied[0:79]:
         #set to supergreen
-        signals[0] = 0
-        signals[1] = 0
-    elif 1 not in occupied[0:11] and 1 not in occupied[68:74]:
+        signals[14] = 0
+        signals[15] = 0
+    elif 1 not in occupied[47:72]:
         #set to green
-        signals[0] = 0
-        signals[1] = 1
-    elif 1 not in occupied[0:11] and 1 in occupied[68:74]:
+        signals[14] = 0
+        signals[15] = 1
+    elif 1 not in occupied[47:60]:
         #set to yellow
-        signals[0] = 1
-        signals[1] = 0
+        signals[14] = 1
+        signals[15] = 0
     else:
         #set to red
-        signals[0] = 1
-        signals[1] = 1
+        signals[14] = 1
+        signals[15] = 1
 
+    
     #light 1 (elements 2,3 in signal array) is light on section A
     if 1 not in occupied[12:79]:
         #set to supergreen
@@ -53,8 +60,29 @@ def process_states_green_xlup(occupied):
         #set to red
         signals[2] = 1
         signals[3] = 1
+
     
-    #light 2 (elements 4,5 in signal array) is light on section G
+    #light 2 (elements 4,5 in signal array) is light on section C
+    if 1 not in occupied[0:11] and 1 not in occupied[28:74]:
+        #set to supergreen
+        signals[0] = 0
+        signals[1] = 0
+    elif 1 not in occupied[0:11] and 1 not in occupied[68:74]:
+        #set to green
+        signals[0] = 0
+        signals[1] = 1
+    elif 1 not in occupied[0:11] and 1 in occupied[68:74]:
+        #set to yellow
+        signals[0] = 1
+        signals[1] = 0
+    else:
+        #set to red
+        signals[0] = 1
+        signals[1] = 1
+
+    
+    
+    #light 3 (elements 6,7 in signal array) is light on section G
     if 1 not in occupied[29:79]:
         #set to supergreen
         signals[4] = 0
@@ -72,7 +100,35 @@ def process_states_green_xlup(occupied):
         signals[4] = 1
         signals[5] = 1
 
-    #light 3 (elements 6,7 in signal array) is light on section Z
+     #light 4 (elements 8,9 in signal array) is light on section J(beginning)
+    if 1 not in occupied[57:72]:
+        #set to green
+        signals[10] = 0
+        signals[11] = 1
+    elif 1 not in occupied[57:60]:
+        #set to yellow
+        signals[10] = 1
+        signals[11] = 0
+    else:
+        #set to red
+        signals[10] = 1
+        signals[11] = 1
+    
+    #light 5 (elements 10,11 in signal array) is light on section J(end)
+    if 1 not in occupied[62:72]:
+        #set to green
+        signals[12] = 0
+        signals[13] = 1
+    elif 1 not in occupied[60:63]:
+        #set to yellow
+        signals[12] = 1
+        signals[13] = 0
+    else:
+        #set to red
+        signals[12] = 1
+        signals[13] = 1
+
+    #light 10 (elements 12,13 in signal array) is light on section Z
     if 1 not in occupied[0:73]:
         #set to supergreen
         signals[6] = 0
@@ -90,57 +146,30 @@ def process_states_green_xlup(occupied):
         signals[6] = 1
         signals[7] = 1
     
-    #light 4 (elements 8,9 in signal array) is light on section green to yard
+    #light 11 (elements 14,15 in signal array) is light on section green to yard
     
     #this light always green
     signals[8] = 0
     signals[9] = 1
 
-    #light 5 (elements 10,11 in signal array) is light on section J(beginning)
-    if 1 not in occupied[57:72]:
-        #set to green
-        signals[10] = 0
-        signals[11] = 1
-    elif 1 not in occupied[57:60]:
-        #set to yellow
-        signals[10] = 1
-        signals[11] = 0
-    else:
-        #set to red
-        signals[10] = 1
-        signals[11] = 1
+   
     
-    #light 6 (elements 12,13 in signal array) is light on section J(end)
-    if 1 not in occupied[62:72]:
-        #set to green
-        signals[12] = 0
-        signals[13] = 1
-    elif 1 not in occupied[60:63]:
-        #set to yellow
-        signals[12] = 1
-        signals[13] = 0
+   
+
+    #switch 0 and 1
+    if 1 in occupied[12:27]:
+        switches[0] = 1 #connect 13 to higher numbered block (12)
+        switches[1] = 0 #connect 28 to lower numbered block (29)
     else:
-        #set to red
-        signals[12] = 1
-        signals[13] = 1
+        switches[0] = 0
+        switches[1] = 1
     
-    #light 7 (elements 14,15 in signal array) is light on section yard to k
-    if 1 not in occupied[0:79]:
-        #set to supergreen
-        signals[14] = 0
-        signals[15] = 0
-    elif 1 not in occupied[47:72]:
-        #set to green
-        signals[14] = 0
-        signals[15] = 1
-    elif 1 not in occupied[47:60]:
-        #set to yellow
-        signals[14] = 1
-        signals[15] = 0
-    else:
-        #set to red
-        signals[14] = 1
-        signals[15] = 1
+    #switch 2 and 3
+    #for now always these position
+    switches[2] = 0
+    switches[3] = 1
+    
+
 
 
     return switches, signals, crossing
