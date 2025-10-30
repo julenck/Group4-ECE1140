@@ -33,7 +33,7 @@ class sw_wayside_controller_ui(tk.Tk):
         self.controller = controller
 
     # Attributes
-        self.toggle_maintenance_mode: bool = False
+        self.toggle_maintenance_mode: tk.BooleanVar = tk.BooleanVar(value=False)
         self.selected_block: int = -1
         self.selected_block_data: dict = {}
         self.maintenance_frame: ttk.Frame = None
@@ -42,10 +42,14 @@ class sw_wayside_controller_ui(tk.Tk):
         self.map_frame: ttk.Frame = None
         self.selected_block_frame: ttk.Frame = None
         self.scrollable_frame: ttk.Frame = None
+        self.blocks_with_switches = [13,28,57,63]
+        self.blocks_with_lights = []
+        self.blocks_with_gates = []
+
 
         #epty options for now
         self.switch_options: list = []
-        self.state_options: list = ["0", "1"]
+        self.state_options: list = []
         self.selected_switch: tk.StringVar = tk.StringVar()
 
 
@@ -106,7 +110,9 @@ class sw_wayside_controller_ui(tk.Tk):
             title="Select PLC File",
             filetypes=[("Python Files", "*.py"), ("All Files", "*.*")]
         )
-        self.controller.load_plc(filename)
+        file = self.controller.load_plc(filename)
+
+        self.update_selected_file(file)
 
     def send_inputs(self, data: dict):
         #self.controller.load_inputs()
@@ -116,7 +122,9 @@ class sw_wayside_controller_ui(tk.Tk):
         pass
 
     def update_selected_file(self, filename: str):
-        pass
+        self.selected_file_str.set(filename)
+        self.selected_file_label.config(text=f"currently selected file: {os.path.basename(self.selected_file_str.get())}")
+        self.build_all_blocks_frame()
 
     def select_block(self, block_id: int):
         #self.selected_block = block_id
@@ -206,6 +214,9 @@ class sw_wayside_controller_ui(tk.Tk):
         io_data_label.pack(pady=10)
 
     def build_all_blocks_frame(self):
+        #clear frame first
+        for widget in self.all_blocks_frame.winfo_children():
+            widget.destroy()
         # Define a style for the all blocks frame widgets
         style = ttk.Style()
         style.configure("AllBlocks.TLabel", font=("Arial", 16, "bold"), background="white")
@@ -242,14 +253,92 @@ class sw_wayside_controller_ui(tk.Tk):
         canvas.bind_all("<MouseWheel>", on_scroll)
 
         #message for start because no plc file loaded
-        no_file_label = ttk.Label(self.scrollable_frame, text="No PLC file loaded", style="smaller.TLabel")
-        no_file_label.grid(row=0, column=0, padx=10, pady=10)
+        if self.selected_file_str.get() == "N/A":
+            no_file_label = ttk.Label(self.scrollable_frame, text="No PLC file loaded", style="smaller.TLabel")
+            no_file_label.grid(row=0, column=0, padx=10, pady=10)
+
+        else:
+
+            #grid headers:
+            ttk.Label(self.scrollable_frame, text="Block", style="smaller.TLabel").grid(row=0, column=1, padx=5, pady=5)
+            ttk.Label(self.scrollable_frame, text="Occupied", style="smaller.TLabel").grid(row=0, column=2, padx=5, pady=5)
+            ttk.Label(self.scrollable_frame, text="Switch", style="smaller.TLabel").grid(row=0, column=3, padx=5, pady=5)
+            ttk.Label(self.scrollable_frame, text="Light", style="smaller.TLabel").grid(row=0, column=4, padx=5, pady=5)
+            ttk.Label(self.scrollable_frame, text="Gate", style="smaller.TLabel").grid(row=0, column=5, padx=5, pady=5)
+            ttk.Label(self.scrollable_frame, text="Failure", style="smaller.TLabel").grid(row=0, column=6, padx=5, pady=5)
+
+            if (os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLup.py"):
+                #build grid for 80 blocks
+                #self.block_vars = {}
+
+                #block for Enter track from yard
+                check_box = ttk.Checkbutton(self.scrollable_frame,
+                                            variable=self.selected_block,
+                                            onvalue=81,
+                                            offvalue=-1,
+                                            command=lambda idx=81: self.on_block_selected(idx))
+
+                check_box.grid(row=1, column=0, padx=5, pady=5)
+                block_label = ttk.Label(
+                    self.scrollable_frame,
+                    text="Leave Yard",
+                    style="smaller.TLabel"
+                )
+                block_label.grid(row=1, column=1, padx=5, pady=5)
+
+                for i in range(80):
+
+                    
+                    #self.block_vars[i] = check_box
 
 
+                    if i <73:
+                        block_num = i + 1
+                    else:
+                        block_num = i + 71
+                    section_letter = self.get_section_letter(block_num)
 
+                    check_box = ttk.Checkbutton(self.scrollable_frame,
+                                                variable=self.selected_block, 
+                                                onvalue=i,
+                                                offvalue=-1,
+                                                command=lambda idx=i: self.on_block_selected(idx))
 
+                    block_label = ttk.Label(
+                        self.scrollable_frame,
+                        text=f"{section_letter}{block_num}",
+                        style="smaller.TLabel"
+                    )
+
+                    check_box.grid(row=i+2, column=0, padx=5, pady=5)
+                    block_label.grid(row=i + 2, column=1, padx=5, pady=5)
+                
+                #block for Enter yard from track
+                check_box = ttk.Checkbutton(self.scrollable_frame,
+                                            variable=self.selected_block,
+                                            onvalue=80,
+                                            offvalue=-1,
+                                            command=lambda idx=80: self.on_block_selected(idx))
+                check_box.grid(row=82, column=0, padx=5, pady=5)
+                block_label = ttk.Label(
+                    self.scrollable_frame,
+                    text="Enter Yard",
+                    style="smaller.TLabel"
+                )
+                block_label.grid(row=82, column=1, padx=5, pady=5)
+
+    def on_block_selected(self, idx: int):
+        # If user clicks the same checkbox again, deselect it
+        if idx==0:
+            self.selected_block = 0
         
+        elif self.selected_block == idx:
+            self.selected_block = -1
+        else:
+            self.selected_block = idx
 
+        # Update the right-side info frame
+        self.build_selected_block_frame()
     
     def build_map_frame(self):
         # Define a style for the map frame widgets
@@ -268,6 +357,9 @@ class sw_wayside_controller_ui(tk.Tk):
         
 
     def build_selected_block_frame(self):
+        #clear frame first
+        for widget in self.selected_block_frame.winfo_children():
+            widget.destroy()
         # Define a style for the selected block frame widgets
         style = ttk.Style()
         style.configure("SelectedBlock.TLabel", font=("Arial", 16, "bold"), background="white")
@@ -278,8 +370,49 @@ class sw_wayside_controller_ui(tk.Tk):
         title_label.pack(pady=10)
 
         # Selected block info display (placeholder)
-        self.block_info_label = ttk.Label(self.selected_block_frame, text="Selected block information will be displayed here.", style="smaller.TLabel")
-        self.block_info_label.pack(pady=10)
+        if self.selected_block == -1:
+            self.block_info_label = ttk.Label(self.selected_block_frame, text="Selected block information will be displayed here.", style="smaller.TLabel")
+            self.block_info_label.pack(pady=10)
+        else:
+            if self.selected_block <= 79:
+                block = self.selected_block + 1 if self.selected_block < 73 else self.selected_block + 71
+                sec = self.get_section_letter(block)
+                self.selected_block_data = self.controller.get_block_data(block)  
+            elif self.selected_block == 80:
+                block=151
+                self.selected_block_data = self.controller.get_block_data(block)
+                
+            elif self.selected_block == 81:
+                block=0
+                self.selected_block_data = self.controller.get_block_data(block)
+            
+            id = self.selected_block_data["block_id"]
+            occupied = self.selected_block_data["occupied"]
+            switch_state = self.selected_block_data["switch_state"]
+            light_state = self.selected_block_data["light_state"]
+            gate_state = self.selected_block_data["gate_state"]
+            failure = self.selected_block_data["Failure:"]
+
+            if self.selected_block <=79:
+                id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
+            elif self.selected_block ==80:
+                id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Enter Yard(151)", style="smaller.TLabel")
+            elif self.selected_block ==81:
+                id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Leave Yard(0)", style="smaller.TLabel")
+            id_label.pack(pady=5)
+            occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
+            occupied_label.pack(pady=5)
+            switch_label = ttk.Label(self.selected_block_frame, text=f"Switch State: {switch_state}", style="smaller.TLabel")
+            switch_label.pack(pady=5)
+            light_label = ttk.Label(self.selected_block_frame, text=f"Light State: {light_state}", style="smaller.TLabel")
+            light_label.pack(pady=5)
+            gate_label = ttk.Label(self.selected_block_frame, text=f"Gate State: {gate_state}", style="smaller.TLabel")
+            gate_label.pack(pady=5)
+            failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
+            failure_label.pack(pady=5)
+
+
+                
     
     def toggle_maintenance(self):
         widgets = [self.switch_menu, self.state_menu, self.upload_button]
@@ -292,7 +425,60 @@ class sw_wayside_controller_ui(tk.Tk):
         for widget in widgets:
             widget.config(state=state)
 
-        
+    def get_section_letter(self, block_num: int):
+        block_num -= 1  # Adjust for 0-based index
+        if block_num < 3:
+            return 'A'
+        elif block_num < 6:
+            return 'B'
+        elif block_num < 12:
+            return 'C'
+        elif block_num < 16:
+            return 'D'
+        elif block_num < 20:
+            return 'E'
+        elif block_num < 28:
+            return 'F'
+        elif block_num < 32:
+            return 'G'
+        elif block_num < 35:
+            return 'H'
+        elif block_num < 57:
+            return 'I'
+        elif block_num < 62:
+            return 'J'
+        elif block_num < 68:
+            return 'K'
+        elif block_num < 73:
+            return 'L'
+        elif block_num < 76:
+            return 'm'
+        elif block_num < 85:
+            return 'N'
+        elif block_num < 88:
+            return 'O'
+        elif block_num < 97:
+            return 'P'
+        elif block_num < 100:
+            return 'Q'
+        elif block_num == 100:
+            return 'R'
+        elif block_num < 104:
+            return 'S'
+        elif block_num < 109:
+            return 'T'
+        elif block_num < 115:
+            return 'U'
+        elif block_num < 121:   
+            return 'V'
+        elif block_num < 143:
+            return 'W'
+        elif block_num < 146:
+            return 'X'
+        elif block_num < 149:
+            return 'Y'  
+        else:
+            return 'Z'
 
 if __name__ == "__main__":
 
