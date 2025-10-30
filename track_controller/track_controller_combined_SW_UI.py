@@ -12,7 +12,7 @@ def main():
     # Create the main software UI (this creates the single Tk root)
     main_ui = sw_track_controller_ui()
     main_ui.title("Track Controller Software Module")
-    main_ui.geometry("1200x700")
+    #main_ui.geometry("1200x700")
 
     # Create the test UI as a Toplevel child of the main UI (same Tk)
     test_root = tk.Toplevel(main_ui)

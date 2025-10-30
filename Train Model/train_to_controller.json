@@ -1,0 +1,13 @@
+{
+    "commanded_speed_mph": 25.0,
+    "commanded_authority_yds": 328.0,
+    "beacon_data": "128B",
+    "failure_modes": {
+        "engine_failure": false,
+        "signal_pickup_failure": false,
+        "brake_failure": false
+    },
+    "train_velocity_mph": 0.56,
+    "train_temperature_F": 68,
+    "emergency_brake": false
+}

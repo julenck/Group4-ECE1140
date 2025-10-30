@@ -1,0 +1,12 @@
+{
+    "block": {
+        "commanded speed": 0,
+        "commanded authority": 0
+    },
+    "beacon": {
+        "speed limit": 30,
+        "side_door": "Right",
+        "current station": "Central Station",
+        "next station": "Park Street"
+    }
+}

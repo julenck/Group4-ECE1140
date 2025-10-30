@@ -1,5 +1,382 @@
 {
     "static_data": {
+        "Blue": [
+            {
+                "Line": "Blue",
+                "Section": "A",
+                "Block Number": 1.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "A",
+                "Block Number": 2.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "A",
+                "Block Number": 3.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "RAILWAY CROSSING",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "Yes",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "A",
+                "Block Number": 4.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "A",
+                "Block Number": 5.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "Switch ( 5 to 6) or (5 to 11)",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "5 TO 6"
+            },
+            {
+                "Line": "Blue",
+                "Section": "B",
+                "Block Number": 6.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "Switch ( 5 to 6); Light",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "5 TO 6"
+            },
+            {
+                "Line": "Blue",
+                "Section": "B",
+                "Block Number": 7.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "B",
+                "Block Number": 8.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "B",
+                "Block Number": 9.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "Transponder",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "B",
+                "Block Number": 10.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "Station B",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "B",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "C",
+                "Block Number": 11.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "Switch (5 to 11); Light",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "5 TO 11"
+            },
+            {
+                "Line": "Blue",
+                "Section": "C",
+                "Block Number": 12.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "C",
+                "Block Number": 13.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "C",
+                "Block Number": 14.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "Transponder",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Blue",
+                "Section": "C",
+                "Block Number": 15.0,
+                "Block Length (m)": 50.0,
+                "Block Grade (%)": 0.0,
+                "Speed Limit (Km/Hr)": 50.0,
+                "Infrastructure": "Station C",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": 0.0,
+                "CUMALTIVE ELEVATION (M)": 0.0,
+                "Station": "C",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "N/A",
+                "Section": 1,
+                "Block Number": 2.0,
+                "Block Length (m)": 3.0,
+                "Block Grade (%)": 4.0,
+                "Speed Limit (Km/Hr)": 5.0,
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            },
+            {
+                "Line": "Yard",
+                "Section": "N/A",
+                "Block Number": "N/A",
+                "Block Length (m)": "N/A",
+                "Block Grade (%)": "N/A",
+                "Speed Limit (Km/Hr)": "N/A",
+                "Infrastructure": "N/A",
+                "Unnamed: 7": "N/A",
+                "ELEVATION (M)": "N/A",
+                "CUMALTIVE ELEVATION (M)": "N/A",
+                "Station": "N/A",
+                "Crossing": "No",
+                "Branching": "N/A"
+            }
+        ],
         "Red": [
             {
                 "Line": "Red",
@@ -13,9 +390,8 @@
                 "ELEVATION (M)": 0.25,
                 "CUMALTIVE ELEVATION (M)": 0.25,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -29,9 +405,8 @@
                 "ELEVATION (M)": 0.5,
                 "CUMALTIVE ELEVATION (M)": 0.75,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -45,9 +420,8 @@
                 "ELEVATION (M)": 0.75,
                 "CUMALTIVE ELEVATION (M)": 1.5,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -61,9 +435,8 @@
                 "ELEVATION (M)": 1.0,
                 "CUMALTIVE ELEVATION (M)": 2.5,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -77,9 +450,8 @@
                 "ELEVATION (M)": 0.75,
                 "CUMALTIVE ELEVATION (M)": 3.25,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -93,9 +465,8 @@
                 "ELEVATION (M)": 0.5,
                 "CUMALTIVE ELEVATION (M)": 3.75,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -109,9 +480,8 @@
                 "ELEVATION (M)": 0.375,
                 "CUMALTIVE ELEVATION (M)": 4.125,
                 "Station": "Shadyside",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -125,9 +495,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": 4.125,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -141,9 +510,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": 4.125,
                 "Station": "N/A",
-                "Switch": "Yard",
                 "Crossing": "No",
-                "Branching": "To/From Yard"
+                "Branching": "75-YARD"
             },
             {
                 "Line": "Red",
@@ -157,9 +525,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": 4.125,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -173,9 +540,8 @@
                 "ELEVATION (M)": -0.375,
                 "CUMALTIVE ELEVATION (M)": 3.75,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "Yes",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -189,9 +555,8 @@
                 "ELEVATION (M)": -0.75,
                 "CUMALTIVE ELEVATION (M)": 3.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -205,9 +570,8 @@
                 "ELEVATION (M)": -1.4,
                 "CUMALTIVE ELEVATION (M)": 1.6,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -221,9 +585,8 @@
                 "ELEVATION (M)": -0.75,
                 "CUMALTIVE ELEVATION (M)": 0.8500000000000001,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -237,9 +600,8 @@
                 "ELEVATION (M)": -0.6,
                 "CUMALTIVE ELEVATION (M)": 0.2500000000000001,
                 "Station": "N/A",
-                "Switch": "15-16; 1-16",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "15-16, 1-16"
             },
             {
                 "Line": "Red",
@@ -253,9 +615,8 @@
                 "ELEVATION (M)": -0.25,
                 "CUMALTIVE ELEVATION (M)": 0.0,
                 "Station": "Herron Ave",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -269,9 +630,8 @@
                 "ELEVATION (M)": -1.0,
                 "CUMALTIVE ELEVATION (M)": -1.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -285,9 +645,8 @@
                 "ELEVATION (M)": -0.241,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -301,9 +660,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -317,9 +675,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -333,9 +690,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "Swissville",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -349,9 +705,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -365,9 +720,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -381,9 +735,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -397,9 +750,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "Penn Station",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -413,9 +765,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -429,9 +780,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "27-28; 27-76",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "27-28, 27-76"
             },
             {
                 "Line": "Red",
@@ -445,9 +795,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -461,9 +810,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -477,9 +825,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -493,9 +840,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -509,9 +855,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "32-33; 33-72",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "32-33, 33-72"
             },
             {
                 "Line": "Red",
@@ -525,9 +870,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -541,9 +885,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -557,9 +900,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "Steel Plaza",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -573,9 +915,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -589,9 +930,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -605,9 +945,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "38-39; 38-71",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "38-39, 38-71"
             },
             {
                 "Line": "Red",
@@ -621,9 +960,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -637,9 +975,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -653,9 +990,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -669,9 +1005,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -685,9 +1020,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "43-44; 44-67",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "43-44, 44-67"
             },
             {
                 "Line": "Red",
@@ -701,9 +1035,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -717,9 +1050,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "First Ave",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -733,9 +1065,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -749,9 +1080,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "Yes",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -765,9 +1095,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "Station Square",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -781,9 +1110,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -797,9 +1125,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -813,9 +1140,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -829,9 +1155,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "52-53; 52-66",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "52-53, 52-66"
             },
             {
                 "Line": "Red",
@@ -845,9 +1170,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -861,9 +1185,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -877,9 +1200,8 @@
                 "ELEVATION (M)": 0.375,
                 "CUMALTIVE ELEVATION (M)": -0.8660000000000001,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -893,9 +1215,8 @@
                 "ELEVATION (M)": 0.375,
                 "CUMALTIVE ELEVATION (M)": -0.4910000000000001,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -909,9 +1230,8 @@
                 "ELEVATION (M)": 0.375,
                 "CUMALTIVE ELEVATION (M)": -0.1160000000000001,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -925,9 +1245,8 @@
                 "ELEVATION (M)": 0.75,
                 "CUMALTIVE ELEVATION (M)": 0.6339999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -941,9 +1260,8 @@
                 "ELEVATION (M)": 0.375,
                 "CUMALTIVE ELEVATION (M)": 1.009,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -957,9 +1275,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": 1.009,
                 "Station": "South Hills Junction",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -973,9 +1290,8 @@
                 "ELEVATION (M)": -0.375,
                 "CUMALTIVE ELEVATION (M)": 0.6339999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -989,9 +1305,8 @@
                 "ELEVATION (M)": -0.75,
                 "CUMALTIVE ELEVATION (M)": -0.1160000000000001,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1005,9 +1320,8 @@
                 "ELEVATION (M)": -0.75,
                 "CUMALTIVE ELEVATION (M)": -0.8660000000000001,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1021,9 +1335,8 @@
                 "ELEVATION (M)": -0.375,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1037,9 +1350,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1053,9 +1365,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1069,9 +1380,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1085,9 +1395,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1101,9 +1410,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1117,9 +1425,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1133,9 +1440,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1149,9 +1455,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1165,9 +1470,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1181,9 +1485,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1197,9 +1500,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Red",
@@ -1213,9 +1515,8 @@
                 "ELEVATION (M)": 0.0,
                 "CUMALTIVE ELEVATION (M)": -1.241,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1229,9 +1530,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1245,9 +1545,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1261,9 +1560,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1277,9 +1575,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1293,9 +1590,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1309,9 +1605,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1325,9 +1620,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1341,9 +1635,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1357,9 +1650,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1373,9 +1665,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1389,9 +1680,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1405,9 +1695,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1421,9 +1710,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1437,9 +1725,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1453,9 +1740,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1469,9 +1755,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1485,9 +1770,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1501,9 +1785,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1517,9 +1800,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1533,9 +1815,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1549,9 +1830,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1565,9 +1845,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1581,9 +1860,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1597,9 +1875,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1613,9 +1890,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1629,9 +1905,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1645,9 +1920,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1661,9 +1935,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1677,9 +1950,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1693,9 +1965,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1709,9 +1980,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1725,9 +1995,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1741,9 +2010,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1757,9 +2025,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1773,9 +2040,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1789,9 +2055,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1805,9 +2070,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1821,9 +2085,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1837,9 +2100,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1853,9 +2115,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1869,9 +2130,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1885,9 +2145,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1901,9 +2160,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1917,9 +2175,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1933,9 +2190,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1949,9 +2205,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1965,9 +2220,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1981,9 +2235,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -1997,9 +2250,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2013,9 +2265,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2029,9 +2280,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2045,9 +2295,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2061,9 +2310,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2077,9 +2325,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2093,9 +2340,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2109,9 +2355,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2125,9 +2370,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2141,9 +2385,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2157,9 +2400,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2173,9 +2415,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2189,9 +2430,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2205,9 +2445,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2221,9 +2460,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2237,9 +2475,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2253,9 +2490,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2269,9 +2505,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2285,9 +2520,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2301,9 +2535,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2317,9 +2550,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2333,9 +2565,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2349,9 +2580,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2365,9 +2595,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2381,9 +2610,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2397,9 +2625,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2413,9 +2640,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2429,9 +2655,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": " ",
@@ -2445,9 +2670,8 @@
                 "ELEVATION (M)": "N/A",
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             }
         ],
         "Green": [
@@ -2464,9 +2688,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2481,9 +2704,8 @@
                 "CUMALTIVE ELEVATION (M)": 1.5,
                 "seconds to traverse block": 8.0,
                 "Station": "Pioneer",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2498,9 +2720,8 @@
                 "CUMALTIVE ELEVATION (M)": 3.0,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2515,9 +2736,8 @@
                 "CUMALTIVE ELEVATION (M)": 5.0,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2532,9 +2752,8 @@
                 "CUMALTIVE ELEVATION (M)": 8.0,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2549,9 +2768,8 @@
                 "CUMALTIVE ELEVATION (M)": 12.0,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2566,9 +2784,8 @@
                 "CUMALTIVE ELEVATION (M)": 17.0,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2583,9 +2800,8 @@
                 "CUMALTIVE ELEVATION (M)": 17.0,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2600,9 +2816,8 @@
                 "CUMALTIVE ELEVATION (M)": 12.0,
                 "seconds to traverse block": 8.0,
                 "Station": "Edgebrook",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2617,9 +2832,8 @@
                 "CUMALTIVE ELEVATION (M)": 7.5,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2634,9 +2848,8 @@
                 "CUMALTIVE ELEVATION (M)": 3.5,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2651,9 +2864,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 8.0,
                 "Station": "N/A",
-                "Switch": "12-13; 1-13",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "12-13, 1-13"
             },
             {
                 "Line": "Green",
@@ -2668,9 +2880,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 7.714285714285715,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2685,9 +2896,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 7.714285714285715,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2702,9 +2912,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 7.714285714285715,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2719,9 +2928,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 7.714285714285715,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2736,9 +2944,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2753,9 +2960,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2770,9 +2976,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "Yes",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2787,9 +2992,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2804,9 +3008,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2821,9 +3024,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "Whited",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2838,9 +3040,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2855,9 +3056,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2872,9 +3072,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.285714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2889,9 +3088,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 5.142857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2906,9 +3104,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2923,9 +3120,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "28-29; 150-28",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "28-29, 150-28"
             },
             {
                 "Line": "Green",
@@ -2940,9 +3136,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2957,9 +3152,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2974,9 +3168,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "South Bank",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -2991,9 +3184,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3008,9 +3200,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3025,9 +3216,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3042,9 +3232,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3059,9 +3248,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3076,9 +3264,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3093,9 +3280,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3110,9 +3296,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "Central",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3127,9 +3312,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3144,9 +3328,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3161,9 +3344,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3178,9 +3360,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3195,9 +3376,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3212,9 +3392,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3229,9 +3408,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3246,9 +3424,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3263,9 +3440,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "Inglewood",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3280,9 +3456,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3297,9 +3472,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3314,9 +3488,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3331,9 +3504,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3348,9 +3520,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3365,9 +3536,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3382,9 +3552,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3399,9 +3568,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3416,9 +3584,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "Overbrook",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3433,9 +3600,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "Yard",
                 "Crossing": "No",
-                "Branching": "To/From Yard"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3450,9 +3616,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3467,9 +3632,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3484,9 +3648,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3501,9 +3664,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.0,
                 "Station": "N/A",
-                "Switch": "Yard",
                 "Crossing": "No",
-                "Branching": "To/From Yard"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3518,9 +3680,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 5.142857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3535,9 +3696,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 5.142857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3552,9 +3712,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.285714285714286,
                 "Station": "Glenbury",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3569,9 +3728,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.285714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3586,9 +3744,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3603,9 +3760,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3620,9 +3776,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3637,9 +3792,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3654,9 +3808,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3671,9 +3824,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3688,9 +3840,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "Dormont",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3705,9 +3856,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3722,9 +3872,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3739,9 +3888,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "76-77;77-101",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "76-77, 77-101"
             },
             {
                 "Line": "Green",
@@ -3756,9 +3904,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "Mt Lebanon",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3773,9 +3920,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3790,9 +3936,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3807,9 +3952,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3824,9 +3968,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3841,9 +3984,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3858,9 +4000,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3875,9 +4016,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3892,9 +4032,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 15.42857142857143,
                 "Station": "N/A",
-                "Switch": "85-86; 100-85",
                 "Crossing": "No",
-                "Branching": "Yes"
+                "Branching": "85-86, 100-85"
             },
             {
                 "Line": "Green",
@@ -3909,9 +4048,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 14.399999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3926,9 +4064,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.470399999999998,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3943,9 +4080,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 14.399999999999999,
                 "Station": "Poplar",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3960,9 +4096,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.125,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3977,9 +4112,8 @@
                 "CUMALTIVE ELEVATION (M)": -0.625,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -3994,9 +4128,8 @@
                 "CUMALTIVE ELEVATION (M)": -2.125,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4011,9 +4144,8 @@
                 "CUMALTIVE ELEVATION (M)": -2.125,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4028,9 +4160,8 @@
                 "CUMALTIVE ELEVATION (M)": -0.625,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4045,9 +4176,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.125,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4062,9 +4192,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4079,9 +4208,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "Castle Shannon",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4096,9 +4224,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4113,9 +4240,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4130,9 +4256,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4147,9 +4272,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.799999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4164,9 +4288,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 4.846153846153847,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4181,9 +4304,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.85714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4198,9 +4320,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.85714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4215,9 +4336,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 10.285714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4232,9 +4352,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.85714285714286,
                 "Station": "Dormont",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4249,9 +4368,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.85714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4266,9 +4384,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 11.571428571428573,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4283,9 +4400,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.85714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "Yes",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4300,9 +4416,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.85714285714286,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4317,9 +4432,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4334,9 +4448,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4351,9 +4464,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4368,9 +4480,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4385,9 +4496,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 19.439999999999998,
                 "Station": "Glenbury",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4402,9 +4512,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4419,9 +4528,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4436,9 +4544,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4453,9 +4560,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4470,9 +4576,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.6,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4487,9 +4592,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4504,9 +4608,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 12.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4521,9 +4624,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4538,9 +4640,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "Overbrook",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4555,9 +4656,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4572,9 +4672,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4589,9 +4688,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4606,9 +4704,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4623,9 +4720,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4640,9 +4736,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4657,9 +4752,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4674,9 +4768,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4691,9 +4784,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "Inglewood",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4708,9 +4800,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4725,9 +4816,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4742,9 +4832,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4759,9 +4848,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4776,9 +4864,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4793,9 +4880,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4810,9 +4896,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4827,9 +4912,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4844,9 +4928,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "Central",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4861,9 +4944,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4878,9 +4960,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4895,9 +4976,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4912,9 +4992,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4929,9 +5008,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4946,9 +5024,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 9.0,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4963,9 +5040,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 33.12,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4980,9 +5056,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 7.199999999999999,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "Green",
@@ -4997,9 +5072,8 @@
                 "CUMALTIVE ELEVATION (M)": 0.5,
                 "seconds to traverse block": 6.3,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "N/A",
@@ -5014,9 +5088,8 @@
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "seconds to traverse block": "N/A",
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "N/A",
@@ -5031,9 +5104,8 @@
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "seconds to traverse block": 4.846153846153847,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             },
             {
                 "Line": "N/A",
@@ -5048,411 +5120,8 @@
                 "CUMALTIVE ELEVATION (M)": "N/A",
                 "seconds to traverse block": 4.038461538461539,
                 "Station": "N/A",
-                "Switch": "N/A",
                 "Crossing": "No",
-                "Branching": "No"
-            }
-        ],
-        "Blue": [
-            {
-                "Line": "Blue",
-                "Section": "A",
-                "Block Number": 1.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "A",
-                "Block Number": 2.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "A",
-                "Block Number": 3.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "RAILWAY CROSSING",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "Yes",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "A",
-                "Block Number": 4.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "A",
-                "Block Number": 5.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "Switch ( 5 to 6) or (5 to 11)",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "5 TO 6",
-                "Crossing": "No",
-                "Branching": "Yes"
-            },
-            {
-                "Line": "Blue",
-                "Section": "B",
-                "Block Number": 6.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "Switch ( 5 to 6); Light",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "5 TO 6",
-                "Crossing": "No",
-                "Branching": "Yes"
-            },
-            {
-                "Line": "Blue",
-                "Section": "B",
-                "Block Number": 7.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "B",
-                "Block Number": 8.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "B",
-                "Block Number": 9.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "Transponder",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "B",
-                "Block Number": 10.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "Station B",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "B",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "C",
-                "Block Number": 11.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "Switch (5 to 11); Light",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "5 TO 11",
-                "Crossing": "No",
-                "Branching": "Yes"
-            },
-            {
-                "Line": "Blue",
-                "Section": "C",
-                "Block Number": 12.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "C",
-                "Block Number": 13.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "C",
-                "Block Number": 14.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "Transponder",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Blue",
-                "Section": "C",
-                "Block Number": 15.0,
-                "Block Length (m)": 50.0,
-                "Block Grade (%)": 0.0,
-                "Speed Limit (Km/Hr)": 50.0,
-                "Infrastructure": "Station C",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": 0.0,
-                "CUMALTIVE ELEVATION (M)": 0.0,
-                "Station": "C",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "N/A",
-                "Section": 1,
-                "Block Number": 2.0,
-                "Block Length (m)": 3.0,
-                "Block Grade (%)": 4.0,
-                "Speed Limit (Km/Hr)": 5.0,
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
-            },
-            {
-                "Line": "Yard",
-                "Section": "N/A",
-                "Block Number": "N/A",
-                "Block Length (m)": "N/A",
-                "Block Grade (%)": "N/A",
-                "Speed Limit (Km/Hr)": "N/A",
-                "Infrastructure": "N/A",
-                "Unnamed: 7": "N/A",
-                "ELEVATION (M)": "N/A",
-                "CUMALTIVE ELEVATION (M)": "N/A",
-                "Station": "N/A",
-                "Switch": "N/A",
-                "Crossing": "No",
-                "Branching": "No"
+                "Branching": "N/A"
             }
         ]
     },
