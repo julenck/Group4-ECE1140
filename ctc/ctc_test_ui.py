@@ -55,8 +55,8 @@ default_data = {
         "Passengers Entering Station": "",
     },
     "MaintenenceModeOutputs": {
-        "Block Line": "Green",
-        "Closed Block": "3"
+        "Block Line": "",
+        "Closed Block": ""
     }
 
 }

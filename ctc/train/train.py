@@ -4,8 +4,7 @@ class Train:
     def __init__(self):
         self.id: int = 0
         self.line: str = ""
-        self.blockSection: int = 0
-        self.numPassengers: int = 0
+        self.location: int = 0
         self.speed: float = 0.0
         self.authority: float = 0.0
         self.destination: str = ""
