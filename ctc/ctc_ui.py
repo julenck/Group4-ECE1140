@@ -421,91 +421,7 @@ def auto_dispatch():
     line = auto_line_box.get()
     dest = auto_dest_box.get()
     arrival = auto_arrival_box.get()
-
-    # Calculate suggested speed and authority 
-    #if(auto_line_box.get()) == "Red":
-        #if(auto_dest_box.get()) == "Shadyside": 
-            #authority = 410.105
-            #speed = 24.855
-        #if(auto_dest_box.get()) == "Herron Ave": 
-           #authority = 1082.68
-            #speed = 24.855
-       # if(auto_dest_box.get()) == "Swissville": 
-            #authority = 2504.374
-            #speed = 24.855
-        #if(auto_dest_box.get()) == "Penn Station": 
-            #authority = 2832.458
-            #speed = 24.855
-        #if(auto_dest_box.get()) == "Steel Plaza": 
-            #authority = 3401.137
-            #speed = 24.855
-        #if(auto_dest_box.get()) == "First Ave": 
-            #authority = 3969.816
-            #speed = 24.855
-        #if(auto_dest_box.get()) == "Station Square": 
-            #authority = 4215.879
-            #speed = 24.855
-        #if(auto_dest_box.get()) == "South Hills Junction": 
-            #authority = 5028.653
-            #speed = 24.855
-    if(auto_line_box.get()) == "Green": 
-        if(auto_dest_box.get()) == "Pioneer": 
-            authority = 218.723
-            speed = 62.137
-        if(auto_dest_box.get()) == "Edgebrook": 
-            authority = 984.252
-            speed = 27.962
-        if(auto_dest_box.get()) == "Whited": 
-            authority = 3280.84
-            speed = 27.962
-        if(auto_dest_box.get()) == "South Bank": 
-            authority = 4538.495
-            speed = 18.641
-        if(auto_dest_box.get()) == "Central": 
-            authority = 4647.857
-            speed = 18.641
-        if(auto_dest_box.get()) == "Inglewood": 
-            authority = 5249.344
-            speed = 18.641
-        if(auto_dest_box.get()) == "Overbrook": 
-            authority = 5940.192
-            speed = 18.641
-        if(auto_dest_box.get()) == "Glenbury": 
-            authority = 6671.041
-            speed = 18.64
-        if(auto_dest_box.get()) == "Dormont": 
-            authority = 7655.293
-            speed = 18.641
-        if(auto_dest_box.get()) == "Mt. Lebanon": 
-            authority = 8311.461
-            speed = 18.641
-        if(auto_dest_box.get()) == "Poplar": 
-            authority = 11249.563
-            speed = 15.534
-        if(auto_dest_box.get()) == "Castle Shannon": 
-            authority = 11905.73
-            speed = 15.534
         
-    data = load_data()
-    dispatcher = data.get("Dispatcher", {})
-    trains = dispatcher.get("Trains", {})
-
-    # Add or update train info
-    trains[train] = {
-        "Line": line,
-        "Authority": authority,
-        "Suggested Speed": speed,
-        "Station Destination": dest,
-        "Arrival Time": arrival,
-        
-    }
-
-    dispatcher["Trains"] = trains
-    data["Dispatcher"] = dispatcher
-
-    save_data(data)
-    update_active_trains_table()
-
     ############# write to ctc_ui_inputs.json ##############
     with open('ctc_ui_inputs.json',"r") as f1: 
         data1 = json.load(f1)
@@ -517,6 +433,8 @@ def auto_dispatch():
 
     with open('ctc_ui_inputs.json',"w") as f1: 
         json.dump(data1,f1,indent=4)
+
+    update_active_trains_table()
 
 # Tables Below Mode Area 
 bottom_frame = tk.Frame(root)
