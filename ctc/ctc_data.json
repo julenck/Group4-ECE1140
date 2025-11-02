@@ -2,32 +2,43 @@
     "Dispatcher": {
         "Trains": {
             "Train 1": {
-                "Line": "Blue",
-                "Suggested Speed": "13",
-                "Authority": "12"
+                "Line": "Green",
+                "Authority": 4538.495,
+                "Suggested Speed": 18.641,
+                "Station Destination": "South Bank",
+                "Arrival Time": "1"
             },
             "Train 2": {
-                "Line": "Blue",
-                "Suggested Speed": "15",
-                "Authority": "15"
+                "Line": "Green",
+                "Authority": 984.252,
+                "Suggested Speed": 27.962,
+                "Station Destination": "Edgebrook",
+                "Arrival Time": "1"
             },
             "Train 3": {
-                "Line": "Blue",
-                "Suggested Speed": "13",
-                "Authority": "12"
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 4": {
+                "Line": "Green",
+                "Authority": 4647.857,
+                "Suggested Speed": 18.641,
+                "Station Destination": "Central",
+                "Arrival Time": "0:13"
             }
         }
     },
     "TrackController": {
-        "Train Position": "Q13",
-        "State of the Train": "Running",
+        "Train Position": "",
+        "State of the Train": "",
         "Train Failure Mode": "",
-        "Section and Block1": "A13",
-        "Light Color": "Red",
+        "Section and Block1": "",
+        "Light Color": "",
         "Section and Block2": "",
-        "Gate": "",
-        "Track Failure Mode": "Broken Track",
-        "Line": "Green"
+        "Gate": ""
     },
     "TrackModel": {
         "Station": "",
@@ -36,8 +47,6 @@
     },
     "MaintenenceModeOutputs": {
         "Block Line": "",
-        "Closed Block": "",
-        "Switch Line": "Red",
-        "Switch Position": "2"
+        "Closed Block": ""
     }
 }
