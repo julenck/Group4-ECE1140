@@ -3,36 +3,36 @@
             "Train 1": {
                 "Active": 0,
                 "Suggested Speed": 0,
-                "Suggestd Authority": 0,
+                "Suggested Authority": 0,
                 "Train Position": 0,
                 "Train State": 0
             },
             "Train 2": {
                 "Active": 0,
                 "Suggested Speed": 0,
-                "Suggestd Authority": 0,
+                "Suggested Authority": 0,
                 "Train Position": 0,
                 "Train State": 0
             }, 
             "Train 3": {
                 "Active": 0,
                 "Suggested Speed": 0,
-                "Suggestd Authority": 0,
+                "Suggested Authority": 0,
                 "Train Position": 0,
                 "Train State": 0
             },
             "Train 4": {
                 "Active": 0,
                 "Suggested Speed": 0,
-                "Suggestd Authority": 0,
+                "Suggested Authority": 0,
                 "Train Position": 0,
                 "Train State": 0
             },
             "Train 5": {
                 "Active": 0,
                 "Suggested Speed": 0,
-                "Suggestd Authority": 0,
-                "Train Position": 0,
+                "Suggested Authority": 0,
+                "Train Position": 65,
                 "Train State": 0
             }
     },

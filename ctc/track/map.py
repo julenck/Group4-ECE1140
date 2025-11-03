@@ -1,8 +1,7 @@
 route_info = {
-    "ID": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21],
-    "Block": [0,65,73,77,88,96,105,114,123,132,141,22,16,9,2,16,22,31,39,48,57,0],
-    "Name": ["Yard",
-            "Glenbury",
+    "ID": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],
+    "Block": [65,73,77,88,96,105,114,123,132,141,22,16,9,2,16,22,31,39,48,57,0],
+    "Name": ["Glenbury",
              "Dormont", 
              "Mt. Lebanon",
              "Poplar",
@@ -26,7 +25,8 @@ route_info = {
     ],
 
     # inlcudes length of next station block but not current station block
-    "Meters to next": [100,900,600,2686.6,600,715,952,540,450,450,1859,1050,850,700,800,1200,1150,400,396,450,100,0]
+    # 1000 meters to glenbury because assuming 100 meters from yard to start of K 
+    "Meters to next": [1000,600,2686.6,600,715,952,540,450,450,1859,1050,850,700,800,1200,1150,400,396,450,100,0]
 }
 
 route_lookup_via_station = {}
