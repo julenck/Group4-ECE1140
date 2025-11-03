@@ -2,32 +2,39 @@
     "Dispatcher": {
         "Trains": {
             "Train 1": {
-                "Line": "Green",
-                "Authority": 4647.857,
-                "Suggested Speed": 18.641,
-                "Station Destination": "Central",
-                "Arrival Time": "4"
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
             },
             "Train 2": {
-                "Line": "Green",
-                "Authority": 100,
-                "Suggested Speed": 0,
-                "Station Destination": "South Bank",
-                "Arrival Time": 0
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
             },
             "Train 3": {
-                "Line": "Green",
-                "Authority": 3280.84,
-                "Suggested Speed": 27.962,
-                "Station Destination": "Whited",
-                "Arrival Time": "1"
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
             },
             "Train 4": {
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 5": {
                 "Line": "Green",
-                "Authority": 5249.344,
-                "Suggested Speed": 18.641,
-                "Station Destination": "Inglewood",
-                "Arrival Time": "6:30"
+                "Suggested Speed": 0,
+                "Authority": 1000,
+                "Station Destination": "Whited",
+                "Arrival Time": 0
             }
         }
     },

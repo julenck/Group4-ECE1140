@@ -1,4 +1,5 @@
-import json
+import json, time, os
+from ctc_main_helper_functions import JSONFileWatcher
 from track.map import route_lookup_via_station, route_lookup_via_id
 
 # read from ctc_ui_inputs.json 
@@ -19,12 +20,15 @@ print(dest_id)
 for i in range(dest_id): 
     # get next station 
     test = route_lookup_via_id[i]["name"]
+    print(test)
 
     # get distance to next station 
     authority = route_lookup_via_id[i]["meters_to_next"]
+    print(authority)
 
     # get location of next station 
     next_station_loc = route_lookup_via_id[i]["block"]
+    print(next_station_loc)
 
     # update ctc_data.json -- updates the UI 
     data_file_ctc_data = 'ctc_data.json'
@@ -43,18 +47,26 @@ for i in range(dest_id):
     # update ctc_track_controller.json with active=1,speed, authority 
 
     # get train position from ctc_track_controller.json 
-    data_file_track_cont = 'ctc_track_controller.json'
+    data_file_track_cont = '../ctc_track_controller.json'
     with open(data_file_track_cont,"r") as f_track: 
         track = json.load(f_track)
-    train_pos = track.get(["Trains"][train]["Train Position"])
+    train_pos = track["Trains"][train]["Train Position"]
+    #print(train_pos)
 
-    # wait until train gets to station (train position == station block) and then iterate i 
-
+    # seeing when train gets to station 
     while(train_pos != next_station_loc):
-        #keep getting train position 
-        
-        if(train_pos == next_station_loc){
-            # wait for dwell time 
-            i = i+1; 
-            break; 
-        }
+
+        # keep checking train position 
+        with open(data_file_track_cont,"r") as f_track: 
+            track = json.load(f_track)
+        train_pos = track["Trains"][train]["Train Position"]
+        print("here")
+        # add time.sleep(0.5) ?
+    
+    # once train gets to station, wait for dwell time 
+    time_now = time.time(); 
+    dwell_time_seconds = 10
+    while time.time() < time_now + dwell_time_seconds: 
+        print("waiting") 
+
+    i = i+1
