@@ -92,5 +92,3 @@ except KeyboardInterrupt:
 finally: 
     observer.stop()
     observer.join() 
-
-

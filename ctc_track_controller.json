@@ -31,8 +31,8 @@
         "Train 5": {
             "Active": 1,
             "Suggested Speed": 0,
-            "Suggested Authority": 1000,
-            "Train Position": 0,
+            "Suggested Authority": 600,
+            "Train Position": 65,
             "Train State": 0
         }
     },

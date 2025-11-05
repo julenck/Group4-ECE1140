@@ -32,7 +32,7 @@
             "Train 5": {
                 "Line": "Green",
                 "Suggested Speed": 0,
-                "Authority": 1000,
+                "Authority": 600,
                 "Station Destination": "Whited",
                 "Arrival Time": 0
             }
