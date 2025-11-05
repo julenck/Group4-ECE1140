@@ -63,7 +63,14 @@ try:
             json.dump(data, f_data, indent=4)
     
         # update ctc_track_controller.json with active=1,speed, authority 
+        with open(data_file_track_cont, "r") as f_updates: 
+            updates = json.load(f_updates)
+        
+        updates["Trains"][train]["Active"] = 1
+        updates["Trains"][train]["Suggested Authority"] = authority
 
+        with open(data_file_track_cont,"w") as f_updates: 
+            json.dump(updates, f_updates, indent=4)
 
         # seeing when train gets to station 
         while(train_pos != next_station_loc):
