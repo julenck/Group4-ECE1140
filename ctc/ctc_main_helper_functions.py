@@ -3,7 +3,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler 
 
 class JSONFileWatcher(FileSystemEventHandler): 
-    def _init_(self,path,callback): 
+    def __init__(self,path,callback): 
         self.path = os.path.abspath(path)
         self.callback = callback
         self.last_data = None
@@ -13,7 +13,7 @@ class JSONFileWatcher(FileSystemEventHandler):
     def load_json(self, retries=5, delay=0.2):
         for _ in range(retries): 
             try: 
-                if not os.path.exits(self.path):
+                if not os.path.exists(self.path):
                     raise FileNotFoundError(self.path)
                 if os.path.getsize(self.path) == 0:
                     raise ValueError("File is Empty")
@@ -34,3 +34,5 @@ class JSONFileWatcher(FileSystemEventHandler):
                     self.last_mtime = mtime
                     self.callback(new_data)
     
+
+
