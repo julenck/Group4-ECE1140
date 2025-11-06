@@ -106,20 +106,79 @@ class train_controller:
         self.api.update_state({k: v for k, v in changes.items()})
         return True
     
+    # Control methods
     def calculate_power_command(self, state):
-            """Calculate power command based on speed difference and Kp/Ki values."""
-            current_speed = state['train_velocity']
-            driver_set_speed = state['driver_velocity']
-            kp = state['kp']
-            ki = state['ki']
+        """Calculate power command based on speed difference and Kp/Ki values.
+        
+        Implements PI control with:
+        - Real-time accumulated error tracking
+        - Anti-windup protection
+        - Power limiting
+        - Zero power when error is zero
+        """
+        # Get current values
+        train_velocity = state['train_velocity']
+        driver_velocity = state['set_speed']
+        kp = state['kp']
+        ki = state['ki']
+        
+        # Calculate speed error
+        velocity_error = driver_velocity - train_velocity
+        
+        # If speed error is effectively zero (within small threshold), return zero power
+        if abs(velocity_error) < 0.01:
+            self._accumulated_error = 0
+            return 0  # No power needed when at desired speed
+        
+        # Get current time
+        current_time = time.time()  # WE MAY NEED VALUE FROM TIME CLASS HERE
+        
+        # Ensure time tracking variables exist
+        if not hasattr(self, '_last_update_time'):
+            self._last_update_time = current_time
+        if not hasattr(self, '_accumulated_error'):
+            self._accumulated_error = 0
             
-            speed_error = driver_set_speed - current_speed
-            
-            power = (kp * speed_error) + (ki * speed_error * 0.5)  # 0.5 is dt
-            
-            power = max(0, min(power, 120000))  # 120kW max power
-            
-            return power
+        # Calculate real time step
+        dt = current_time - self._last_update_time
+        dt = max(0.001, min(dt, 1.0))  # Limit dt between 1ms and 1s for stability
+        
+        # Update accumulated error with anti-windup and scaling
+        # Scale the error integration based on time step
+        self._accumulated_error += velocity_error * dt
+        
+        # Anti-windup limits (scaled by ki to prevent excessive integral term)
+        max_integral = 120000 / ki if ki != 0 else 0
+        self._accumulated_error = max(-max_integral, min(max_integral, self._accumulated_error))
+        
+        # Calculate PI control output
+        proportional = kp * velocity_error
+        integral = ki * self._accumulated_error
+        
+        # Debug monitoring
+        if hasattr(self, 'debug') and self.debug:
+            print(f"Time: {current_time:.3f}, dt: {dt:.3f}")
+            print(f"Speed Error: {velocity_error:.2f}, P: {proportional:.2f}, I: {integral:.2f}")
+            print(f"Accumulated Error: {self._accumulated_error:.2f}")
+        
+        # Calculate total power command
+        power = proportional + integral
+        
+        # Limit power
+        power = max(0, min(power, 120000))  # 120kW max power
+        
+        # Anti-windup: adjust accumulated error when power saturates
+        if power == 120000 and integral > 0:
+            # Back-calculate integral term to match power limit
+            self._accumulated_error = (120000 - proportional) / ki if ki != 0 else 0
+        elif power == 0 and integral < 0:
+            # Reset integral term when power is zero
+            self._accumulated_error = -proportional / ki if ki != 0 else 0
+        
+        # Update last time for next iteration
+        self._last_update_time = current_time
+        
+        return power
 
     #not yet completed (still just a placeholder from it #2 feedback)
     def emergency_brake_activated(self):
@@ -131,21 +190,55 @@ class train_controller:
         else:
             self.api.update_state({'emergency_brake': False})
 
-    def manual_mode_active(self):
-        current_state = self.api.get_state()
-        # if manual mode is active, disable automatic speed control
-        if current_state['manual_mode']:
-            self.api.update_state({'manual_mode': True})
-        else:
-            self.api.update_state({'manual_mode': False})
+    def toggle_mode(self):
+        """Flip manual/automatic mode flag in the API.
 
-    def automatic_mode_active(self):
-        current_state = self.api.get_state()
-        # if automatic mode is active, enable automatic speed control
-        if current_state['manual_mode'] != True:
-            self.api.update_state({'automatic_mode': True})
-        else:
-            self.api.update_state({'automatic_mode': False})
+        - 'manual_mode' == True  -> manual
+        - 'manual_mode' == False -> automatic
+        """
+        try:
+            curr = self.api.get_state().get('manual_mode', False)
+            new = not curr
+            self.api.update_state({'manual_mode': new})
+            print(f"Mode toggled: {'MANUAL' if new else 'AUTOMATIC'}")
+            return new
+        except Exception as e:
+            print(f"toggle_mode error: {e}")
+            return self.api.get_state().get('manual_mode', False)
+
+    def is_automatic_mode(self) -> bool:
+        """Return True when system is in automatic mode (manual_mode == False)."""
+        try:
+            return not bool(self.api.get_state().get('manual_mode', False))
+        except Exception:
+            return True
+
+    def apply_automatic_controls(self, state: dict):
+        """When in automatic mode:
+           1) Use commanded_speed to set driver_velocity (vital)
+           2) Apply service_brake when commanded_authority indicates stopping
+           3) Non-vital controls remain unchanged
+        """
+        try:
+            if not self.is_automatic_mode():
+                return
+
+            # 1) Ensure driver_velocity follows commanded_speed (vital change via validator)
+            cmd_speed = float(state.get('commanded_speed', 0.0))
+            # Use controller's vital path to update vitals safely
+            self.vital_control_check_and_update({'driver_velocity': cmd_speed})
+
+            # 2) If authority is depleted (<= 0) request full service brake, otherwise release
+            cmd_auth = float(state.get('commanded_authority', 0.0))
+            current_sb = int(state.get('service_brake', 0))
+            if cmd_auth <= 0 and current_sb == 0:
+                # request braking (100% service brake)
+                self.vital_control_check_and_update({'service_brake': 100})
+            elif cmd_auth > 0 and current_sb > 0:
+                # release service brake when authority available again
+                self.vital_control_check_and_update({'service_brake': 0})
+        except Exception as e:
+            print(f"apply_automatic_controls error: {e}")
 
     def detect_failure_mode(self, curr: vital_train_controls, prev: vital_train_controls, dt: float):
         """Detect engine, brake, or signal failure based on temporal behavior."""
@@ -204,18 +297,22 @@ class train_controller_ui(tk.Tk):
 
         # Hardware configuration (GPIO pin mapping)
         self.GPIO_PINS = {
-            "lights_button": 4,
-            "lights_status_led": 13,
+            "exterior_lights_button": 4,
+            "exterior_lights_status_led": 13,
+            # "interior_lights_button": NEED TO ASSIGN GPIO PIN
+            # "interior_lights_status_led": NEED TO ASSIGN GPIO PIN
             "left_door_button": 17,
             "left_door_status_led": 19,
             "right_door_button": 27,
             "right_door_status_led": 26,
             "announcement_button": 22,
             "announcement_status_led": 20,
-            #"service_brake_button": 5, #temp replacement for pot issue
-            #"service_brake_status_led": 16, #temp replacement for pot issue
+            #"service_brake_button": NEED TO ASSIGN NEW GPIO PIN
+            #"service_brake_status_led": NEED TO ASSIGN NEW GPIO PIN
             "emergency_brake_button": 6,
             "emergency_brake_status_led": 21,
+            #"mode_button": NEED TO ASSIGN GPIO PIN
+            #"mode_status_led": NEED TO ASSIGN GPIO PIN
         }
 
         # I2C configuration
@@ -253,6 +350,7 @@ class train_controller_ui(tk.Tk):
             ("Station Side", "", "Left/Right"),
             ("Next Station", "", "Station"),
             ("Failure(s)", "", "Type(s)"),
+            ("Mode", "", "")
         ]
         for param, val, unit in self.important_parameters:
             self.info_treeview.insert("", "end", values=(param, val, unit))
@@ -265,7 +363,7 @@ class train_controller_ui(tk.Tk):
         status_frame.pack(side="left", fill="both", expand=True)
 
         self.status_buttons = {}
-        statuses = ["Lights", "Left Door", "Right Door", "Announcement", "Service Brake", "Emergency Brake"]
+        statuses = ["Interior Lights", "Exterior Lights", "Left Door", "Right Door", "Announcement", "Service Brake", "Emergency Brake", "Mode"]
 
         button_frame = ttk.Frame(status_frame)
         button_frame.pack(fill="x", padx=4, pady=6)
@@ -360,6 +458,8 @@ class train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", state.get('station_side', ''))
                 elif param == "Next Station":
                     self.info_treeview.set(iid, "value", state.get('next_stop', ''))
+                elif param == "Mode":
+                    self.info_treeview.set(iid, "value", state.get('mode', ''))
                 elif param == "Failure(s)":
                     failures = []
                     if state.get('engine_failure', False):
@@ -397,12 +497,14 @@ class train_controller_ui(tk.Tk):
 
     def update_status_indicators(self, state):
         mapping = {
-            "Lights": bool(state.get('lights', False)),
+            "Interior Lights": bool(state.get('interior_lights', False)),
+            "Exterior Lights": bool(state.get('exterior_lights', False)),
             "Left Door": bool(state.get('left_door', False)),
             "Right Door": bool(state.get('right_door', False)),
             "Announcement": bool(state.get('announcement', '')),
-            "Service Brake": bool(state.get('service_brake', 0) > 0), #active if >0%
-            "Emergency Brake": bool(state.get('emergency_brake', False))
+            "Service Brake": bool(state.get('service_brake', False)), #active if >0%
+            "Emergency Brake": bool(state.get('emergency_brake', False)),
+            "Mode": not bool(state.get('manual_mode', False))  # True if automatic mode
         }
         for name, val in mapping.items():
             entry = self.status_buttons.get(name)

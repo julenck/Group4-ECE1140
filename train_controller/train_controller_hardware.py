@@ -138,15 +138,13 @@ class train_controller_hardware:
             # Read each ADC channel through dedicated helpers
             set_speed = self.set_driver_velocity_adc()
             set_temp = self.set_temperature_adc()
-            service_brake = self.set_service_brake_adc()
 
             # Build a tentative state for power calculation
             state = self.api.get_state()
             new_state = state.copy()
             new_state.update({
-                'set_speed': set_speed,
-                'set_temperature': set_temp,
-                'service_brake': service_brake
+                'driver_velocity': set_speed,
+                'set_temperature': set_temp
             })
 
             # Prefer controller to compute power_command if available (controller coordinates vitals)
@@ -157,7 +155,7 @@ class train_controller_hardware:
                 power = 0.0
 
             # Route vital changes via controller when present (safer)
-            vital_changes = {'set_speed': set_speed, 'service_brake': service_brake, 'power_command': power}
+            vital_changes = {'driver_velocity': set_speed, 'power_command': power}
             if self.controller:
                 self.controller.vital_control_check_and_update(vital_changes)
             else:
@@ -223,19 +221,6 @@ class train_controller_hardware:
         except Exception as e:
             print(f"set_temperature_adc error: {e}")
             return 55
-
-    def set_service_brake_adc(self) -> int:
-        """Read ADC channel for service_brake pot and convert to 0-100%."""
-        address = self.i2c_address.get('adc')
-        if not address:
-            return 0
-        try:
-            v3, _ = self._read_ads1115_single_ended(address, 3)
-            ratio3 = max(0.0, min(1.0, v3 / 3.3))
-            return int(round(ratio3 * 100))
-        except Exception as e:
-            print(f"set_service_brake_adc error: {e}")
-            return 0
 
 # ---------------------------------------------------------------------------
 #                                   LCD Helpers
