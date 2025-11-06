@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import ttk
 import os
 import sys
+import time  # Add time module for real-time tracking
 
 # Add parent directory to Python path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -79,6 +80,10 @@ class sw_train_controller_ui(tk.Tk):
         self.create_info_table()        # Right side of top frame
         self.create_control_section()    # Middle frame
         self.create_engineering_panel()  # Bottom frame
+        
+        # Initialize PI controller variables
+        self._accumulated_error = 0
+        self._last_update_time = time.time()
         
         # Start periodic updates
         self.update_interval = 500  # 500ms = 0.5 seconds
@@ -223,12 +228,12 @@ class sw_train_controller_ui(tk.Tk):
         ttk.Label(eng_frame, text="Kp:").grid(row=0, column=0, padx=5, pady=5)
         self.kp_entry = ttk.Entry(eng_frame)
         self.kp_entry.grid(row=0, column=1, padx=5, pady=5)
-        self.kp_entry.insert(0, "0.0")
+        self.kp_entry.insert(0, "10.0")  # Default Kp value for good control
         
         ttk.Label(eng_frame, text="Ki:").grid(row=0, column=2, padx=5, pady=5)
         self.ki_entry = ttk.Entry(eng_frame)
         self.ki_entry.grid(row=0, column=3, padx=5, pady=5)
-        self.ki_entry.insert(0, "0.0")
+        self.ki_entry.insert(0, "0.5")  # Default Ki value for good control
         
         self.lock_btn = ttk.Button(eng_frame, text="Lock Values", command=self.lock_engineering_values)
         self.lock_btn.grid(row=0, column=4, padx=20, pady=5)
@@ -238,14 +243,29 @@ class sw_train_controller_ui(tk.Tk):
         try:
             current_state = self.api.get_state()
             
+            # Check for critical failures that require emergency brake
+            critical_failure = (current_state.get('engine_failure', False) or 
+                              current_state.get('signal_failure', False) or 
+                              current_state.get('brake_failure', False))
+            
+            if critical_failure and not current_state['emergency_brake']:
+                # Automatically engage emergency brake on critical failure
+                self.emergency_brake()
+                
             # Recalculate power command based on current state
-            if not current_state['emergency_brake'] and current_state['service_brake'] == 0:
+            if (not current_state['emergency_brake'] and 
+                current_state['service_brake'] == 0 and 
+                not critical_failure):
                 power = self.calculate_power_command(current_state)
                 if power != current_state['power_command']:
                     self.api.update_state({'power_command': power})
             else:
-                # No power when brakes are active
-                self.api.update_state({'power_command': 0})
+                # Reset accumulated error when brakes are active
+                if hasattr(self, '_accumulated_error'):
+                    self._accumulated_error = 0
+                # No power when brakes are active or failures present
+                self.api.update_state({'power_command': 0,
+                                     'set_speed': 0})
             
             # Update current speed display
             self.speed_display.config(text=f"{current_state['velocity']:.1f} MPH")
@@ -330,7 +350,14 @@ class sw_train_controller_ui(tk.Tk):
     
     # Control methods
     def calculate_power_command(self, state):
-        """Calculate power command based on speed difference and Kp/Ki values."""
+        """Calculate power command based on speed difference and Kp/Ki values.
+        
+        Implements PI control with:
+        - Real-time accumulated error tracking
+        - Anti-windup protection
+        - Power limiting
+        - Zero power when error is zero
+        """
         # Get current values
         current_speed = state['velocity']
         driver_set_speed = state['set_speed']
@@ -340,13 +367,58 @@ class sw_train_controller_ui(tk.Tk):
         # Calculate speed error
         speed_error = driver_set_speed - current_speed
         
-        # Calculate power command using PI control
-        # P = Kp * error + Ki * ∫error dt
-        # For simplicity, we're using a basic implementation
-        power = (kp * speed_error) + (ki * speed_error * 0.5)  # 0.5 is dt
+        # If speed error is effectively zero (within small threshold), return zero power
+        if abs(speed_error) < 0.01:  # 0.01 MPH threshold
+            self._accumulated_error = 0  # Reset accumulated error
+            return 0  # No power needed when at desired speed
         
-        # Ensure power is non-negative and within limits
+        # Get current time
+        current_time = time.time()  # Use real time in seconds
+        
+        # Ensure time tracking variables exist
+        if not hasattr(self, '_last_update_time'):
+            self._last_update_time = current_time
+        if not hasattr(self, '_accumulated_error'):
+            self._accumulated_error = 0
+            
+        # Calculate real time step
+        dt = current_time - self._last_update_time
+        dt = max(0.001, min(dt, 1.0))  # Limit dt between 1ms and 1s for stability
+        
+        # Update accumulated error with anti-windup and scaling
+        # Scale the error integration based on time step
+        self._accumulated_error += speed_error * dt
+        
+        # Anti-windup limits (scaled by ki to prevent excessive integral term)
+        max_integral = 120000 / ki if ki != 0 else 0
+        self._accumulated_error = max(-max_integral, min(max_integral, self._accumulated_error))
+        
+        # Calculate PI control output
+        proportional = kp * speed_error
+        integral = ki * self._accumulated_error
+        
+        # Debug monitoring
+        if hasattr(self, 'debug') and self.debug:
+            print(f"Time: {current_time:.3f}, dt: {dt:.3f}")
+            print(f"Speed Error: {speed_error:.2f}, P: {proportional:.2f}, I: {integral:.2f}")
+            print(f"Accumulated Error: {self._accumulated_error:.2f}")
+        
+        # Calculate total power command
+        power = proportional + integral
+        
+        # Limit power
         power = max(0, min(power, 120000))  # 120kW max power
+        
+        # Anti-windup: adjust accumulated error when power saturates
+        if power == 120000 and integral > 0:
+            # Back-calculate integral term to match power limit
+            self._accumulated_error = (120000 - proportional) / ki if ki != 0 else 0
+        elif power == 0 and integral < 0:
+            # Reset integral term when power is zero
+            self._accumulated_error = -proportional / ki if ki != 0 else 0
+        
+        # Update last time for next iteration
+        self._last_update_time = current_time
         
         return power
     
