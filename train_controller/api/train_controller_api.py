@@ -25,21 +25,23 @@ class train_controller_api:
             # Inputs FROM Train Model
             'commanded_speed': 0.0,      # mph
             'commanded_authority': 0.0,   # yards
-            'speed_limit': 0,         # mph
+            'speed_limit': 0.0,         # mph
             'train_velocity': 0.0,             # mph
             'next_stop': '',             # station name
             'station_side': '',     # left/right
-            'train_temperature': 0,   # °F
+            'train_temperature': 0.0,   # °F
             'engine_failure': False,
             'signal_failure': False,
             'brake_failure': False,
+            'manual_mode': False,       # manual/automatic mode
             
             # Internal Train Controller State
-            'driver_velocity': 0.0,           # mph - will be initialized to match commanded_speed
+            'driver_velocity': 0.0,           # mph - driver's set speed, will be initialized to match commanded_speed
             'service_brake': 0,         # percentage (0-100)
             'right_door': False,        # door state
             'left_door': False,         # door state
-            'lights': False,            # lights state
+            'interior_lights': False,   # interior lights state
+            'exterior_lights': False,   # exterior lights state
             'set_temperature': 0.0,     # Driver's desired temperature (°F) - will be initialized to match train_temperature
             'temperature_up': False,    # temperature control
             'temperature_down': False,   # temperature control
@@ -165,7 +167,7 @@ class train_controller_api:
             k: v for k, v in data.items() 
             if k in ['commanded_speed', 'commanded_authority', 'speed_limit',
                     'train_velocity', 'next_stop', 'station_side', 'train_temperature',
-                    'engine_failure', 'signal_failure', 'brake_failure']
+                    'engine_failure', 'signal_failure', 'brake_failure', 'manual_mode']
         }
         
         # If commanded_speed is changing and driver_velocity matches old commanded_speed,
@@ -195,7 +197,8 @@ class train_controller_api:
             'emergency_brake': state['emergency_brake'],
             'right_door': state['right_door'],
             'left_door': state['left_door'],
-            'lights': state['lights'],
+            'interior_lights': state['interior_lights'],
+            'exterior_lights': state['exterior_lights'],
             'temperature_up': state['temperature_up'],
             'temperature_down': state['temperature_down']
         }

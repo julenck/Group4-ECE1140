@@ -18,12 +18,12 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 # Import UIs and API
-from train_controller_sw_ui import sw_train_controller_ui
+from train_controller_sw_ui import train_controller_ui
 from train_controller_test_ui import train_controller_test_ui
 
 def run_driver_ui():
     """Run the driver interface in its own thread."""
-    driver_ui = sw_train_controller_ui()
+    driver_ui = train_controller_ui()
     driver_ui.mainloop()
 
 def run_test_ui():
