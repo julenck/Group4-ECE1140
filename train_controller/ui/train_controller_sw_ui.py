@@ -309,7 +309,7 @@ class train_controller:
 		Returns:
 			True if validation passed and changes applied, False otherwise.
 		"""
-		# Build a vital_train_controls candidate from current state + changes
+		# Build a vital_train_controls candidate from current state + changes 
 		state = self.api.get_state().copy()
 		candidate = vital_train_controls(
 			kp=changes.get('kp', state.get('kp', 0.0)),

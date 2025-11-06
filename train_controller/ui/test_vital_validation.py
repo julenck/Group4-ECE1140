@@ -400,7 +400,7 @@ def run_verbose_tests():
     print("VITAL VALIDATION TEST SUITE")
     print("="*70 + "\n")
     
-    # Create test suite
+    # Create test suite 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     
