@@ -83,17 +83,19 @@ class train_controller_test_ui(tk.Tk):
             
             # Combine them to show complete status
             display_state = {
-                'set_speed': state['set_speed'],
+                'driver_velocity': state['driver_velocity'],
                 'power_command': driver_outputs['power_command'],
                 'emergency_brake': driver_outputs['emergency_brake'],
                 'service_brake': driver_outputs['service_brake'],
                 'left_door': driver_outputs['left_door'],
                 'right_door': driver_outputs['right_door'],
-                'lights': driver_outputs['lights'],
+                'interior_lights': driver_outputs['interior_lights'],
+                'exterior_lights': driver_outputs['exterior_lights'],
                 'set_temperature': state['set_temperature'],
                 'next_stop': state['next_stop'],
                 'station_side': state['station_side'],
-                'announce_pressed': state['announce_pressed']
+                'announce_pressed': state['announce_pressed'],
+                'manual_mode': state['manual_mode']
             }
             
             self.update_outputs(display_state)
@@ -130,9 +132,10 @@ class train_controller_test_ui(tk.Tk):
         self.train_engine_failure_entry = self.make_entry_dropdown(input_frame, "Train Engine Failure", 8, ["True", "False"], "False")
         self.signal_pickup_failure_entry = self.make_entry_dropdown(input_frame, "Signal Pickup Failure", 9, ["True", "False"], "False")
         self.brake_failure_entry = self.make_entry_dropdown(input_frame, "Brake Failure", 10, ["True", "False"], "False")
+        self.manual_mode_entry = self.make_entry_dropdown(input_frame, "Manual Mode", 11, ["True", "False"], "False")
 
         # Simulate button
-        ttk.Button(input_frame, text="Simulate", command=self.simulate).grid(row=10, column=2, columnspan=2, pady=10)
+        ttk.Button(input_frame, text="Simulate", command=self.simulate).grid(row=12, column=2, columnspan=2, pady=10)
 
     def create_output_frame(self):
         """Create the output frame showing signals sent to Train Model from the driver."""
@@ -143,10 +146,11 @@ class train_controller_test_ui(tk.Tk):
         status_frame = ttk.LabelFrame(output_frame, text="Status Information")
         status_frame.grid(row=0, column=0, sticky="NSEW", padx=5, pady=5)
         
-        # set speed and power, the set speed is the speed the driver is setting with his controls,
-        # power command is a value calculated internally based on Kp, Ki, driver set speed (aka Vcmd), and Velocity provided by the train
-        self.set_speed = self.make_output(status_frame, "Set Speed (mph)", 0)
+        # Driver velocity and power, the driver velocity is the speed the driver is setting with his controls,
+        # power command is a value calculated internally based on Kp, Ki, driver velocity (aka Vcmd), and train velocity provided by the train
+        self.driver_velocity = self.make_output(status_frame, "Driver Velocity (mph)", 0)
         self.power_command = self.make_output(status_frame, "Power Command (W)", 1)
+        self.manual_mode_status = self.make_output(status_frame, "Manual Mode", 2)
         
         # Braking section
         brake_frame = ttk.LabelFrame(output_frame, text="Brake Status")
@@ -164,8 +168,9 @@ class train_controller_test_ui(tk.Tk):
         # Environmental controls section
         env_frame = ttk.LabelFrame(output_frame, text="Environmental Controls")
         env_frame.grid(row=4, column=0, sticky="NSEW", padx=5, pady=5)
-        self.lights_status = self.make_output(env_frame, "Lights Status", 0)
-        self.set_temperature_status = self.make_output(env_frame, "Set Temperature (°F)", 1)
+        self.exterior_lights_status = self.make_output(env_frame, "Exterior Lights Status", 0)
+        self.interior_lights_status = self.make_output(env_frame, "Interior Lights Status", 1)
+        self.set_temperature_status = self.make_output(env_frame, "Set Temperature (°F)", 2)
 
     def make_entry_text(self, parent, label, row, default=""):
         """Create a labeled text entry field.
@@ -278,7 +283,7 @@ class train_controller_test_ui(tk.Tk):
                 'commanded_speed': float(self.commanded_speed_entry.get()),
                 'speed_limit': float(self.speed_limit_entry.get()),
                 'commanded_authority': float(self.commanded_authority_entry.get()),
-                'velocity': float(self.train_velocity_entry.get()),
+                'train_velocity': float(self.train_velocity_entry.get()),
                 
                 # Station and beacon information
                 'next_stop': self.next_stop_beacon_entry.get(),
@@ -290,7 +295,10 @@ class train_controller_test_ui(tk.Tk):
                 # System failures
                 'engine_failure': self.train_engine_failure_entry.get() == "True",
                 'signal_failure': self.signal_pickup_failure_entry.get() == "True",
-                'brake_failure': self.brake_failure_entry.get() == "True"
+                'brake_failure': self.brake_failure_entry.get() == "True",
+                
+                # Operation mode
+                'manual_mode': self.manual_mode_entry.get() == "True"
             }
             
             # Send only Train Model inputs to the Train Controller
@@ -315,8 +323,9 @@ class train_controller_test_ui(tk.Tk):
         """
         try:
             # Update speed and power displays (from driver controls)
-            self.set_speed.config(text=f"{state_dict['set_speed']:.1f} mph")
+            self.driver_velocity.config(text=f"{state_dict['driver_velocity']:.1f} mph")
             self.power_command.config(text=f"{state_dict['power_command']:.1f} W")
+            self.manual_mode_status.config(text="MANUAL" if state_dict['manual_mode'] else "AUTOMATIC")
             
             # Update brake status (from driver controls)
             self.emergency_brake_status.config(
@@ -346,8 +355,11 @@ class train_controller_test_ui(tk.Tk):
             self.announcement_status.config(text=announcement)
             
             # Update environmental controls (from driver inputs)
-            self.lights_status.config(
-                text="ON" if state_dict['lights'] else "OFF"
+            self.exterior_lights_status.config(
+                text="ON" if state_dict['exterior_lights'] else "OFF"
+            )
+            self.interior_lights_status.config(
+                text="ON" if state_dict['interior_lights'] else "OFF"
             )
             
             # Update temperature display
