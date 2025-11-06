@@ -5,3 +5,4 @@ train_controller/api/__pycache__/train_controller_api.cpython-313.pyc
 train_controller/ui/__pycache__/train_controller_hw_ui.cpython-313.pyc
 train_controller/ui/__pycache__/train_controller_test_ui.cpython-313.pyc
 train_controller/ui/__pycache__/train_controller_sw_ui.cpython-313.pyc
+train_controller/data/train_states.json
