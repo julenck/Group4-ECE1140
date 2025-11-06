@@ -1,5 +1,5 @@
 #Train Controller Hardware UI
-#James Struyk
+#James Struyk test
 
 
 #import tkinter and related libraries
@@ -90,7 +90,7 @@ class train_controller:
             train_velocity = state.get('train_velocity', 0.0),
             driver_velocity = changes.get('driver_velocity', state.get('driver_velocity', 0.0)),
             emergency_brake = changes.get('emergency_brake', state.get('emergency_brake', False)),
-            service_brake = changes.get('service_brake', state.get('service_brake', 0)),
+            service_brake = changes.get('service_brake', state.get('service_brake', False)),
             power_command = state.get('power_command', 0.0),
             commanded_authority = state.get('commanded_authority', 0.0),
             speed_limit = state.get('speed_limit', 0.0)
@@ -233,10 +233,10 @@ class train_controller:
             current_sb = int(state.get('service_brake', 0))
             if cmd_auth <= 0 and current_sb == 0:
                 # request braking (100% service brake)
-                self.vital_control_check_and_update({'service_brake': 100})
+                self.vital_control_check_and_update({'service_brake': True})
             elif cmd_auth > 0 and current_sb > 0:
                 # release service brake when authority available again
-                self.vital_control_check_and_update({'service_brake': 0})
+                self.vital_control_check_and_update({'service_brake': False})
         except Exception as e:
             print(f"apply_automatic_controls error: {e}")
 
@@ -502,7 +502,7 @@ class train_controller_ui(tk.Tk):
             "Left Door": bool(state.get('left_door', False)),
             "Right Door": bool(state.get('right_door', False)),
             "Announcement": bool(state.get('announcement', '')),
-            "Service Brake": bool(state.get('service_brake', False)), #active if >0%
+            "Service Brake": bool(state.get('service_brake', False)),
             "Emergency Brake": bool(state.get('emergency_brake', False)),
             "Mode": not bool(state.get('manual_mode', False))  # True if automatic mode
         }
@@ -555,7 +555,7 @@ class vital_train_controls:
     train_velocity: float = 0.0
     driver_velocity: float = 0.0
     emergency_brake: bool = False
-    service_brake: int = 0
+    service_brake: bool = False
     power_command: float = 0.0
     commanded_authority: float = 0.0
     speed_limit: float = 0.0
