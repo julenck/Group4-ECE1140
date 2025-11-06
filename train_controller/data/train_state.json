@@ -11,7 +11,7 @@
     "brake_failure": false,
     "manual_mode": false,
     "driver_velocity": 67.0,
-    "service_brake": 0,
+    "service_brake": false,
     "right_door": false,
     "left_door": false,
     "interior_lights": false,
