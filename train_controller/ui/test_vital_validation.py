@@ -388,7 +388,7 @@ class TestVitalValidationEdgeCases(unittest.TestCase):
             emergency_brake=False,
             service_brake=0,
             power_command=50000,
-            commanded_authority=0.1,  # Very small but > 0
+            commanded_authority=0.1,  # Very small but > 0 
             speed_limit=60.0
         )
         self.assertTrue(self.validator_first.validate(controls))

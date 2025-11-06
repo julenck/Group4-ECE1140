@@ -284,7 +284,7 @@ class train_controller:
 		self._accumulated_error = 0.0
 		self._last_update_time = time.time()
 		
-		# Create instances for beacon and commanded speed/authority
+		# Create instances for beacon and commanded speed/authority 
 		self.beacon_info = beacon()
 		self.cmd_speed_auth = commanded_speed_authority()
 		
