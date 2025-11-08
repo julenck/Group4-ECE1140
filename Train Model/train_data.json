@@ -14,7 +14,7 @@
     "inputs": {
         "commanded speed": 35.0,
         "commanded authority": 5.0,
-        "speed limit": 35.0,
+        "speed limit": 39.0,
         "side_door": "left",
         "current station": "Herron Ave",
         "next station": "Herron Ave",
