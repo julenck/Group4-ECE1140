@@ -153,6 +153,50 @@ class train_controller_api:
             with open(self.state_file, 'w') as f:
                 json.dump(self.train_states.copy(), f, indent=4)
 
+    def reset_state(self) -> None:
+        """Reset train state to default values."""
+        self.save_state(self.train_states.copy())
+
+    def read_train_model_file(self) -> Optional[Dict]:
+        """Read the latest Train Model output JSON (train_to_controller.json)."""
+        try:
+            base_dir = os.path.dirname(os.path.dirname(__file__))  # train_controller/
+            train_model_path = os.path.join(base_dir, "Train Model", "train_to_controller.json")
+
+            if not os.path.exists(train_model_path):
+                print("[TrainControllerAPI] train_to_controller.json not found.")
+                return None
+
+            with open(train_model_path, 'r') as f:
+                data = json.load(f)
+            return data
+
+        except json.JSONDecodeError:
+            print("[TrainControllerAPI] Invalid JSON format in train_to_controller.json.")
+            return None
+        except Exception as e:
+            print(f"[TrainControllerAPI] Error reading train_to_controller.json: {e}")
+            return None
+        
+    def map_train_model_data(self, raw: Dict) -> Dict:
+        """Map Train Model JSON keys to Controller expected format."""
+        mapped = {
+            'commanded_speed': raw.get('commanded_speed_mph', 0.0),
+            'commanded_authority': raw.get('commanded_authority_yds', 0.0),
+            'train_velocity': raw.get('train_velocity_mph', 0.0),
+            'train_temperature': raw.get('train_temperature_F', 0.0),
+            'emergency_brake': raw.get('emergency_brake', False)
+        }
+
+        failure_modes = raw.get('failure_modes', {})
+        mapped.update({
+            'engine_failure': failure_modes.get('engine_failure', False),
+            'signal_failure': failure_modes.get('signal_pickup_failure', False),
+            'brake_failure': failure_modes.get('brake_failure', False),
+        })
+
+        return mapped
+    
     def receive_from_train_model(self, data: dict) -> None:
         """Receive updates from Train Model.
         

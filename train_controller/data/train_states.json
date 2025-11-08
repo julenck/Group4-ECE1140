@@ -1,7 +1,7 @@
 {
     "commanded_speed": 35.0,
     "commanded_authority": 5.0,
-    "speed_limit": 40.0,
+    "speed_limit": 35.0,
     "train_velocity": 30.0,
     "next_stop": "Herron Ave",
     "station_side": "left",
