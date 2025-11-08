@@ -2,9 +2,12 @@
 
 import json
 import os
+from Green_Line_PLC_XandLup import process_states_green_xlup
+import threading
+
 
 class sw_wayside_controller:
-    def __init__(self, vital):
+    def __init__(self, vital,plc=""):
     # Association
         self.vital = vital
 
@@ -18,18 +21,40 @@ class sw_wayside_controller:
         self.close_result: bool = False
         self.status_result: bool = False
         self.active_trains: dict = {}
-        self.occupied_blocks: list = [0]*150
+        self.occupied_blocks: list = [0]*152
         self.light_states: list = [0]*24
         self.gate_states: list = [0,0]
         self.switch_states: list = [0]*6
         self.output_data: dict = {}
-        self.active_plc: str = ""
-        self.input_output_filename: str = ""
+        self.active_plc: str = plc
+        self.ctc_comm_file: str = "ctc_to_wayside.json"
+        self.track_comm_file: str = "track_to_wayside.json"
         self.block_status: list = []
         self.detected_faults: dict = {}
         self.input_faults: dict = {}
+        self.blocks_with_switches: list = [13,28,57,63,77,85]
+        self.blocks_with_lights: list = [0,3,7,29,58,62,76,86,100,101,150,151]
+        self.blocks_with_gates: list = [19,108]
+
+
+
+        # Start PLC processing loop
+        self.run_plc()
 
     # Methods
+
+    def run_plc(self):
+        #call plc function
+        if self.active_plc != "":
+            self.load_inputs_track()
+            if self.active_plc == "Green_Line_PLC_XandLup.py":
+                switches, signals, crossing = process_states_green_xlup(self.occupied_blocks)
+                self.switch_states[0:3] = switches
+                self.light_states[0:11]=signals[0:11]
+                self.light_states[20:23]=signals[12:15]
+                self.gate_states[0]=crossing[0]
+            threading.Timer(0.2, self.run_plc).start()
+            
     def override_light(self, block_id: int, state: int):
         pass
 
@@ -68,15 +93,27 @@ class sw_wayside_controller:
 
     def get_block_data(self, block_id: int):
         
-        example = {
+        if block_id in self.blocks_with_switches:
+            switch_state = self.switch_states[self.blocks_with_switches.index(block_id)]
+        else:
+            switch_state = "N/A"
+        if block_id in self.blocks_with_lights:
+            light_state = self.light_states[self.blocks_with_lights.index(block_id)]
+        else:
+            light_state = "N/A"
+        if block_id in self.blocks_with_gates:
+            gate_state = self.gate_states[self.blocks_with_gates.index(block_id)]
+        else:
+            gate_state = "N/A"
+        desired = {
             "block_id": block_id,
             "occupied": False,
-            "switch_state": 0,
-            "light_state": "GREEN",
-            "gate_state": 0,
+            "switch_state": switch_state,
+            "light_state": light_state,
+            "gate_state": gate_state,
             "Failure:": 0
         }
-        return example
+        return desired
 
     def confirm_auth(self):
         pass
