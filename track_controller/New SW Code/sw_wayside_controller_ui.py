@@ -42,9 +42,9 @@ class sw_wayside_controller_ui(tk.Tk):
         self.map_frame: ttk.Frame = None
         self.selected_block_frame: ttk.Frame = None
         self.scrollable_frame: ttk.Frame = None
-        self.blocks_with_switches = [13,28,57,63]
-        self.blocks_with_lights = []
-        self.blocks_with_gates = []
+        self.blocks_with_switches: list = [13,28,57,63,77,85]
+        self.blocks_with_lights: list = [0,3,7,29,58,62,76,86,100,101,150,151]
+        self.blocks_with_gates: list = [19,108]
 
 
         #epty options for now
@@ -274,9 +274,9 @@ class sw_wayside_controller_ui(tk.Tk):
                 #block for Enter track from yard
                 check_box = ttk.Checkbutton(self.scrollable_frame,
                                             variable=self.selected_block,
-                                            onvalue=81,
+                                            onvalue=152,
                                             offvalue=-1,
-                                            command=lambda idx=81: self.on_block_selected(idx))
+                                            command=lambda idx=152: self.on_block_selected(idx))
 
                 check_box.grid(row=1, column=0, padx=5, pady=5)
                 block_label = ttk.Label(
@@ -313,19 +313,19 @@ class sw_wayside_controller_ui(tk.Tk):
                     check_box.grid(row=i+2, column=0, padx=5, pady=5)
                     block_label.grid(row=i + 2, column=1, padx=5, pady=5)
                 
-                #block for Enter yard from track
-                check_box = ttk.Checkbutton(self.scrollable_frame,
-                                            variable=self.selected_block,
-                                            onvalue=80,
-                                            offvalue=-1,
-                                            command=lambda idx=80: self.on_block_selected(idx))
-                check_box.grid(row=82, column=0, padx=5, pady=5)
-                block_label = ttk.Label(
-                    self.scrollable_frame,
-                    text="Enter Yard",
-                    style="smaller.TLabel"
-                )
-                block_label.grid(row=82, column=1, padx=5, pady=5)
+                    #block for Enter yard from track
+                    check_box = ttk.Checkbutton(self.scrollable_frame,
+                                                variable=self.selected_block,
+                                                onvalue=151,
+                                                offvalue=-1,
+                                                command=lambda idx=151: self.on_block_selected(idx))
+                    check_box.grid(row=82, column=0, padx=5, pady=5)
+                    block_label = ttk.Label(
+                        self.scrollable_frame,
+                        text="Enter Yard",
+                        style="smaller.TLabel"
+                    )
+                    block_label.grid(row=82, column=1, padx=5, pady=5)
 
     def on_block_selected(self, idx: int):
         # If user clicks the same checkbox again, deselect it
@@ -378,11 +378,11 @@ class sw_wayside_controller_ui(tk.Tk):
                 block = self.selected_block + 1 if self.selected_block < 73 else self.selected_block + 71
                 sec = self.get_section_letter(block)
                 self.selected_block_data = self.controller.get_block_data(block)  
-            elif self.selected_block == 80:
+            elif self.selected_block == 151:
                 block=151
                 self.selected_block_data = self.controller.get_block_data(block)
                 
-            elif self.selected_block == 81:
+            elif self.selected_block == 152:
                 block=0
                 self.selected_block_data = self.controller.get_block_data(block)
             
@@ -395,9 +395,9 @@ class sw_wayside_controller_ui(tk.Tk):
 
             if self.selected_block <=79:
                 id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
-            elif self.selected_block ==80:
+            elif self.selected_block ==151:
                 id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Enter Yard(151)", style="smaller.TLabel")
-            elif self.selected_block ==81:
+            elif self.selected_block ==152:
                 id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Leave Yard(0)", style="smaller.TLabel")
             id_label.pack(pady=5)
             occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
@@ -427,6 +427,10 @@ class sw_wayside_controller_ui(tk.Tk):
 
     def get_section_letter(self, block_num: int):
         block_num -= 1  # Adjust for 0-based index
+        if block_num == 151:
+            return 'Enter Yard'
+        elif block_num == 152:
+            return 'Leave Yard'
         if block_num < 3:
             return 'A'
         elif block_num < 6:
@@ -484,7 +488,7 @@ if __name__ == "__main__":
 
 
     vital = sw_vital_check.sw_vital_check()
-    controller = sw_wayside_controller.sw_wayside_controller(vital)
+    controller = sw_wayside_controller.sw_wayside_controller(vital,"Green_Line_PLC_XandLup.py")
     ui = sw_wayside_controller_ui(controller)
     #make it 1200x800
     ui.geometry("1200x800")
