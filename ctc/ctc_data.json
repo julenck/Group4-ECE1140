@@ -22,14 +22,14 @@
                 "Current Station": ""
             },
             "Train 3": {
-                "Line": "",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": "",
-                "Position": "",
-                "State": "",
-                "Current Station": ""
+                "Line": "Green",
+                "Suggested Speed": 0,
+                "Authority": 2686.6,
+                "Station Destination": "Central",
+                "Arrival Time": 0,
+                "Position": 73,
+                "State": "Running",
+                "Current Station": "---"
             },
             "Train 4": {
                 "Line": "",
@@ -44,7 +44,7 @@
             "Train 5": {
                 "Line": "Green",
                 "Suggested Speed": 0,
-                "Authority": 2686.6,
+                "Authority": 1000,
                 "Station Destination": "South Bank",
                 "Arrival Time": 0,
                 "Position": 73,
