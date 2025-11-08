@@ -24,57 +24,54 @@ default_data = {
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 2": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 3": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-               "Arrival Time": "" 
+               "Arrival Time": "",
+               "Position": "",
+               "State": "",
+               "Current Station": ""
+
             },
             "Train 4": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 5": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             }
         }
-    },
-    "TrackController": {
-        "Train Position": "",
-        "State of the Train": "",
-        "Train Failure Mode": "",
-        "Section and Block1": "",
-        "Light Color": "",
-        "Section and Block2": "",
-        "Gate": ""
-    },
-    "TrackModel": {
-        "Station": "",
-        "Passengers Leaving Station": "",
-        "Passengers Entering Station": "",
-    },
-    "MaintenenceModeOutputs": {
-        "Block Line": "",
-        "Closed Block": ""
     }
-
 }
 
 # Check if json file structure is ok 
@@ -90,58 +87,15 @@ else:
         with open(data_file, "w") as f:
             json.dump(default_data, f, indent=4)
 
-# save_to_json
-def save_to_json(section, data):
-    with open(data_file, "r") as f:
-        json_data = json.load(f)
-    json_data[section].update(data)
-    with open(data_file, "w") as f:
-        json.dump(json_data, f, indent=4)
-    print(f"{section} data saved:", data)
-
 # save_data 
 def save_data(data):
     with open(data_file, "w") as f:
         json.dump(data, f, indent=4)
 
-# update_ui
-def update_ui():
-    data = load_data()
-    dispatcher = data.get("Dispatcher", {})
-    track_controller = data.get("TrackController", {})
-    track_model = data.get("TrackModel", {})
-
-    # Dispatcher
-    train_data = dispatcher.get("Train", "")
-    line_data = dispatcher.get("Line","")
-    sugg_speed_data = dispatcher.get("Suggested Speed","")
-    authority_data = dispatcher.get("Authority","")
-    station_dest_data = dispatcher.get("Station Destination","")
-    arrival_time_data = dispatcher.get("Arrival Time","")
-
-    # Track Controller 
-    train_position_data = track_controller.get("Train Position","")
-    state_of_train_data = track_controller.get("State of the Train","")
-    failure_mode_data = track_controller.get("Track Failure Mode","")
-    lights_gates_line = track_controller.get("Line","")
-    light_loc_data = track_controller.get("Section and Block1","")
-    light_color_data = track_controller.get("Light Color","")
-    gate_loc_data = track_controller.get("Section and Block2","")
-    gate_data = track_controller.get("Gate","")
-
-    # Track Model 
-    station_data = track_model.get("Station", "")
-    passengers_leaving_data = track_model.get("Passengers Leaving Station")
-    passengers_entering_data = track_model.get("Passengers Entering Station")
-
-    active_trains_table.insert("", "end", values=(train_data, line_data, train_position_data, state_of_train_data, sugg_speed_data, authority_data, "", station_dest_data, arrival_time_data, ""))
-    lights_table.insert("","end",values=(lights_gates_line,light_loc_data,light_color_data))
-    gates_table.insert("","end",values=(lights_gates_line,gate_loc_data,gate_data))
-
 class FileChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path.endswith("ctc_data.json"):
-            root.after(100, update_ui)
+            root.after(100, update_active_trains_table)
 
 # Root window
 root = tk.Tk()
@@ -465,7 +419,7 @@ def create_table_section(parent, title, columns, data):
 active_trains_frame, active_trains_table = create_table_section(
     bottom_frame,
     "Active Trains",
-    ("Train", "Line", "Block", "State", "Suggested Speed (mph)", "Authority (yards)", "Direction", "Station", "Arrival Time"),
+    ("Train", "Line", "Block", "State", "Speed (mph)", "Authority (yards)", "Current Station", "Destination", "Arrival Time"),
     []
 )
 active_trains_frame.grid(row=0, column=0, sticky='nsew', padx=5)
@@ -493,13 +447,14 @@ def update_active_trains_table():
         active_trains_table.insert("", "end", values=(
             train_name,
             info.get("Line", ""),
-            "",  
+            info.get("Position"),
             info.get("State", ""),
             info.get("Suggested Speed", ""),
             info.get("Authority", ""),
-            info.get("Direction", ""),
+            info.get("Current Station", ""),
             info.get("Station Destination", ""),
-            info.get("Arrival Time", "")
+            info.get("Arrival Time", ""),
+            info.get("Position")
         ))
 
     # Repeat every second
@@ -542,7 +497,7 @@ auto_button.config(bg="lightgray")
 active_button = auto_button
 
 # Start event loop
-update_ui()
+#update_ui()
 root.protocol("WM_DELETE_WINDOW", lambda: (observer.stop(), root.destroy()))
 update_active_trains_table()
 root.mainloop()
