@@ -3,9 +3,10 @@ from tkinter import filedialog, ttk
 from watchdog.observers import Observer 
 from watchdog.events import FileSystemEventHandler 
 
-# json file set up 
-data_file = "ctc_data.json"
+# Set up json file 
+data_file = 'ctc_data.json'
 
+# load_data
 def load_data():
     if os.path.exists(data_file):
         with open(data_file, "r") as f:
@@ -15,19 +16,102 @@ def load_data():
                 return {}
     return {}
 
+default_data = {
+    "Dispatcher": {
+        "Trains":{
+            "Train 1": {
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 2": {
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 3": {
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+               "Arrival Time": "" 
+            },
+            "Train 4": {
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            },
+            "Train 5": {
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": ""
+            }
+        }
+    },
+    "TrackController": {
+        "Train Position": "",
+        "State of the Train": "",
+        "Train Failure Mode": "",
+        "Section and Block1": "",
+        "Light Color": "",
+        "Section and Block2": "",
+        "Gate": ""
+    },
+    "TrackModel": {
+        "Station": "",
+        "Passengers Leaving Station": "",
+        "Passengers Entering Station": "",
+    },
+    "MaintenenceModeOutputs": {
+        "Block Line": "",
+        "Closed Block": ""
+    }
+
+}
+
+# Check if json file structure is ok 
+if not os.path.exists(data_file) or os.stat(data_file).st_size == 0:
+    with open(data_file, "w") as f:
+        json.dump(default_data, f, indent=4)
+else:
+    try:
+        with open(data_file, "r") as f:
+            json.load(f)
+    except json.JSONDecodeError:
+        # Recreate file if it's corrupted or empty
+        with open(data_file, "w") as f:
+            json.dump(default_data, f, indent=4)
+
+# save_to_json
+def save_to_json(section, data):
+    with open(data_file, "r") as f:
+        json_data = json.load(f)
+    json_data[section].update(data)
+    with open(data_file, "w") as f:
+        json.dump(json_data, f, indent=4)
+    print(f"{section} data saved:", data)
+
+# save_data 
 def save_data(data):
     with open(data_file, "w") as f:
         json.dump(data, f, indent=4)
 
-
-def update_labels():
+# update_ui
+def update_ui():
     data = load_data()
     dispatcher = data.get("Dispatcher", {})
     track_controller = data.get("TrackController", {})
     track_model = data.get("TrackModel", {})
 
     # Dispatcher
-    #active_trains_table.delete(*active_trains_table.get_children())
     train_data = dispatcher.get("Train", "")
     line_data = dispatcher.get("Line","")
     sugg_speed_data = dispatcher.get("Suggested Speed","")
@@ -36,8 +120,6 @@ def update_labels():
     arrival_time_data = dispatcher.get("Arrival Time","")
 
     # Track Controller 
-    lights_table.delete(*lights_table.get_children())
-    gates_table.delete(*gates_table.get_children())
     train_position_data = track_controller.get("Train Position","")
     state_of_train_data = track_controller.get("State of the Train","")
     failure_mode_data = track_controller.get("Track Failure Mode","")
@@ -59,7 +141,7 @@ def update_labels():
 class FileChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path.endswith("ctc_data.json"):
-            root.after(100, update_labels)
+            root.after(100, update_ui)
 
 # Root window
 root = tk.Tk()
@@ -151,7 +233,6 @@ label_font = ('Times New Roman', 12, 'bold')
 input_font = ('Times New Roman', 12, 'bold')
 manual_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
-
 tk.Label(manual_frame, text="Select a Train to Dispatch", font=label_font, bg="lightgreen").grid(row=0, column=0, sticky='w', padx=10, pady=5)
 tk.Label(manual_frame, text="Select a Line", font=label_font, bg="lightgreen").grid(row=0, column=1, sticky='w', padx=10, pady=5)
 tk.Label(manual_frame, text="Enter Suggested Speed in mph", font=label_font, bg="lightgreen").grid(row=0, column=2, sticky='w', padx=10, pady=5)
@@ -175,10 +256,6 @@ def manual_dispatch():
     line = manual_line_box.get()
     speed = manual_sugg_speed_box.get()
     authority = manual_authority_box.get()
-
-    #if not train or not line or not speed or not authority:
-        #print("Please fill out all fields.")
-        #return
 
     data = load_data()
     dispatcher = data.get("Dispatcher", {})
@@ -313,21 +390,11 @@ auto_train_box = ttk.Combobox(dispatch_frame, values=["Train 1", "Train 2", "Tra
 auto_train_box.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 
 tk.Label(dispatch_frame, text="Select a Line", font=label_font, bg="lightblue").grid(row=1, column=0, sticky='w', padx=5, pady=5)
-auto_line_box = ttk.Combobox(dispatch_frame, values=["Red", "Green","Blue"], font=input_font)
+auto_line_box = ttk.Combobox(dispatch_frame, values=["Green"], font=input_font)
 auto_line_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
 
 tk.Label(dispatch_frame, text="Select a Destination Station", font=label_font, bg="lightblue").grid(row=2, column=0, sticky='w', padx=5, pady=5)
-auto_dest_box = ttk.Combobox(dispatch_frame, values=["Station B",
-                                                     "Station C",
-                                                     "Shadyside",
-                                                     "Herron Ave",
-                                                     "Swissville",
-                                                     "Penn Station",
-                                                     "Steel Plaza",
-                                                     "First Ave",
-                                                     "Station Square",
-                                                     "South Hills Junction",
-                                                     "Pioneer",
+auto_dest_box = ttk.Combobox(dispatch_frame, values=["Pioneer",
                                                      "Edgebrook",
                                                      "Whited",
                                                      "South Bank",
@@ -354,100 +421,19 @@ def auto_dispatch():
     line = auto_line_box.get()
     dest = auto_dest_box.get()
     arrival = auto_arrival_box.get()
-
-    #if not train or not line or not dest or not arrival:
-       # print("Please fill out all fields.")
-        #return
+        
+    ############# write to ctc_ui_inputs.json ##############
+    with open('ctc_ui_inputs.json',"r") as f1: 
+        data1 = json.load(f1)
     
-    # Calculate suggested speed and authority 
-    if(auto_line_box.get()) == "Blue":
-        if(auto_dest_box.get()) == "Station B":
-            authority = 546.807
-            speed = 31.069
-        if(auto_dest_box.get()) == "Station C":
-            authority = 820.21
-            speed = 31.069
-    if(auto_line_box.get()) == "Red":
-        if(auto_dest_box.get()) == "Shadyside": 
-            authority = 410.105
-            speed = 24.855
-        if(auto_dest_box.get()) == "Herron Ave": 
-            authority = 1082.68
-            speed = 24.855
-        if(auto_dest_box.get()) == "Swissville": 
-            authority = 2504.374
-            speed = 24.855
-        if(auto_dest_box.get()) == "Penn Station": 
-            authority = 2832.458
-            speed = 24.855
-        if(auto_dest_box.get()) == "Steel Plaza": 
-            authority = 3401.137
-            speed = 24.855
-        if(auto_dest_box.get()) == "First Ave": 
-            authority = 3969.816
-            speed = 24.855
-        if(auto_dest_box.get()) == "Station Square": 
-            authority = 4215.879
-            speed = 24.855
-        if(auto_dest_box.get()) == "South Hills Junction": 
-            authority = 5028.653
-            speed = 24.855
-    if(auto_line_box.get()) == "Green": 
-        if(auto_dest_box.get()) == "Pioneer": 
-            authority = 218.723
-            speed = 62.137
-        if(auto_dest_box.get()) == "Edgebrook": 
-            authority = 984.252
-            speed = 27.962
-        if(auto_dest_box.get()) == "Whited": 
-            authority = 3280.84
-            speed = 27.962
-        if(auto_dest_box.get()) == "South Bank": 
-            authority = 4538.495
-            speed = 18.641
-        if(auto_dest_box.get()) == "Central": 
-            authority = 4647.857
-            speed = 18.641
-        if(auto_dest_box.get()) == "Inglewood": 
-            authority = 5249.344
-            speed = 18.641
-        if(auto_dest_box.get()) == "Overbrook": 
-            authority = 5940.192
-            speed = 18.641
-        if(auto_dest_box.get()) == "Glenbury": 
-            authority = 6671.041
-            speed = 18.64
-        if(auto_dest_box.get()) == "Dormont": 
-            authority = 7655.293
-            speed = 18.641
-        if(auto_dest_box.get()) == "Mt. Lebanon": 
-            authority = 8311.461
-            speed = 18.641
-        if(auto_dest_box.get()) == "Poplar": 
-            authority = 11249.563
-            speed = 15.534
-        if(auto_dest_box.get()) == "Castle Shannon": 
-            authority = 11905.73
-            speed = 15.534
-        
-    data = load_data()
-    dispatcher = data.get("Dispatcher", {})
-    trains = dispatcher.get("Trains", {})
+    data1["Train"] = train
+    data1["Line"] = line
+    data1["Station"] = dest
+    data1["Arrival Time"] = arrival
 
-    # Add or update train info
-    trains[train] = {
-        "Line": line,
-        "Authority": authority,
-        "Suggested Speed": speed,
-        "Station Destination": dest,
-        "Arrival Time": arrival,
-        
-    }
+    with open('ctc_ui_inputs.json',"w") as f1: 
+        json.dump(data1,f1,indent=4)
 
-    dispatcher["Trains"] = trains
-    data["Dispatcher"] = dispatcher
-
-    save_data(data)
     update_active_trains_table()
 
 # Tables Below Mode Area 
@@ -486,7 +472,6 @@ active_trains_frame.grid(row=0, column=0, sticky='nsew', padx=5)
 
 
 def update_active_trains_table():
-    """Refresh the Active Trains table from JSON file."""
     if not os.path.exists(data_file):
         return
 
@@ -502,14 +487,13 @@ def update_active_trains_table():
     for row in active_trains_table.get_children():
         active_trains_table.delete(row)
 
-    # If you saved multiple trains in your JSON
     trains = dispatcher_data.get("Trains", {})
 
     for train_name, info in trains.items():
         active_trains_table.insert("", "end", values=(
             train_name,
             info.get("Line", ""),
-            "",  # Block (if not stored yet)
+            "",  
             info.get("State", ""),
             info.get("Suggested Speed", ""),
             info.get("Authority", ""),
@@ -558,7 +542,7 @@ auto_button.config(bg="lightgray")
 active_button = auto_button
 
 # Start event loop
-update_labels()
+update_ui()
 root.protocol("WM_DELETE_WINDOW", lambda: (observer.stop(), root.destroy()))
 update_active_trains_table()
 root.mainloop()

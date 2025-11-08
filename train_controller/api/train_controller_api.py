@@ -18,28 +18,30 @@ class train_controller_api:
         self.data_dir = os.path.join(base_dir, "data")
         os.makedirs(self.data_dir, exist_ok=True)
         
-        self.state_file = os.path.join(self.data_dir, "train_state.json")
+        self.state_file = os.path.join(self.data_dir, "train_states.json")
         
         # Default state template
-        self.default_state = {
+        self.train_states = {
             # Inputs FROM Train Model
             'commanded_speed': 0.0,      # mph
             'commanded_authority': 0.0,   # yards
-            'speed_limit': 0,         # mph
-            'velocity': 0.0,             # mph
+            'speed_limit': 0.0,         # mph
+            'train_velocity': 0.0,             # mph
             'next_stop': '',             # station name
             'station_side': '',     # left/right
-            'train_temperature': 0,   # °F
+            'train_temperature': 0.0,   # °F
             'engine_failure': False,
             'signal_failure': False,
             'brake_failure': False,
+            'manual_mode': False,       # manual/automatic mode
             
             # Internal Train Controller State
-            'set_speed': 0.0,           # mph - will be initialized to match commanded_speed
+            'driver_velocity': 0.0,           # mph - driver's set speed, will be initialized to match commanded_speed
             'service_brake': 0,         # percentage (0-100)
             'right_door': False,        # door state
             'left_door': False,         # door state
-            'lights': False,            # lights state
+            'interior_lights': False,   # interior lights state
+            'exterior_lights': False,   # exterior lights state
             'set_temperature': 0.0,     # Driver's desired temperature (°F) - will be initialized to match train_temperature
             'temperature_up': False,    # temperature control
             'temperature_down': False,   # temperature control
@@ -58,8 +60,8 @@ class train_controller_api:
         try:
             if not os.path.exists(self.state_file) or os.path.getsize(self.state_file) == 0:
                 # Initialize default state with matched values
-                initial_state = self.default_state.copy()
-                initial_state['set_speed'] = initial_state['commanded_speed']
+                initial_state = self.train_states.copy()
+                initial_state['driver_velocity'] = initial_state['commanded_speed']
                 initial_state['set_temperature'] = initial_state['train_temperature']
                 self.save_state(initial_state)
             else:
@@ -68,26 +70,26 @@ class train_controller_api:
                     try:
                         current_state = json.load(f)
                         # Ensure all required fields are present
-                        for key in self.default_state:
+                        for key in self.train_states:
                             if key not in current_state:
-                                current_state[key] = self.default_state[key]
-                        # Always ensure set_speed and set_temperature match their inputs if not set
-                        if 'set_speed' not in current_state:
-                            current_state['set_speed'] = current_state['commanded_speed']
+                                current_state[key] = self.train_states[key]
+                        # Always ensure driver_velocity and set_temperature match their inputs if not set
+                        if 'driver_velocity' not in current_state:
+                            current_state['driver_velocity'] = current_state['commanded_speed']
                         if 'set_temperature' not in current_state:
                             current_state['set_temperature'] = current_state['train_temperature']
                         self.save_state(current_state)
                     except json.JSONDecodeError:
                         # File exists but is malformed, overwrite with defaults
-                        initial_state = self.default_state.copy()
-                        initial_state['set_speed'] = initial_state['commanded_speed']
+                        initial_state = self.train_states.copy()
+                        initial_state['driver_velocity'] = initial_state['commanded_speed']
                         initial_state['set_temperature'] = initial_state['train_temperature']
                         self.save_state(initial_state)
         except Exception as e:
             print(f"Error initializing state file: {e}")
             # Ensure we have a valid state file with proper initialization
-            initial_state = self.default_state.copy()
-            initial_state['set_speed'] = initial_state['commanded_speed']
+            initial_state = self.train_states.copy()
+            initial_state['driver_velocity'] = initial_state['commanded_speed']
             initial_state['set_temperature'] = initial_state['train_temperature']
             self.save_state(initial_state)
 
@@ -115,11 +117,11 @@ class train_controller_api:
                     except json.JSONDecodeError as e:
                         print(f"Error reading state file: {e}")
                         # Reset to default state if file is corrupted
-                        self.save_state(self.default_state)
-            return self.default_state.copy()
+                        self.save_state(self.train_states)
+            return self.train_states.copy()
         except Exception as e:
             print(f"Error accessing state file: {e}")
-            return self.default_state.copy()
+            return self.train_states.copy()
 
     def save_state(self, state: dict) -> None:
         """Save train state to file.
@@ -132,7 +134,7 @@ class train_controller_api:
         """
         try:
             # Ensure all default fields are present
-            complete_state = self.default_state.copy()
+            complete_state = self.train_states.copy()
             complete_state.update(state)
             
             # Create directory if it doesn't exist
@@ -149,7 +151,7 @@ class train_controller_api:
             print(f"Error saving state: {e}")
             # If all else fails, try direct write
             with open(self.state_file, 'w') as f:
-                json.dump(self.default_state.copy(), f, indent=4)
+                json.dump(self.train_states.copy(), f, indent=4)
 
     def receive_from_train_model(self, data: dict) -> None:
         """Receive updates from Train Model.
@@ -164,15 +166,15 @@ class train_controller_api:
         relevant_data = {
             k: v for k, v in data.items() 
             if k in ['commanded_speed', 'commanded_authority', 'speed_limit',
-                    'velocity', 'next_stop', 'station_side', 'train_temperature',
-                    'engine_failure', 'signal_failure', 'brake_failure']
+                    'train_velocity', 'next_stop', 'station_side', 'train_temperature',
+                    'engine_failure', 'signal_failure', 'brake_failure', 'manual_mode']
         }
         
-        # If commanded_speed is changing and set_speed matches old commanded_speed,
-        # update set_speed to match new commanded_speed
+        # If commanded_speed is changing and driver_velocity matches old commanded_speed,
+        # update driver_velocity to match new commanded_speed
         if ('commanded_speed' in relevant_data and 
-            current_state['set_speed'] == current_state['commanded_speed']):
-            relevant_data['set_speed'] = relevant_data['commanded_speed']
+            current_state['driver_velocity'] == current_state['commanded_speed']):
+            relevant_data['driver_velocity'] = relevant_data['commanded_speed']
             
         # If train_temperature is changing and set_temperature matches old train_temperature,
         # update set_temperature to match new train_temperature
@@ -195,7 +197,8 @@ class train_controller_api:
             'emergency_brake': state['emergency_brake'],
             'right_door': state['right_door'],
             'left_door': state['left_door'],
-            'lights': state['lights'],
+            'interior_lights': state['interior_lights'],
+            'exterior_lights': state['exterior_lights'],
             'temperature_up': state['temperature_up'],
             'temperature_down': state['temperature_down']
         }
