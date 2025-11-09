@@ -59,18 +59,43 @@ class sw_wayside_controller:
             if self.active_plc == "Green_Line_PLC_XandLup.py":
                 occ1 = self.occupied_blocks[0:73]
                 occ2 = self.occupied_blocks[144:151]
-                occ = occ1 + occ2
+                occ =occ1+occ2
                 switches, signals, crossing = process_states_green_xlup(occ)
-                self.switch_states[0:3] = switches[0:3]
-                self.light_states[0:11]=signals[0:11]
-                self.light_states[20:23]=signals[12:15]
+                self.switch_states[0]=switches[0]
+                self.switch_states[1]=switches[1]
+                self.switch_states[2]=switches[2]
+                self.switch_states[3]=switches[3]
+                self.light_states[0]=signals[0]
+                self.light_states[1]=signals[1]
+                self.light_states[2]=signals[2]
+                self.light_states[3]=signals[3]
+                self.light_states[4]=signals[4]
+                self.light_states[5]=signals[5]
+                self.light_states[6]=signals[6]
+                self.light_states[7]=signals[7]
+                self.light_states[8]=signals[8]
+                self.light_states[9]=signals[9]
+                self.light_states[10]=signals[10]
+                self.light_states[11]=signals[11]
+                self.light_states[20]=signals[12]
+                self.light_states[21]=signals[13]
+                self.light_states[22]=signals[14]
+                self.light_states[23]=signals[15]
                 self.gate_states[0]=crossing[0]
 
             elif self.active_plc == "Green_Line_PLC_XandLdown.py":
                 occ = self.occupied_blocks[70:146]
-                switches, signals, crossing = process_states_green_xldown(occ)
-                self.switch_states[4:5] = switches[0:1]
-                self.light_states[12:19] = signals[0:7]
+                signals, switches, crossing = process_states_green_xldown(occ)
+                self.switch_states[4]=switches[0]
+                self.switch_states[5]=switches[1]
+                self.light_states[12]=signals[0]
+                self.light_states[13]=signals[1]
+                self.light_states[14]=signals[2]
+                self.light_states[15]=signals[3]
+                self.light_states[16]=signals[4]
+                self.light_states[17]=signals[5]
+                self.light_states[18]=signals[6]
+                self.light_states[19]=signals[7]
                 self.gate_states[1] = crossing[0]
             self.load_track_outputs()
             if self.running:
@@ -143,7 +168,10 @@ class sw_wayside_controller:
         else:
             switch_state = "N/A"
         if block_id in self.blocks_with_lights:
-            light_state = self.light_states[self.blocks_with_lights.index(block_id)]
+            light_state0 = self.light_states[(self.blocks_with_lights.index(block_id))*2]
+            light_state1 = self.light_states[(self.blocks_with_lights.index(block_id))*2+1]
+            light_state = f"{light_state0}{light_state1}"
+         
         else:
             light_state = "N/A"
         if block_id in self.blocks_with_gates:
