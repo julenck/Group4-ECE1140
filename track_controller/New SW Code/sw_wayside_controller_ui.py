@@ -345,6 +345,27 @@ class sw_wayside_controller_ui(tk.Tk):
                         style="smaller.TLabel"
                     )
                     block_label.grid(row=82, column=1, padx=5, pady=5)
+            
+            elif (os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py"):
+                #build for 77 blocks
+
+                for i in range(77):
+                    block_num = i + 70
+                    section_letter = self.get_section_letter(block_num)
+                    check_box = ttk.Checkbutton(self.scrollable_frame,
+                                                variable=self.selected_block, 
+                                                onvalue=i,
+                                                offvalue=-1,
+                                                command=lambda idx=i: self.on_block_selected(idx))
+                    check_box.grid(row=i+1, column=0, padx=5, pady=5)
+
+                    block_label = ttk.Label(
+                        self.scrollable_frame,
+                        text=f"{section_letter}{block_num}",
+                        style="smaller.TLabel"
+                    )
+                    block_label.grid(row=i + 1, column=1, padx=5, pady=5)
+
 
     def on_block_selected(self, idx: int):
         # If user clicks the same checkbox again, deselect it
@@ -392,7 +413,7 @@ class sw_wayside_controller_ui(tk.Tk):
         if self.selected_block == -1:
             self.block_info_label = ttk.Label(self.selected_block_frame, text="Selected block information will be displayed here.", style="smaller.TLabel")
             self.block_info_label.pack(pady=10)
-        else:
+        elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLup.py":
             if self.selected_block <= 79:
                 block = self.selected_block + 1 if self.selected_block < 73 else self.selected_block + 71
                 sec = self.get_section_letter(block)
@@ -429,6 +450,32 @@ class sw_wayside_controller_ui(tk.Tk):
             gate_label.pack(pady=5)
             failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
             failure_label.pack(pady=5)
+
+        elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py":
+            block = self.selected_block + 70
+            sec = self.get_section_letter(block)
+            self.selected_block_data = self.controller.get_block_data(block)  
+
+            id = self.selected_block_data["block_id"]
+            occupied = self.selected_block_data["occupied"]
+            switch_state = self.selected_block_data["switch_state"]
+            light_state = self.selected_block_data["light_state"]
+            gate_state = self.selected_block_data["gate_state"]
+            failure = self.selected_block_data["Failure"]
+
+            id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
+            id_label.pack(pady=5)
+            occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
+            occupied_label.pack(pady=5)
+            switch_label = ttk.Label(self.selected_block_frame, text=f"Switch State: {switch_state}", style="smaller.TLabel")
+            switch_label.pack(pady=5)
+            light_label = ttk.Label(self.selected_block_frame, text=f"Light State: {light_state}", style="smaller.TLabel")
+            light_label.pack(pady=5)
+            gate_label = ttk.Label(self.selected_block_frame, text=f"Gate State: {gate_state}", style="smaller.TLabel")
+            gate_label.pack(pady=5)
+            failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
+            failure_label.pack(pady=5)
+
 
 
                 
@@ -513,15 +560,15 @@ def main():
     ui1.geometry("1200x800")
 
     # Create second UI window (another Tk)
-    #vital2 = sw_vital_check.sw_vital_check()
-    #controller2 = sw_wayside_controller.sw_wayside_controller(vital2, "Green_Line_PLC_XandLup.py")
-    #ui2 = sw_wayside_controller_ui(controller2)
-    #ui2.title("Wayside Controller 2")
-    #ui2.geometry("1200x800")
+    vital2 = sw_vital_check.sw_vital_check()
+    controller2 = sw_wayside_controller.sw_wayside_controller(vital2, "Green_Line_PLC_XandLdown.py")
+    ui2 = sw_wayside_controller_ui(controller2)
+    ui2.title("Wayside Controller 2")
+    ui2.geometry("1200x800")
 
     # Bring both windows to front
     ui1.lift()
-    #ui2.lift()
+    ui2.lift()
 
     # Run *one* mainloop (both Tk windows share it)
     tk.mainloop()
