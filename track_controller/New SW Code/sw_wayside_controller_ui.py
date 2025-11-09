@@ -605,29 +605,29 @@ class sw_wayside_controller_ui(tk.Tk):
 
         if id in [13,28,57,63,77,85]:
             if id == 13 and switch_state_enum == 0:
-                switch_state = "13->1"
+                switch_state = "D13->A1"
             elif id == 13 and switch_state_enum == 1:
-                switch_state = "13->12"
+                switch_state = "D13->C12"
             elif id == 28 and switch_state_enum == 0:
-                switch_state = "28->29"
+                switch_state = "F28->G29"
             elif id == 28 and switch_state_enum == 1:
-                switch_state = "28->150"
+                switch_state = "F28->Z150"
             elif id == 57 and switch_state_enum == 0:
-                switch_state = "57->Yard"
+                switch_state = "I57->Yard"
             elif id == 57 and switch_state_enum == 1:
-                switch_state = "57->58"
+                switch_state = "I57->J58"
             elif id == 63 and switch_state_enum == 0:
-                switch_state = "63->62"
+                switch_state = "K63->J62"
             elif id == 63 and switch_state_enum == 1:
-                switch_state = "63-Yard"
+                switch_state = "K63-Yard"
             elif id == 77 and switch_state_enum == 0:
-                switch_state = "77->78"
+                switch_state = "N77->M76"
             elif id == 77 and switch_state_enum == 1:
-                switch_state = "77->101"
+                switch_state = "N77->R101"
             elif id == 85 and switch_state_enum == 0:
-                switch_state = "85->86"
+                switch_state = "N85->O86"
             elif id == 85 and switch_state_enum == 1:
-                switch_state = "85->100"
+                switch_state = "N85->Q100"
         else: 
             switch_state = "N/A"
         if id in [0,3,7,29,58,62,76,86,100,101,150,151]:
