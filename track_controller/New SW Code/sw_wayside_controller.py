@@ -3,6 +3,7 @@
 import json
 import os
 from Green_Line_PLC_XandLup import process_states_green_xlup
+from Green_Line_PLC_XandLdown import process_states_green_xldown
 import threading
 
 
@@ -60,10 +61,17 @@ class sw_wayside_controller:
                 occ2 = self.occupied_blocks[144:151]
                 occ = occ1 + occ2
                 switches, signals, crossing = process_states_green_xlup(occ)
-                self.switch_states[0:4] = switches
+                self.switch_states[0:3] = switches[0:3]
                 self.light_states[0:11]=signals[0:11]
                 self.light_states[20:23]=signals[12:15]
                 self.gate_states[0]=crossing[0]
+
+            elif self.active_plc == "Green_Line_PLC_XandLdown.py":
+                occ = self.occupied_blocks[70:146]
+                switches, signals, crossing = process_states_green_xldown(occ)
+                self.switch_states[4:5] = switches[0:1]
+                self.light_states[12:19] = signals[0:7]
+                self.gate_states[1] = crossing[0]
             self.load_track_outputs()
             if self.running:
                 threading.Timer(0.2, self.run_plc).start()
