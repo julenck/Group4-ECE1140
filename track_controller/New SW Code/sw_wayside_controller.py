@@ -31,10 +31,12 @@ class sw_wayside_controller:
         self.track_comm_file: str = "track_to_wayside.json"
         self.block_status: list = []
         self.detected_faults: dict = {}
-        self.input_faults: dict = {}
+        self.input_faults: list = []
         self.blocks_with_switches: list = [13,28,57,63,77,85]
         self.blocks_with_lights: list = [0,3,7,29,58,62,76,86,100,101,150,151]
         self.blocks_with_gates: list = [19,108]
+        self.running: bool = True
+        self.file_lock = threading.Lock()
 
 
 
@@ -42,21 +44,33 @@ class sw_wayside_controller:
         self.run_plc()
 
     # Methods
+    def stop(self):
+        # Stop PLC processing loop
+        self.running = False
 
     def run_plc(self):
+        if not self.running:
+            self.active_plc = ""
+            return
         #call plc function
         if self.active_plc != "":
             self.load_inputs_track()
             if self.active_plc == "Green_Line_PLC_XandLup.py":
-                switches, signals, crossing = process_states_green_xlup(self.occupied_blocks)
-                self.switch_states[0:3] = switches
+                occ1 = self.occupied_blocks[0:73]
+                occ2 = self.occupied_blocks[144:151]
+                occ = occ1 + occ2
+                switches, signals, crossing = process_states_green_xlup(occ)
+                self.switch_states[0:4] = switches
                 self.light_states[0:11]=signals[0:11]
                 self.light_states[20:23]=signals[12:15]
                 self.gate_states[0]=crossing[0]
-            threading.Timer(0.2, self.run_plc).start()
+            self.load_track_outputs()
+            if self.running:
+                threading.Timer(0.2, self.run_plc).start()
             
     def override_light(self, block_id: int, state: int):
-        pass
+        if block_id in self.blocks_with_lights:
+            self.light_states[self.blocks_with_lights.index(block_id)] = state
 
     def override_gate(self, block_id: int, state: int):
         pass
@@ -83,10 +97,33 @@ class sw_wayside_controller:
         pass
 
     def load_inputs_track(self):
-        pass
+        #read track to wayside json file
+        with self.file_lock:
+            with open(self.track_comm_file, 'r') as f:
+                data = json.load(f)
+                self.occupied_blocks = data.get("G-Occupancy", [0]*152)
+                self.input_faults = data.get("G-Failures", [0]*152*3)
+        
      
     def load_track_outputs(self):
-        pass
+        with self.file_lock:
+            with open(self.track_comm_file, 'r') as f:
+                data = json.load(f)
+
+            # Update values
+
+
+            data["G-switches"] = self.switch_states
+            data["G-lights"] = self.light_states
+            data["G-gates"] = self.gate_states
+
+            
+
+            # Now rewrite cleanly (overwrite file)
+            with open(self.track_comm_file, 'w') as f:
+                json.dump(data, f, indent=4)
+
+            
 
     def load_ctc_outputs(self):
         pass
@@ -105,15 +142,32 @@ class sw_wayside_controller:
             gate_state = self.gate_states[self.blocks_with_gates.index(block_id)]
         else:
             gate_state = "N/A"
+
+        if self.occupied_blocks[block_id] == 1:
+            occupied = True
+        else:
+            occupied = False
+        
+        if self.input_faults[block_id*3] == 1:
+            failure = 1
+        elif self.input_faults[block_id*3+1] == 1:
+            failure = 2
+        elif self.input_faults[block_id*3+2] == 1:
+            failure = 3
+        else:
+            failure = 0
         desired = {
             "block_id": block_id,
-            "occupied": False,
+            "occupied": occupied,
             "switch_state": switch_state,
             "light_state": light_state,
             "gate_state": gate_state,
-            "Failure:": 0
+            "Failure": failure
         }
         return desired
+
+    def get_start_plc(self):
+        return self.active_plc
 
     def confirm_auth(self):
         pass

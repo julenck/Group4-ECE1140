@@ -29,8 +29,10 @@ import sw_vital_check
 class sw_wayside_controller_ui(tk.Tk):
     def __init__(self, controller):
         super().__init__()
-    # Association
         self.controller = controller
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    
 
     # Attributes
         self.toggle_maintenance_mode: tk.BooleanVar = tk.BooleanVar(value=False)
@@ -86,11 +88,28 @@ class sw_wayside_controller_ui(tk.Tk):
         self.selected_block_frame = ttk.Frame(self, style="SelectedBlock.TFrame")
         self.selected_block_frame.grid(row=1, column=2, sticky="nsew")
 
+        self.start_plc: str = controller.get_start_plc()
+        self.selected_file_str = tk.StringVar(value="N/A")
+        self.selected_file_str.set(self.start_plc)
+
         self.build_maintenance_frame()
         self.build_input_frame()
         self.build_all_blocks_frame()
         self.build_map_frame()
         self.build_selected_block_frame()
+    
+
+    def on_close(self):
+         # Stop the PLC loop and all background timers
+        if hasattr(self, "controller") and self.controller is not None:
+            self.controller.stop()
+
+        # Destroy the UI window cleanly
+        self.destroy()
+
+        # End Tkinter’s mainloop completely if no other windows remain
+        if not any(isinstance(w, tk.Tk) and w.winfo_exists() for w in tk._default_root.children.values()):
+            self.quit()
 
     
 
@@ -194,7 +213,7 @@ class sw_wayside_controller_ui(tk.Tk):
         )
         self.upload_button.pack(pady=10)
 
-        self.selected_file_str = tk.StringVar(value="N/A")
+        
 
         self.selected_file_label = ttk.Label(self.maintenance_frame, text=f"currently selected file: {self.selected_file_str.get()}", style="display.TLabel", wraplength=200)
         self.selected_file_label.pack(pady=5)
@@ -391,7 +410,7 @@ class sw_wayside_controller_ui(tk.Tk):
             switch_state = self.selected_block_data["switch_state"]
             light_state = self.selected_block_data["light_state"]
             gate_state = self.selected_block_data["gate_state"]
-            failure = self.selected_block_data["Failure:"]
+            failure = self.selected_block_data["Failure"]
 
             if self.selected_block <=79:
                 id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
@@ -484,12 +503,29 @@ class sw_wayside_controller_ui(tk.Tk):
         else:
             return 'Z'
 
+
+def main():
+    # Create first UI window (still a Tk)
+    vital1 = sw_vital_check.sw_vital_check()
+    controller1 = sw_wayside_controller.sw_wayside_controller(vital1, "Green_Line_PLC_XandLup.py")
+    ui1 = sw_wayside_controller_ui(controller1)
+    ui1.title("Wayside Controller 1")
+    ui1.geometry("1200x800")
+
+    # Create second UI window (another Tk)
+    #vital2 = sw_vital_check.sw_vital_check()
+    #controller2 = sw_wayside_controller.sw_wayside_controller(vital2, "Green_Line_PLC_XandLup.py")
+    #ui2 = sw_wayside_controller_ui(controller2)
+    #ui2.title("Wayside Controller 2")
+    #ui2.geometry("1200x800")
+
+    # Bring both windows to front
+    ui1.lift()
+    #ui2.lift()
+
+    # Run *one* mainloop (both Tk windows share it)
+    tk.mainloop()
+
+
 if __name__ == "__main__":
-
-
-    vital = sw_vital_check.sw_vital_check()
-    controller = sw_wayside_controller.sw_wayside_controller(vital,"Green_Line_PLC_XandLup.py")
-    ui = sw_wayside_controller_ui(controller)
-    #make it 1200x800
-    ui.geometry("1200x800")
-    ui.mainloop()
+    main()
