@@ -1,8 +1,21 @@
 {
-    "train_velocity_mph": 2.23636304,
+    "train_velocity_mph": 3.3545445600000003,
+    "train_acceleration_ftps2": 1.64,
+    "train_position_yds": 2.87,
+    "authority_remaining_yds": 328.0,
+    "current_station": "",
+    "next_station": "",
+    "left_door_open": false,
+    "right_door_open": false,
+    "speed_limit_mph": 40.0,
+    "commanded_speed_mph": 35.0,
+    "commanded_authority_yds": 328.0,
+    "beacon_data": "None",
     "train_temperature_F": 68,
     "emergency_brake": false,
-    "engine_failure": false,
-    "signal_pickup_failure": false,
-    "brake_failure": false
+    "failure_modes": {
+        "engine_failure": false,
+        "signal_pickup_failure": false,
+        "brake_failure": false
+    }
 }

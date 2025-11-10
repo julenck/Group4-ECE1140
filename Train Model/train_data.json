@@ -21,9 +21,9 @@
         "station name": ""
     },
     "outputs": {
-        "velocity_mph": 2.23636304,
+        "velocity_mph": 3.3545445600000003,
         "acceleration_ftps2": 1.64,
-        "position_yds": 1.3666666666666667,
+        "position_yds": 2.87,
         "authority_yds": 328.0,
         "station_name": "",
         "next_station": "",
