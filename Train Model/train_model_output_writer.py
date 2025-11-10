@@ -3,11 +3,10 @@ import os
 
 def write_outputs_to_other_modules(inputs, outputs):
     """
-    Write real Train Model computation results to:
-      1. train_to_controller.json (for Train Controller)
-      2. train_to_trackmodel.json (for Track Model)
-    Combines both current inputs (from train_data.json)
-    and calculated outputs (from train_model_ui).
+    Write only required fields to:
+      - train_to_controller.json
+      - train_to_trackmodel.json
+    The output fields match the Train Controller’s required format.
     """
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,30 +15,30 @@ def write_outputs_to_other_modules(inputs, outputs):
     controller_path = os.path.join(base_dir, "train_to_controller.json")
 
     controller_data = {
-        # ---- From Train Model simulation results ----
-        "train_velocity_mph": outputs.get("velocity_mph", 0.0),
-        "train_acceleration_ftps2": outputs.get("acceleration_ftps2", 0.0),
-        "train_position_yds": outputs.get("position_yds", 0.0),
-        "authority_remaining_yds": outputs.get("authority_yds", 0.0),
-        "current_station": outputs.get("station_name", "Unknown"),
-        "next_station": outputs.get("next_station", "Unknown"),
-        "left_door_open": outputs.get("left_door_open", False),
-        "right_door_open": outputs.get("right_door_open", False),
-        "speed_limit_mph": outputs.get("speed_limit", 0.0),
+        # 1. Commanded Speed (from Train Controller inputs)
+        "commanded speed": inputs.get("commanded speed", 0.0),
 
-        # ---- From Train Controller commands ----
-        "commanded_speed_mph": inputs.get("commanded speed", 0.0),
-        "commanded_authority_yds": inputs.get("commanded authority", 0.0),
-        "beacon_data": inputs.get("beacon data", "None"),
+        # 2. Commanded Authority
+        "commanded authority": inputs.get("commanded authority", 0.0),
 
-        # ---- System status ----
-        "train_temperature_F": 68,     # Replace with actual model variable if available
-        "emergency_brake": False,      # Replace if your model has a flag for this
-        "failure_modes": {
-            "engine_failure": inputs.get("engine failure", False),
-            "signal_pickup_failure": inputs.get("signal failure", False),
-            "brake_failure": inputs.get("brake failure", False)
-        }
+        # 3. Beacon Data
+        "beacon data": inputs.get("beacon data", "None"),
+
+        # 4. Failure Modes (3 subfields)
+        "failure modes": {
+            "engine failure": inputs.get("engine failure", False),
+            "signal pickup failure": inputs.get("signal failure", False),
+            "brake failure": inputs.get("brake failure", False)
+        },
+
+        # 5. Train Velocity (from Train Model calculation)
+        "train velocity": outputs.get("velocity_mph", 0.0),
+
+        # 6. Emergency Brake
+        "emergency brake": False,  # replace later if model supports it
+
+        # 7. Train Temperature
+        "train temperature": 68  # static or dynamic
     }
 
     with open(controller_path, "w") as f:
@@ -48,12 +47,9 @@ def write_outputs_to_other_modules(inputs, outputs):
     # === 2️⃣ Write to Track Model ===
     track_path = os.path.join(base_dir, "train_to_trackmodel.json")
 
-    # Example: passengers disembark only when train stops
+    # Example: only output passenger count
     num_disembarking = 11 if outputs.get("velocity_mph", 0) < 1 else 0
-
-    track_data = {
-        "number_of_passengers_disembarking": num_disembarking
-    }
+    track_data = {"number_of_passengers_disembarking": num_disembarking}
 
     with open(track_path, "w") as f:
         json.dump(track_data, f, indent=4)
