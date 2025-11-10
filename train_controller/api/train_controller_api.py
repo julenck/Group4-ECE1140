@@ -140,13 +140,9 @@ class train_controller_api:
             # Create directory if it doesn't exist
             os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
             
-            # Write state atomically using a temporary file
-            temp_file = self.state_file + '.tmp'
-            with open(temp_file, 'w') as f:
+            with open(self.state_file, 'w') as f:
                 json.dump(complete_state, f, indent=4)
-            
-            # Rename temp file to actual file (atomic operation)
-            os.replace(temp_file, self.state_file)
+
         except Exception as e:
             print(f"Error saving state: {e}")
             # If all else fails, try direct write
