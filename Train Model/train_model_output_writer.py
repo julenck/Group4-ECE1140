@@ -12,7 +12,7 @@ def write_outputs_to_other_modules(inputs, outputs):
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # ===  Write to Train Controller ===
+    # === 1️⃣ Write to Train Controller ===
     controller_path = os.path.join(base_dir, "train_to_controller.json")
 
     controller_data = {
@@ -33,7 +33,7 @@ def write_outputs_to_other_modules(inputs, outputs):
         "beacon_data": inputs.get("beacon data", "None"),
 
         # ---- System status ----
-        "train_temperature_F": 68,     # You can later replace this with actual model temp
+        "train_temperature_F": 68,     # Replace with actual model variable if available
         "emergency_brake": False,      # Replace if your model has a flag for this
         "failure_modes": {
             "engine_failure": inputs.get("engine failure", False),
@@ -45,16 +45,16 @@ def write_outputs_to_other_modules(inputs, outputs):
     with open(controller_path, "w") as f:
         json.dump(controller_data, f, indent=4)
 
-    # ===  Write to Track Model ===
+    # === 2️⃣ Write to Track Model ===
     track_path = os.path.join(base_dir, "train_to_trackmodel.json")
 
-    # Example: suppose passengers disembark only when velocity ~ 0
+    # Example: passengers disembark only when train stops
     num_disembarking = 11 if outputs.get("velocity_mph", 0) < 1 else 0
 
     track_data = {
-        "number_of_passengers_disembarking": num_disembarking,
-        "current_station": outputs.get("station_name", "Unknown")
+        "number_of_passengers_disembarking": num_disembarking
     }
 
     with open(track_path, "w") as f:
         json.dump(track_data, f, indent=4)
+

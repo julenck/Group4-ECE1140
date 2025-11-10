@@ -1,7 +1,7 @@
 {
-    "train_velocity_mph": 3.3545445600000003,
+    "train_velocity_mph": 2.23636304,
     "train_acceleration_ftps2": 1.64,
-    "train_position_yds": 2.87,
+    "train_position_yds": 1.3666666666666667,
     "authority_remaining_yds": 328.0,
     "current_station": "",
     "next_station": "",
