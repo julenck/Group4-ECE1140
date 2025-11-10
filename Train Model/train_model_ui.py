@@ -234,9 +234,6 @@ class TrainModelUI(tk.Tk):
             self.env_labels["Left Door"].config(text=f"Left Door: {'Open' if outputs['left_door_open'] else 'Closed'}")
             self.env_labels["Right Door"].config(text=f"Right Door: {'Open' if outputs['right_door_open'] else 'Closed'}")
 
-            from train_model_output_writer import write_outputs_to_other_modules
-            write_outputs_to_other_modules(inputs, outputs)
-
 
         # 4. Repeat periodically
         self.after(int(self.model.dt * 1000), self.update_loop)

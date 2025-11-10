@@ -153,48 +153,56 @@ class train_controller_api:
         """Reset train state to default values."""
         self.save_state(self.train_states.copy())
 
-    def read_train_model_file(self) -> Optional[Dict]:
-        """Read the latest Train Model output JSON (train_to_controller.json)."""
+    def read_train_data_json(self) -> Optional[Dict]:
+        """Read the latest train_data.json directly from Train Model folder."""
         try:
             base_dir = os.path.dirname(os.path.dirname(__file__))  # train_controller/
-            train_model_path = os.path.join(os.path.dirname(base_dir), "Train Model", "train_to_controller.json")
+            train_data_path = os.path.join(os.path.dirname(base_dir), "Train Model", "train_data.json")
 
-            print(f"[DEBUG] Looking for JSON at: {train_model_path}")
+            print(f"[DEBUG] Reading Train Model data from: {train_data_path}")
 
-            if not os.path.exists(train_model_path):
-                print("[TrainControllerAPI] train_to_controller.json not found.")
+            if not os.path.exists(train_data_path):
+                print("[TrainControllerAPI] train_data.json not found in Train Model folder.")
                 return None
 
-            with open(train_model_path, 'r') as f:
+            with open(train_data_path, 'r') as f:
                 data = json.load(f)
             return data
 
         except json.JSONDecodeError:
-            print("[TrainControllerAPI] Invalid JSON format in train_to_controller.json.")
+            print("[TrainControllerAPI] Invalid JSON format in train_data.json.")
             return None
         except Exception as e:
-            print(f"[TrainControllerAPI] Error reading train_to_controller.json: {e}")
+            print(f"[TrainControllerAPI] Error reading train_data.json: {e}")
             return None
-        
-    def map_train_model_data(self, raw: Dict) -> Dict:
-        """Map Train Model JSON keys to Controller expected format."""
-        mapped = {
-            'commanded_speed': raw.get('commanded_speed_mph', 0.0),
-            'commanded_authority': raw.get('commanded_authority_yds', 0.0),
-            'train_velocity': raw.get('train_velocity_mph', 0.0),
-            'train_temperature': raw.get('train_temperature_F', 0.0),
-            'emergency_brake': raw.get('emergency_brake', False)
+
+    def update_from_train_data(self) -> None:
+        """Read and update controller state directly from Train Model's train_data.json."""
+        data = self.read_train_data_json()
+        if not data:
+            print("[TrainControllerAPI] No valid data read from Train Model.")
+            return
+
+        # === Map relevant keys from train_data.json ===
+        inputs = data.get("inputs", {})
+        outputs = data.get("outputs", {})
+
+        mapped_data = {
+            'commanded_speed': inputs.get('commanded speed', 0.0),
+            'commanded_authority': inputs.get('commanded authority', 0.0),
+            'speed_limit': inputs.get('speed limit', 0.0),
+            'train_velocity': outputs.get('velocity_mph', 0.0),
+            'train_temperature': outputs.get('temperature_F', 70.0),
+            'engine_failure': inputs.get('engine_failure', False),
+            'signal_failure': inputs.get('signal_failure', False),
+            'brake_failure': inputs.get('brake_failure', False),
+            'manual_mode': inputs.get('manual_mode', False),
         }
 
-        failure_modes = raw.get('failure_modes', {})
-        mapped.update({
-            'engine_failure': failure_modes.get('engine_failure', False),
-            'signal_failure': failure_modes.get('signal_pickup_failure', False),
-            'brake_failure': failure_modes.get('brake_failure', False),
-        })
+        # Update controller state
+        self.receive_from_train_model(mapped_data)
+        print("[TrainControllerAPI] State successfully updated from Train Model train_data.json.")
 
-        return mapped
-    
     def receive_from_train_model(self, data: dict) -> None:
         """Receive updates from Train Model.
         
@@ -247,11 +255,4 @@ class train_controller_api:
 
 if __name__ == "__main__":
     api = train_controller_api()
-
-    raw_data = api.read_train_model_file()
-    if raw_data:
-        mapped_data = api.map_train_model_data(raw_data)
-        api.receive_from_train_model(mapped_data)
-        print("[Controller] State updated from Train Model")
-    else:
-        print("[Controller] No Train Model data found.")
+    api.update_from_train_data()

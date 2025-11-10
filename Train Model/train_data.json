@@ -12,8 +12,8 @@
         "crew_count": 2
     },
     "inputs": {
-        "commanded speed": 35.0,
-        "commanded authority": 328.0,
+        "commanded speed": 0.0,
+        "commanded authority": 0.0,
         "speed limit": 0.0,
         "side_door": "",
         "current station": "",
@@ -21,10 +21,10 @@
         "station name": ""
     },
     "outputs": {
-        "velocity_mph": 2.7954538,
-        "acceleration_ftps2": 1.64,
-        "position_yds": 2.0500000000000003,
-        "authority_yds": 328.0,
+        "velocity_mph": 0.0,
+        "acceleration_ftps2": 0.0,
+        "position_yds": 0.0,
+        "authority_yds": 0.0,
         "station_name": "",
         "next_station": "",
         "left_door_open": false,
