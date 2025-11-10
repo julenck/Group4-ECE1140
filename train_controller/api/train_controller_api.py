@@ -161,7 +161,9 @@ class train_controller_api:
         """Read the latest Train Model output JSON (train_to_controller.json)."""
         try:
             base_dir = os.path.dirname(os.path.dirname(__file__))  # train_controller/
-            train_model_path = os.path.join(base_dir, "Train Model", "train_to_controller.json")
+            train_model_path = os.path.join(os.path.dirname(base_dir), "Train Model", "train_to_controller.json")
+
+            print(f"[DEBUG] Looking for JSON at: {train_model_path}")
 
             if not os.path.exists(train_model_path):
                 print("[TrainControllerAPI] train_to_controller.json not found.")
@@ -246,3 +248,14 @@ class train_controller_api:
             'temperature_up': state['temperature_up'],
             'temperature_down': state['temperature_down']
         }
+
+if __name__ == "__main__":
+    api = train_controller_api()
+
+    raw_data = api.read_train_model_file()
+    if raw_data:
+        mapped_data = api.map_train_model_data(raw_data)
+        api.receive_from_train_model(mapped_data)
+        print("[Controller] State updated from Train Model")
+    else:
+        print("[Controller] No Train Model data found.")

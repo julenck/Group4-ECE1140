@@ -4,7 +4,7 @@
         "width_ft": 10.0,
         "height_ft": 11.5,
         "mass_lbs": 90100,
-        "max_power_hp": 161,
+        "max_power_hp": 169,
         "max_accel_ftps2": 1.64,
         "service_brake_ftps2": -3.94,
         "emergency_brake_ftps2": -8.86,
@@ -12,24 +12,24 @@
         "crew_count": 2
     },
     "inputs": {
-        "commanded speed": 35.0,
-        "commanded authority": 5.0,
-        "speed limit": 39.0,
-        "side_door": "left",
-        "current station": "Herron Ave",
-        "next station": "Herron Ave",
-        "station name": "Herron Ave"
+        "commanded speed": 25.0,
+        "commanded authority": 328.0,
+        "speed limit": 0.0,
+        "side_door": "",
+        "current station": "",
+        "next station": "",
+        "station name": ""
     },
     "outputs": {
-        "velocity_mph": 0.0,
-        "acceleration_ftps2": 0.0,
-        "position_yds": 0.0,
-        "authority_yds": 0,
-        "station_name": "Central Station",
-        "next_station": "Park Street",
+        "velocity_mph": 5.03181684,
+        "acceleration_ftps2": 1.64,
+        "position_yds": 6.15,
+        "authority_yds": 328.0,
+        "station_name": "",
+        "next_station": "",
         "left_door_open": false,
-        "right_door_open": true,
-        "speed_limit": 30,
+        "right_door_open": false,
+        "speed_limit": 0.0,
         "door_side": "Right"
     }
 }
