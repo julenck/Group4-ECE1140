@@ -104,6 +104,7 @@ class TrainModelUI(tk.Tk):
         self.create_env_panel(left_frame)
         self.create_specs_panel(left_frame)
         self.create_control_panel(left_frame)
+        self.create_failure_panel(left_frame)   # <-- NEW PANEL ADDED HERE
         self.create_announcements_panel(left_frame)
 
         # Right panel (map)
@@ -183,6 +184,38 @@ class TrainModelUI(tk.Tk):
         self.emergency_button = ttk.Button(frame, text="EMERGENCY BRAKE")
         self.emergency_button.pack(fill="x", padx=20, pady=10)
 
+    def create_failure_panel(self, parent):
+        """Panel for setting failure modes."""
+        frame = ttk.LabelFrame(parent, text="Failure Modes")
+        frame.pack(fill="x", pady=5)
+
+        # Boolean variables for each failure mode
+        self.engine_failure_var = tk.BooleanVar(value=False)
+        self.signal_failure_var = tk.BooleanVar(value=False)
+        self.brake_failure_var = tk.BooleanVar(value=False)
+
+        # Checkbuttons for each failure mode
+        ttk.Checkbutton(frame, text="Train Engine Failure",
+                        variable=self.engine_failure_var,
+                        command=self.update_failures).pack(anchor="w", padx=10, pady=2)
+        ttk.Checkbutton(frame, text="Signal Pickup Failure",
+                        variable=self.signal_failure_var,
+                        command=self.update_failures).pack(anchor="w", padx=10, pady=2)
+        ttk.Checkbutton(frame, text="Brake Failure",
+                        variable=self.brake_failure_var,
+                        command=self.update_failures).pack(anchor="w", padx=10, pady=2)
+
+    def update_failures(self):
+        """Write failure mode states to train_data.json inputs."""
+        self.data = self.load_or_create_json()
+        inputs = self.data.get("inputs", {})
+        inputs.update({
+            "engine_failure": self.engine_failure_var.get(),
+            "signal_failure": self.signal_failure_var.get(),
+            "brake_failure": self.brake_failure_var.get(),
+        })
+        self.write_json(inputs, self.data.get("outputs", {}))
+
     def create_announcements_panel(self, parent):
         frame = ttk.LabelFrame(parent, text="Announcements")
         frame.pack(fill="both", expand=True, pady=5)
@@ -234,7 +267,6 @@ class TrainModelUI(tk.Tk):
             self.env_labels["Left Door"].config(text=f"Left Door: {'Open' if outputs['left_door_open'] else 'Closed'}")
             self.env_labels["Right Door"].config(text=f"Right Door: {'Open' if outputs['right_door_open'] else 'Closed'}")
 
-
         # 4. Repeat periodically
         self.after(int(self.model.dt * 1000), self.update_loop)
 
@@ -242,3 +274,4 @@ class TrainModelUI(tk.Tk):
 if __name__ == "__main__":
     app = TrainModelUI()
     app.mainloop()
+

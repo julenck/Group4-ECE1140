@@ -18,7 +18,10 @@
         "side_door": "",
         "current station": "",
         "next station": "",
-        "station name": ""
+        "station name": "",
+        "engine_failure": true,
+        "signal_failure": false,
+        "brake_failure": false
     },
     "outputs": {
         "velocity_mph": 0.0,

@@ -6,7 +6,7 @@
     "next_stop": "",
     "station_side": "",
     "train_temperature": 70.0,
-    "engine_failure": false,
+    "engine_failure": true,
     "signal_failure": false,
     "brake_failure": false,
     "manual_mode": false,
