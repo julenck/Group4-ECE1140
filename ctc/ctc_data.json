@@ -2,14 +2,14 @@
     "Dispatcher": {
         "Trains": {
             "Train 1": {
-                "Line": "",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": "",
-                "Position": "",
-                "State": "",
-                "Current Station": ""
+                "Line": "Green",
+                "Suggested Speed": 31,
+                "Authority": 782,
+                "Station Destination": "Castle Shannon",
+                "Arrival Time": "18:50",
+                "Position": 96,
+                "State": 0,
+                "Current Station": "Castle Shannon"
             },
             "Train 2": {
                 "Line": "",
@@ -22,14 +22,14 @@
                 "Current Station": ""
             },
             "Train 3": {
-                "Line": "Green",
-                "Suggested Speed": 0,
-                "Authority": 2686.6,
-                "Station Destination": "Central",
-                "Arrival Time": 0,
-                "Position": 73,
-                "State": "Running",
-                "Current Station": "---"
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 4": {
                 "Line": "",
@@ -42,14 +42,14 @@
                 "Current Station": ""
             },
             "Train 5": {
-                "Line": "Green",
-                "Suggested Speed": 0,
-                "Authority": 1000,
-                "Station Destination": "South Bank",
-                "Arrival Time": 0,
-                "Position": 73,
-                "State": "Running",
-                "Current Station": "---"
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             }
         }
     }
