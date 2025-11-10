@@ -6,7 +6,9 @@ from __future__ import annotations
 from typing import Dict, List, Any, Optional
 from hw_vital_check import HW_Vital_Check
 import importlib.util
-from types import ModuleType
+import json
+import threading
+import os
 
 class HW_Wayside_Controller:
 
@@ -39,7 +41,7 @@ class HW_Wayside_Controller:
         self.active_trains = {}
         self.light_states = getattr(self, "light_states", {b: 0 for b in self.block_ids})
         self.switch_states = getattr(self, "switch_states", {b: 0 for b in self.block_ids})
-        self.gate_states = getattr(self, "gate_states", {})
+        self.gate_states = getattr(self, "gate_states", {b: 0 for b in self.block_ids})
         self.active_plc = None
         self.maintenance_active = False
         self.safety_result = True
@@ -53,8 +55,21 @@ class HW_Wayside_Controller:
 
         self.vital = HW_Vital_Check()
 
-        self._plc_module: ModuleType | None = None
-        self.active_plc: str = ""
+        self._plc_module = None
+        self.active_plc = ""
+        # JSON comm filenames (compatible with SW naming)
+        self.ctc_comm_file = "ctc_to_wayside.json"
+        self.track_comm_file = "track_to_wayside.json"
+        # threading/file protection for background PLC loop
+        self.file_lock = threading.Lock()
+        self.running = True
+
+        # Start background PLC loop (non-blocking)
+        try:
+            # schedule first run shortly after init
+            threading.Timer(0.1, self.run_plc).start()
+        except Exception:
+            pass
 
     def apply_vital_inputs(self, block_ids: List, vital_in: Dict) -> None:
 
@@ -220,9 +235,90 @@ class HW_Wayside_Controller:
         self.assess_safety(block_ids, vital_in)
         return self._final_outputs()
 
+    # background PLC loop + file IO
+    def run_plc(self) -> None:
+       
+        if not self.running:
+            self.active_plc = ""
+            return
+
+        if self.active_plc:
+            
+            try:
+                self.load_inputs_track()
+            except Exception:
+                pass
+
+            try:
+                self.run_plc_cycle()
+            except Exception:
+                pass
+
+            # write outputs back
+            try:
+                self.load_track_outputs()
+            except Exception:
+                pass
+
+        # schedule next run
+        if self.running:
+            try:
+                threading.Timer(0.2, self.run_plc).start()
+            except Exception:
+                pass
+
+    def stop(self) -> None:
+        
+        self.running = False
+
+    def load_inputs_track(self) -> None:
+        
+        data = {}
+        try:
+            with self.file_lock:
+
+                if not os.path.exists(self.track_comm_file):
+                    return
+                with open(self.track_comm_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+            occ = data.get("occupied_blocks") or data.get("G-Occupancy")
+            if occ is not None:
+                
+                self.occupied_blocks = list(occ)
+
+            closed = data.get("closed_blocks") or data.get("G-Closed")
+            if closed is not None:
+                self.closed_blocks = list(closed)
+
+        except Exception:
+            # ignore IO errors in background loop
+            return
+
+    def load_track_outputs(self) -> None:
+        
+        try:
+            with self.file_lock:
+                data = {}
+                if os.path.exists(self.track_comm_file):
+                    try:
+                        with open(self.track_comm_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                    except Exception:
+                        data = {}
+
+                data["occupied_blocks"] = list(self.occupied_blocks)
+                data["light_states"] = dict(self.light_states)
+                data["gate_states"] = dict(self.gate_states)
+                data["switch_states"] = dict(self.switch_states)
+
+                with open(self.track_comm_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+        except Exception:
+            return
+
     # ---------------- internal plc/runtime helpers ----------------
     def run_plc_cycle(self) -> None:
-
         if not self._plc_module:
             return
 
@@ -236,38 +332,42 @@ class HW_Wayside_Controller:
         }
 
         try:
-            proposals = self._plc_module.tick(ctx) or []
+            proposals = (self._plc_module.tick(ctx) or [])
         except Exception:
             return  # never let PLC crash the vital loop
 
-        for kind, bid, val in proposals:
+        for item in proposals:
+            # Expect tuples like (kind, block_id, value)
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            kind, bid, val = item[0], item[1], item[2]
             try:
                 val = int(val)
             except Exception:
+                # skip invalid values
                 continue
-        if kind == "light":
 
-            ok = True
+            if kind == "light":
+                ok = True
+                if hasattr(self.vital, "verify_light_change"):
+                    ok = self.vital.verify_light_change(list(self.light_states.items()), bid, val)
+                if ok:
+                    # set only if block known
+                    if bid in self.light_states:
+                        self.light_states[bid] = val
 
-            if hasattr(self.vital, "verify_light_change"):
-                ok = self.vital.verify_light_change(list(self.light_states.items()), bid, val)
-            if ok:
-                self.light_states[bid] = val
+            elif kind == "switch":
+                ok = True
+                if hasattr(self.vital, "verify_switch_change"):
+                    ok = self.vital.verify_switch_change(list(self.switch_states.items()), bid, val)
+                if ok:
+                    if bid in self.switch_states:
+                        self.switch_states[bid] = val
 
-        elif kind == "switch":
-
-            ok = True
-
-            if hasattr(self.vital, "verify_switch_change"):
-                ok = self.vital.verify_switch_change(list(self.switch_states.items()), bid, val)
-            if ok:
-                self.switch_states[bid] = val
-
-        elif kind == "gate":
-            
-            ok = True
-            
-            if hasattr(self.vital, "verify_gate_change"):
-                ok = self.vital.verify_gate_change(list(self.gate_states.items()), bid, val)
-            if ok:
-                self.gate_states[bid] = val
+            elif kind == "gate":
+                ok = True
+                if hasattr(self.vital, "verify_gate_change"):
+                    ok = self.vital.verify_gate_change(list(self.gate_states.items()), bid, val)
+                if ok:
+                    if bid in self.gate_states:
+                        self.gate_states[bid] = val
