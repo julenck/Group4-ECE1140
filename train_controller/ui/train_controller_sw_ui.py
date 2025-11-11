@@ -543,12 +543,18 @@ class train_controller_ui(tk.Tk):
         emergency_brake_release_timer: Timer ID for emergency brake auto-release.
     """
     
-    def __init__(self):
-        """Initialize the driver interface."""
+    def __init__(self, train_id=None):
+        """Initialize the driver interface.
+        
+        Args:
+            train_id: Optional train ID for multi-train support. If None, uses root level (legacy).
+        """
         super().__init__()
         
-        # Initialize API
-        self.api = train_controller_api()
+        self.train_id = train_id
+        
+        # Initialize API with train_id
+        self.api = train_controller_api(train_id=train_id)
         
         # Create controller instance with shared API
         self.controller = train_controller(self.api)
@@ -557,7 +563,8 @@ class train_controller_ui(tk.Tk):
         self.emergency_brake_release_timer = None
         
         # Configure window
-        self.title("Train Controller - Driver Interface")
+        title = f"Train {train_id} - Train Controller" if train_id else "Train Controller - Driver Interface"
+        self.title(title)
         self.geometry("1200x800")
         self.configure(bg='lightgray')
         
