@@ -12,7 +12,7 @@
         "crew_count": 2
     },
     "inputs": {
-        "commanded speed": 53.0,
+        "commanded speed": 69.0,
         "commanded authority": 0.0,
         "speed limit": 0.0,
         "side_door": "",
@@ -20,7 +20,7 @@
         "next station": "",
         "station name": "",
         "engine_failure": false,
-        "signal_failure": false,
+        "signal_failure": true,
         "brake_failure": false
     },
     "outputs": {

@@ -6,6 +6,8 @@ for communication between Train Controller and Train Model modules.
 
 import json
 import os
+import threading
+import time
 from typing import Dict, Optional
 
 class train_controller_api:
@@ -19,6 +21,15 @@ class train_controller_api:
         os.makedirs(self.data_dir, exist_ok=True)
         
         self.state_file = os.path.join(self.data_dir, "train_states.json")
+        
+        # Track Train Model data file
+        project_root = os.path.dirname(base_dir)
+        self._train_data_path = os.path.join(project_root, "Train Model", "train_data.json")
+        self._poll_interval = 0.5  # seconds
+        self._last_mtime: Optional[float] = None
+        self._stop_event = threading.Event()
+        self._auto_thread: Optional[threading.Thread] = None
+        self._lock = threading.RLock()
         
         # Default state template
         self.train_states = {
@@ -93,6 +104,9 @@ class train_controller_api:
             initial_state['set_temperature'] = initial_state['train_temperature']
             self.save_state(initial_state)
 
+        # Start automatic sync from Train Model
+        self.start_auto_sync()
+
     def update_state(self, state_dict: dict) -> None:
         """Update train state with new values.
         
@@ -110,15 +124,16 @@ class train_controller_api:
             dict: Current state of the train. Returns default state if there are any issues.
         """
         try:
-            if os.path.exists(self.state_file):
-                with open(self.state_file, 'r') as f:
-                    try:
-                        return json.load(f)
-                    except json.JSONDecodeError as e:
-                        print(f"Error reading state file: {e}")
-                        # Reset to default state if file is corrupted
-                        self.save_state(self.train_states)
-            return self.train_states.copy()
+            with self._lock:
+                if os.path.exists(self.state_file):
+                    with open(self.state_file, 'r') as f:
+                        try:
+                            return json.load(f)
+                        except json.JSONDecodeError as e:
+                            print(f"Error reading state file: {e}")
+                            # Reset to default state if file is corrupted
+                            self.save_state(self.train_states)
+                return self.train_states.copy()
         except Exception as e:
             print(f"Error accessing state file: {e}")
             return self.train_states.copy()
@@ -139,15 +154,16 @@ class train_controller_api:
             
             # Create directory if it doesn't exist
             os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
-            
-            with open(self.state_file, 'w') as f:
-                json.dump(complete_state, f, indent=4)
+            with self._lock:
+                with open(self.state_file, 'w') as f:
+                    json.dump(complete_state, f, indent=4)
 
         except Exception as e:
             print(f"Error saving state: {e}")
             # If all else fails, try direct write
-            with open(self.state_file, 'w') as f:
-                json.dump(self.train_states.copy(), f, indent=4)
+            with self._lock:
+                with open(self.state_file, 'w') as f:
+                    json.dump(self.train_states.copy(), f, indent=4)
 
     def reset_state(self) -> None:
         """Reset train state to default values."""
@@ -156,13 +172,12 @@ class train_controller_api:
     def read_train_data_json(self) -> Optional[Dict]:
         """Read the latest train_data.json directly from Train Model folder."""
         try:
-            base_dir = os.path.dirname(os.path.dirname(__file__))  # train_controller/
-            train_data_path = os.path.join(os.path.dirname(base_dir), "Train Model", "train_data.json")
+            train_data_path = self._train_data_path
 
-            print(f"[DEBUG] Reading Train Model data from: {train_data_path}")
+            # print(f"[DEBUG] Reading Train Model data from: {train_data_path}")
 
             if not os.path.exists(train_data_path):
-                print("[TrainControllerAPI] train_data.json not found in Train Model folder.")
+                # print("[TrainControllerAPI] train_data.json not found in Train Model folder.")
                 return None
 
             with open(train_data_path, 'r') as f:
@@ -170,7 +185,7 @@ class train_controller_api:
             return data
 
         except json.JSONDecodeError:
-            print("[TrainControllerAPI] Invalid JSON format in train_data.json.")
+            # print("[TrainControllerAPI] Invalid JSON format in train_data.json.")
             return None
         except Exception as e:
             print(f"[TrainControllerAPI] Error reading train_data.json: {e}")
@@ -180,7 +195,6 @@ class train_controller_api:
         """Read and update controller state directly from Train Model's train_data.json."""
         data = self.read_train_data_json()
         if not data:
-            print("[TrainControllerAPI] No valid data read from Train Model.")
             return
 
         # === Map relevant keys from train_data.json ===
@@ -201,7 +215,36 @@ class train_controller_api:
 
         # Update controller state
         self.receive_from_train_model(mapped_data)
-        print("[TrainControllerAPI] State successfully updated from Train Model train_data.json.")
+
+    # --- New: automatic sync loop ---
+    def start_auto_sync(self, interval: float = 0.5) -> None:
+        """Start background polling of Train Model train_data.json."""
+        self._poll_interval = interval
+        if self._auto_thread and self._auto_thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._auto_thread = threading.Thread(target=self._auto_sync_loop, name="TrainDataAutoSync", daemon=True)
+        self._auto_thread.start()
+
+    def stop_auto_sync(self) -> None:
+        """Stop background polling."""
+        self._stop_event.set()
+        if self._auto_thread and self._auto_thread.is_alive():
+            self._auto_thread.join(timeout=2.0)
+
+    def _auto_sync_loop(self) -> None:
+        """Poll the Train Model data file and update state on change."""
+        while not self._stop_event.is_set():
+            try:
+                if os.path.exists(self._train_data_path):
+                    mtime = os.path.getmtime(self._train_data_path)
+                    if self._last_mtime is None or mtime != self._last_mtime:
+                        self.update_from_train_data()
+                        self._last_mtime = mtime
+            except Exception as e:
+                print(f"[TrainControllerAPI] Auto sync error: {e}")
+            finally:
+                time.sleep(self._poll_interval)
 
     def receive_from_train_model(self, data: dict) -> None:
         """Receive updates from Train Model.
@@ -255,4 +298,10 @@ class train_controller_api:
 
 if __name__ == "__main__":
     api = train_controller_api()
-    api.update_from_train_data()
+    print("TrainControllerAPI auto-sync running. Press Ctrl+C to exit.")
+    try:
+        while True:
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        api.stop_auto_sync()
+        print("Auto-sync stopped.")
