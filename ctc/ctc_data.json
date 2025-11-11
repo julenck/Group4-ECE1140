@@ -3,11 +3,11 @@
         "Trains": {
             "Train 1": {
                 "Line": "Green",
-                "Suggested Speed": 46,
-                "Authority": 656,
-                "Station Destination": "Poplar",
-                "Arrival Time": "15:42",
-                "Position": 72,
+                "Suggested Speed": 29,
+                "Authority": 1094,
+                "Station Destination": "Edgebrook",
+                "Arrival Time": "17:40",
+                "Position": 88,
                 "State": 0,
                 "Current Station": "---"
             },
