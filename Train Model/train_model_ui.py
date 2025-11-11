@@ -8,7 +8,8 @@ import math
 
 # === File paths ===
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
-TRAIN_SPECS_FILE = "train_data.json"  # Keep for static specs only
+TRAIN_SPECS_FILE = "train_data.json"
+CTC_OUTPUT_FILE = "../CTC/train_model_to_ctc.json"  # NEW: send disembarking count to CTC
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -75,7 +76,7 @@ class TrainModel:
         return round(self.temperature_F * 2) / 2
     
     def update(self, commanded_speed, commanded_authority, speed_limit,
-               current_station, next_station, side_door, power_command=0, 
+               current_station, next_station, side_door, power_command=0,
                emergency_brake=False, service_brake=False, set_temperature=70.0,
                left_door=False, right_door=False):
         """Simulate motion and update station/door status"""
@@ -134,6 +135,50 @@ class TrainModel:
             "temperature_F": self.temperature_F
         }
 
+    def compute_passengers_disembarking(self, station: str, velocity_mph: float, passengers_onboard: int) -> int:
+        """
+        Compute disembarking count only once when first stopped at a station.
+        Does not modify passengers_onboard (CTC updates onboard after receiving this).
+        """
+        station = (station or "").strip()
+        if not station or velocity_mph >= 0.5:
+            return 0
+        if self._last_disembark_station != station:
+            crew = self.model.crew_count
+            non_crew = max(0, passengers_onboard - crew)
+            max_out = min(30, int(non_crew * 0.4))
+            if max_out > 0:
+                # lightweight randomness (0–max_out)
+                count = int(os.urandom(1)[0] / 255 * max_out)
+            else:
+                count = 0
+            self._last_disembark_station = station
+            self._last_disembarking = count
+            return count
+        return self._last_disembarking
+
+    def write_ctc_output(self, passengers_disembarking: int):
+        """Send passengers_disembarking to CTC JSON file (no timestamp)."""
+        out_dir = os.path.dirname(os.path.abspath(CTC_OUTPUT_FILE))
+        if out_dir and not os.path.exists(out_dir):
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+            except Exception:
+                pass
+        payload = {"passengers_disembarking": int(passengers_disembarking)}
+        tmp = CTC_OUTPUT_FILE + ".tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump(payload, f, indent=4)
+            os.replace(tmp, CTC_OUTPUT_FILE)
+        except PermissionError:
+            try:
+                with open(CTC_OUTPUT_FILE, "w") as f:
+                    json.dump(payload, f, indent=4)
+            except Exception as e:
+                print("CTC write error:", e)
+        except Exception as e:
+            print("CTC write error:", e)
 
 # === Train Model UI ===
 class TrainModelUI(tk.Tk):
@@ -257,7 +302,10 @@ class TrainModelUI(tk.Tk):
             "kp": 0.0,
             "ki": 0.0,
             "engineering_panel_locked": False,
-            "power_command": 0.0
+            "power_command": 0.0,
+            "passengers_onboard": 0,              # NEW
+            "passengers_boarding": 0,             # NEW (from CTC or external source)
+            "passengers_disembarking": 0          # NEW (computed here, sent to CTC)
         }
 
     def update_train_state(self, updates):
@@ -382,11 +430,8 @@ class TrainModelUI(tk.Tk):
             ttk.Label(parent, text="Map not found").pack()
 
     def update_loop(self):
-        """Periodic update: read from train_states.json, compute, write back"""
-        # 1. Read inputs from train_states.json (from Train Controller)
+        """Periodic update: read state, simulate, write outputs."""
         state = self.get_train_state()
-
-        # 2. Run train model simulation with all inputs
         outputs = self.model.update(
             commanded_speed=state.get("commanded_speed", 0),
             commanded_authority=state.get("commanded_authority", 0),
@@ -402,13 +447,19 @@ class TrainModelUI(tk.Tk):
             right_door=state.get("right_door", False)
         )
 
-        # 3. Write train model outputs back to train_states.json
+        passengers_onboard = int(state.get("passengers_onboard", 0))
+        disembarking = self.compute_passengers_disembarking(
+            outputs["station_name"], outputs["velocity_mph"], passengers_onboard
+        )
+        self.write_ctc_output(disembarking)
+
         self.update_train_state({
             "train_velocity": outputs['velocity_mph'],
             "train_temperature": outputs['temperature_F'],
+            "passengers_disembarking": disembarking
         })
 
-        # 4. Update UI labels
+        # UI updates
         self.info_labels["Velocity (mph)"].config(text=f"Velocity: {outputs['velocity_mph']:.2f} mph")
         self.info_labels["Acceleration (ft/s²)"].config(text=f"Acceleration: {outputs['acceleration_ftps2']:.2f} ft/s²")
         self.info_labels["Position (yds)"].config(text=f"Position: {outputs['position_yds']:.1f} yds")
@@ -418,31 +469,15 @@ class TrainModelUI(tk.Tk):
         self.info_labels["Current Station"].config(text=f"Current Station: {outputs['station_name']}")
         self.info_labels["Next Station"].config(text=f"Next Station: {outputs['next_station']}")
         self.info_labels["Speed Limit (mph)"].config(text=f"Speed Limit: {outputs['speed_limit']} mph")
-
         self.env_labels["Left Door"].config(text=f"Left Door: {'Open' if outputs['left_door_open'] else 'Closed'}")
         self.env_labels["Right Door"].config(text=f"Right Door: {'Open' if outputs['right_door_open'] else 'Closed'}")
 
-        # 5. Handle announcements from train controller
-        announcement = state.get("announcement", "")
-        announce_pressed = state.get("announce_pressed", False)
-        
-        # Display announcement only while button is pressed
-        if announce_pressed and announcement:
-            # Show the announcement
-            self.announcement_box.config(state='normal')
-            self.announcement_box.delete("1.0", "end")  # Clear previous content
-            self.announcement_box.insert("end", f"[ANNOUNCEMENT]\n{announcement}")
-            self.announcement_box.config(state='disabled')
-        else:
-            # Clear announcement when button is not pressed
-            self.announcement_box.config(state='normal')
-            self.announcement_box.delete("1.0", "end")
-            self.announcement_box.insert("end", "Train Model Running (Integrated Mode)...\n")
-            self.announcement_box.config(state='disabled')
+        self.announcement_box.config(state='normal')
+        self.announcement_box.delete("1.0", "end")
+        self.announcement_box.insert("end", f"Train Model Running...\nDisembarking this stop: {disembarking}")
+        self.announcement_box.config(state='disabled')
 
-        # 6. Repeat periodically
         self.after(int(self.model.dt * 1000), self.update_loop)
-
 
 if __name__ == "__main__":
     app = TrainModelUI()

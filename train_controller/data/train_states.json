@@ -34,7 +34,7 @@
         "train_velocity": 0.0,
         "next_stop": "Station A",
         "station_side": "Right",
-        "train_temperature": 69.3000000000003,
+        "train_temperature": 69.07500000000024,
         "engine_failure": false,
         "signal_failure": false,
         "brake_failure": false,
