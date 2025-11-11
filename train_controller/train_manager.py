@@ -97,7 +97,7 @@ class TrainManager:
             with open(self.state_file, 'w') as f:
                 json.dump({}, f, indent=4)
     
-    def add_train(self, train_specs: dict = None, create_uis: bool = True) -> int:
+    def add_train(self, train_specs: dict = None, create_uis: bool = True, use_hardware: bool = False) -> int:
         """Add a new train (TrainModel + train_controller pair with UIs).
         
         Creates a new TrainModel and train_controller instance, assigns a unique ID,
@@ -108,6 +108,7 @@ class TrainManager:
             train_specs: Dictionary of train specifications for TrainModel.
                         If None, uses default specifications.
             create_uis: If True, creates UI windows for this train (default: True).
+            use_hardware: If True, uses hardware controller UI instead of software (default: False).
         
         Returns:
             The train_id of the newly created train.
@@ -127,8 +128,13 @@ class TrainManager:
             TrainModel = train_model_module.TrainModel
             TrainModelUI = train_model_module.TrainModelUI
         
-        # Import train_controller and train_controller_ui
-        from ui.train_controller_sw_ui import train_controller, train_controller_ui
+        # Import appropriate controller based on hardware flag
+        if use_hardware:
+            from ui.train_controller_hw_ui import train_controller, train_controller_ui
+            print(f"Using HARDWARE controller for train {self.next_train_id}")
+        else:
+            from ui.train_controller_sw_ui import train_controller, train_controller_ui
+            print(f"Using SOFTWARE controller for train {self.next_train_id}")
         
         # Get train ID
         train_id = self.next_train_id
@@ -493,6 +499,32 @@ class TrainManagerUI(tk.Tk):
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
         
+        # Controller type selection
+        type_frame = tk.LabelFrame(button_frame, text="Controller Type", font=("Arial", 10, "bold"))
+        type_frame.grid(row=0, column=0, columnspan=2, sticky="EW", pady=(0, 10))
+        
+        self.controller_type_var = tk.StringVar(value="software")
+        
+        hw_radio = tk.Radiobutton(
+            type_frame,
+            text="🔧 Hardware (Raspberry Pi)",
+            variable=self.controller_type_var,
+            value="hardware",
+            font=("Arial", 10),
+            cursor="hand2"
+        )
+        hw_radio.pack(anchor="w", padx=10, pady=5)
+        
+        sw_radio = tk.Radiobutton(
+            type_frame,
+            text="💻 Software (UI Only)",
+            variable=self.controller_type_var,
+            value="software",
+            font=("Arial", 10),
+            cursor="hand2"
+        )
+        sw_radio.pack(anchor="w", padx=10, pady=5)
+        
         # Add Train button (prominent green)
         self.add_button = tk.Button(
             button_frame,
@@ -506,7 +538,7 @@ class TrainManagerUI(tk.Tk):
             height=2,
             cursor="hand2"
         )
-        self.add_button.grid(row=0, column=0, columnspan=2, sticky="EW", pady=(0, 10))
+        self.add_button.grid(row=1, column=0, columnspan=2, sticky="EW", pady=(0, 10))
         
         # Remove Train button
         self.remove_button = tk.Button(
@@ -520,7 +552,7 @@ class TrainManagerUI(tk.Tk):
             command=self.remove_selected_train,
             cursor="hand2"
         )
-        self.remove_button.grid(row=1, column=0, sticky="EW", padx=(0, 5))
+        self.remove_button.grid(row=2, column=0, sticky="EW", padx=(0, 5))
         
         # Update All button
         self.update_button = tk.Button(
@@ -534,7 +566,7 @@ class TrainManagerUI(tk.Tk):
             command=self.update_all_trains,
             cursor="hand2"
         )
-        self.update_button.grid(row=1, column=1, sticky="EW", padx=(5, 0))
+        self.update_button.grid(row=2, column=1, sticky="EW", padx=(5, 0))
     
     def create_status_bar(self):
         """Create status bar at bottom."""
@@ -554,10 +586,15 @@ class TrainManagerUI(tk.Tk):
     def add_train(self):
         """Add a new train with UIs."""
         try:
-            train_id = self.manager.add_train(create_uis=True)
+            # Get selected controller type from radio buttons
+            use_hardware = (self.controller_type_var.get() == "hardware")
+            
+            train_id = self.manager.add_train(create_uis=True, use_hardware=use_hardware)
             self.update_train_list()
-            self.update_status(f"Train {train_id} added successfully")
-            print(f"Train {train_id} created with UI windows")
+            
+            controller_type = "HARDWARE" if use_hardware else "SOFTWARE"
+            self.update_status(f"Train {train_id} added with {controller_type} controller")
+            print(f"Train {train_id} created with {controller_type} controller and UI windows")
         except Exception as e:
             self.update_status(f"Error adding train: {str(e)}")
             print(f"Error adding train: {e}")
@@ -629,7 +666,11 @@ class TrainManagerUI(tk.Tk):
             for train_id in train_ids:
                 train = self.manager.get_train(train_id)
                 ui_status = "✓ UIs" if train.model_ui and train.controller_ui else "⚠ No UIs"
-                self.train_listbox.insert(tk.END, f"Train {train_id} - {ui_status}")
+                
+                # Determine controller type by checking which UI class is used
+                controller_type = "HW" if hasattr(train.controller_ui, 'gpio_leds') else "SW"
+                
+                self.train_listbox.insert(tk.END, f"Train {train_id} [{controller_type}] - {ui_status}")
         
         # Update status
         count = self.manager.get_train_count()
