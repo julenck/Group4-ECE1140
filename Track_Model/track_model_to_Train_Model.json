@@ -7,6 +7,7 @@
         "speed limit": 30,
         "side_door": "Right",
         "current station": "Central Station",
-        "next station": "Park Street"
+        "next station": "Park Street",
+        "passengers_boarding": 15
     }
 }

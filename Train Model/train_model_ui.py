@@ -9,6 +9,7 @@ from PIL import Image, ImageTk
 # === File paths ===
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
 TRACK_INPUT_FILE = "../Track_Model/track_model_to_Train_Model.json"
+TRACK_OUTPUT_FILE = "../Track_Model/train_model_to_track_model.json"
 TRAIN_DATA_FILE = "train_data.json"
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))  # ensures relative paths work
@@ -160,6 +161,7 @@ class TrainModelUI(tk.Tk):
         
         self.build_basic_ui()
         self.build_failure_controls()
+        self.build_passenger_ui()
         # Start update loop
         self.update_loop()
 
@@ -248,33 +250,31 @@ class TrainModelUI(tk.Tk):
             "speed limit": beacon.get("speed limit", 0.0),
             "side_door": beacon.get("side_door", ""),
             "current station": beacon.get("current station", ""),
-            "next station": beacon.get("next station", "")
+            "next station": beacon.get("next station", ""),
+            "passengers_boarding": beacon.get("passengers_boarding", 0)  # new
         }
 
-    def overwrite_train_data(self, inputs, outputs):
-        state = self.get_train_state()
-        # Failures & emergency brake included in inputs section
-        inputs_full = {
-            **inputs,
-            "engine_failure": state.get("engine_failure", False),
-            "signal_failure": state.get("signal_failure", False),
-            "brake_failure": state.get("brake_failure", False),
-            "emergency_brake": state.get("emergency_brake", False)
-        }
-        data = {"specs": self.specs, "inputs": inputs_full, "outputs": outputs}
-        try:
-            with open(self.train_data_path, "w") as f:
-                json.dump(data, f, indent=4)
-        except Exception as e:
-            print("train_data write error:", e)
+    def build_passenger_ui(self):
+        frm = ttk.LabelFrame(self, text="Passengers")
+        frm.pack(fill="x", padx=10, pady=5)
+        self.lbl_onboard = ttk.Label(frm, text="Onboard: 0")
+        self.lbl_onboard.pack(anchor="w")
+        self.lbl_boarding = ttk.Label(frm, text="Boarding: 0")
+        self.lbl_boarding.pack(anchor="w")
+        self.lbl_disembark = ttk.Label(frm, text="Disembarking: 0")
+        self.lbl_disembark.pack(anchor="w")
+        self.lbl_capacity = ttk.Label(frm, text=f"Capacity: {self.specs.get('capacity', 0)} (Crew {self.specs.get('crew_count',0)})")
+        self.lbl_capacity.pack(anchor="w")
 
     def compute_passengers_disembarking(self, current_station, velocity_mph):
         if not current_station:
             return 0
         stopped = velocity_mph < 0.5
         if stopped and current_station != self.last_disembark_station:
-            max_out = min(30, int(self.model.capacity * 0.5))
-            count = random.randint(0, max_out)
+            # Disembark up to 30 or 40% of onboard (excluding crew)
+            non_crew = max(0, self.passengers_onboard - self.specs.get("crew_count", 0))
+            max_out = min(30, int(non_crew * 0.4))
+            count = random.randint(0, max_out) if max_out > 0 else 0
             self.last_disembark_station = current_station
             self.last_passengers_disembarking = count
             return count
@@ -282,48 +282,35 @@ class TrainModelUI(tk.Tk):
             return self.last_passengers_disembarking
         return 0
 
-    def build_failure_controls(self):
-        frm = ttk.LabelFrame(self, text="Failures / Safety")
-        frm.pack(fill="x", padx=10, pady=5)
-        self.var_engine = tk.BooleanVar(value=False)
-        self.var_signal = tk.BooleanVar(value=False)
-        self.var_brake = tk.BooleanVar(value=False)
-        self.var_emergency = tk.BooleanVar(value=False)
+    def write_track_output(self, passengers_disembarking):
+        out = {"passengers_disembarking": passengers_disembarking}
+        try:
+            with open(TRACK_OUTPUT_FILE, "w") as f:
+                json.dump(out, f, indent=4)
+        except Exception as e:
+            print("track output write error:", e)
 
-        ttk.Checkbutton(frm, text="Engine Failure", variable=self.var_engine,
-                        command=self._on_failure_toggle).pack(anchor="w")
-        ttk.Checkbutton(frm, text="Signal Pickup Failure", variable=self.var_signal,
-                        command=self._on_failure_toggle).pack(anchor="w")
-        ttk.Checkbutton(frm, text="Brake Failure", variable=self.var_brake,
-                        command=self._on_failure_toggle).pack(anchor="w")
-        ttk.Checkbutton(frm, text="Emergency Brake", variable=self.var_emergency,
-                        command=self._on_emergency_toggle).pack(anchor="w")
-
-        self.fail_status_lbl = ttk.Label(frm, text="Status: OK")
-        self.fail_status_lbl.pack(anchor="w")
-
-    def _on_failure_toggle(self):
-        self.engine_failure = self.var_engine.get()
-        self.signal_failure = self.var_signal.get()
-        self.brake_failure = self.var_brake.get()
-        self._push_failures_to_state()
-        status = []
-        if self.engine_failure: status.append("Engine")
-        if self.signal_failure: status.append("Signal")
-        if self.brake_failure: status.append("Brake")
-        self.fail_status_lbl.config(text=f"Status: {' / '.join(status) if status else 'OK'}")
-
-    def _on_emergency_toggle(self):
-        self.emergency_brake = self.var_emergency.get()
-        self._push_failures_to_state()
-
-    def _push_failures_to_state(self):
-        self.update_train_state({
-            "engine_failure": self.engine_failure,
-            "signal_failure": self.signal_failure,
-            "brake_failure": self.brake_failure,
-            "emergency_brake": self.emergency_brake
-        })
+    def overwrite_train_data(self, inputs, outputs):
+        state = self.get_train_state()
+        inputs_full = {
+            **inputs,
+            "engine_failure": state.get("engine_failure", False),
+            "signal_failure": state.get("signal_failure", False),
+            "brake_failure": state.get("brake_failure", False),
+            "emergency_brake": state.get("emergency_brake", False)
+        }
+        outputs_extended = {
+            **outputs,
+            "passengers_onboard": self.passengers_onboard,
+            "passengers_boarding": self.boarding_last_cycle,
+            "passengers_disembarking": self.last_passengers_disembarking
+        }
+        data = {"specs": self.specs, "inputs": inputs_full, "outputs": outputs_extended}
+        try:
+            with open(self.train_data_path, "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print("train_data write error:", e)
 
     def update_loop(self):
         track_inputs = self.load_track_inputs()
@@ -335,6 +322,30 @@ class TrainModelUI(tk.Tk):
         current_station = track_inputs.get("current station", "")
         next_station = track_inputs.get("next station", "")
         side_door = track_inputs.get("side_door", "Right")
+        passengers_boarding = track_inputs.get("passengers_boarding", 0)
+
+        # Disembark first
+        passengers_out = self.compute_passengers_disembarking(
+            track_inputs.get("current station", ""), self.model.velocity_mph
+        )
+
+        stopped = self.model.velocity_mph < 0.5
+        at_station = bool(track_inputs.get("current station", ""))
+        new_station = (track_inputs.get("current station", "") == self.last_disembark_station)
+
+        if stopped and at_station:
+            # Apply disembark
+            self.passengers_onboard = max(
+                self.specs.get("crew_count", 0),
+                self.passengers_onboard - passengers_out
+            )
+            # Apply boarding (limit capacity)
+            available = self.specs.get("capacity", 0) - self.passengers_onboard
+            actual_boarding = min(available, max(0, passengers_boarding))
+            self.passengers_onboard += actual_boarding
+            self.boarding_last_cycle = actual_boarding
+        else:
+            self.boarding_last_cycle = 0
 
         outputs_sim = self.model.update(
             commanded_speed=commanded_speed,
@@ -352,7 +363,6 @@ class TrainModelUI(tk.Tk):
             engine_failure=state.get("engine_failure", False),
             brake_failure=state.get("brake_failure", False)
         )
-        passengers_out = self.compute_passengers_disembarking(current_station, outputs_sim["velocity_mph"])
         train_model_outputs = {
             "velocity_mph": outputs_sim["velocity_mph"],
             "acceleration_ftps2": outputs_sim["acceleration_ftps2"],
@@ -367,7 +377,10 @@ class TrainModelUI(tk.Tk):
             "passengers_disembarking": passengers_out,
             "door_side": side_door
         }
+
+        self.last_passengers_disembarking = passengers_out
         self.overwrite_train_data(track_inputs, train_model_outputs)
+        self.write_track_output(passengers_out)
         self.update_train_state({
             "train_velocity": outputs_sim["velocity_mph"],
             "train_temperature": self.model.temperature_F,
@@ -394,6 +407,9 @@ class TrainModelUI(tk.Tk):
             text=f"Status: {'EMERGENCY BRAKE' if state.get('emergency_brake') else 'OK'} | "
                  f"Eng:{int(state.get('engine_failure',0))} Sig:{int(state.get('signal_failure',0))} Brk:{int(state.get('brake_failure',0))}"
         )
+        self.lbl_onboard.config(text=f"Onboard: {self.passengers_onboard}")
+        self.lbl_boarding.config(text=f"Boarding: {self.boarding_last_cycle}")
+        self.lbl_disembark.config(text=f"Disembarking: {passengers_out}")
         self.after(int(self.model.dt * 1000), self.update_loop)
 
 
