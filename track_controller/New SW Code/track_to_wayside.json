@@ -649,18 +649,6 @@
         0,
         0
     ],
-    "G-Commanded Speed": [
-        0,
-        0,
-        0,
-        0,
-        0
-    ],
-    "G-Commanded Authority": [
-        0,
-        0,
-        0,
-        0,
-        0
-    ]
+    "G-Commanded Authorty": [],
+    "G-Commanded Speed": []
 }
