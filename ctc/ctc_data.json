@@ -3,13 +3,13 @@
         "Trains": {
             "Train 1": {
                 "Line": "Green",
-                "Suggested Speed": 29,
-                "Authority": 1094,
-                "Station Destination": "Edgebrook",
-                "Arrival Time": "17:40",
-                "Position": 88,
+                "Suggested Speed": 0,
+                "Authority": 0,
+                "Station Destination": "Poplar",
+                "Arrival Time": "17:55",
+                "Position": 77,
                 "State": 0,
-                "Current Station": "---"
+                "Current Station": "Mt. Lebanon"
             },
             "Train 2": {
                 "Line": "",
