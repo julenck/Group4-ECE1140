@@ -223,6 +223,12 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             if _SHARED_LCD is None:
                 from lcd_i2c_wayside_hw import I2CLcd
                 _SHARED_LCD = I2CLcd(bus=1, addr=0x27)
+                try:
+                    # clear once on first init to avoid leftover gibberish
+                    if _SHARED_LCD.present():
+                        _SHARED_LCD.clear()
+                except Exception:
+                    pass
         except Exception:
             _SHARED_LCD = None
 

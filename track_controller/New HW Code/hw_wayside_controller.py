@@ -313,7 +313,7 @@ class HW_Wayside_Controller:
     def change_plc(self, enable: bool, *_args, **_kwargs):
         self._plc_loaded = bool(enable)
 
-    # ------------------------- UI hooks -------------------------
+    # --------------- UI hooks ----------------
 
     def on_selected_block(self, block_id: str):
         with self._lock:
