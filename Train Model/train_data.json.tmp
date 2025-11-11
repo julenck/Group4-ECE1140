@@ -30,9 +30,9 @@
         "set_temperature": 70.75000000000017
     },
     "outputs": {
-        "velocity_mph": 7.827270640000001,
+        "velocity_mph": 8.3863614,
         "acceleration_ftps2": 1.64,
-        "position_yds": 14.350000000000003,
+        "position_yds": 16.400000000000002,
         "authority_yds": 0,
         "station_name": "Penn Station",
         "next_station": "Park Street",

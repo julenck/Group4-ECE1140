@@ -410,9 +410,9 @@ class TrainModelUI(tk.Tk):
         }
 
     def write_track_output(self, passengers_disembarking: int):
+        """Send passengers_disembarking back to the Track Model (no timestamp)."""
         out = {
-            "passengers_disembarking": int(passengers_disembarking),
-            "timestamp": time.time()
+            "passengers_disembarking": int(passengers_disembarking)
         }
         safe_write_json(self.track_output_path, out)
 
