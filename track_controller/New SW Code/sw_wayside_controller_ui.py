@@ -48,6 +48,8 @@ class sw_wayside_controller_ui(tk.Tk):
         self.blocks_with_lights: list = [0,3,7,29,58,62,76,86,100,101,150,151]
         self.blocks_with_gates: list = [19,108]
 
+        self.block_labels: dict = {}
+
 
         #epty options for now
         self.switch_options: list = []
@@ -97,6 +99,8 @@ class sw_wayside_controller_ui(tk.Tk):
         self.build_all_blocks_frame()
         self.build_map_frame()
         self.build_selected_block_frame()
+
+        self.update_block_labels()
     
 
     def on_close(self):
@@ -317,6 +321,14 @@ class sw_wayside_controller_ui(tk.Tk):
                 failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")
                 failure_label.grid(row=1, column=6, padx=5, pady=5)
 
+
+                self.block_labels[0] = {
+                    "occupied": occupied_label,
+                    "switch": switch_label,
+                    "light": light_label,
+                    "gate": gate_label,
+                    "failure": failure_label
+                }
                 for i in range(80):
 
                     
@@ -355,32 +367,48 @@ class sw_wayside_controller_ui(tk.Tk):
                     gate_label.grid(row=i+2, column=5, padx=5, pady=5)
                     failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")  
                     failure_label.grid(row=i+2, column=6, padx=5, pady=5)
+
+                    self.block_labels[block_num] = {
+                        "occupied": occupied_label,
+                        "switch": switch_label,
+                        "light": light_label,
+                        "gate": gate_label,
+                        "failure": failure_label
+                    }
                 
                     #block for Enter yard from track
-                    check_box = ttk.Checkbutton(self.scrollable_frame,
-                                                variable=self.selected_block,
-                                                onvalue=151,
-                                                offvalue=-1,
-                                                command=lambda idx=151: self.on_block_selected(idx))
-                    check_box.grid(row=82, column=0, padx=5, pady=5)
-                    block_label = ttk.Label(
-                        self.scrollable_frame,
-                        text="Enter Yard",
-                        style="smaller.TLabel"
-                    )
-                    block_label.grid(row=82, column=1, padx=5, pady=5)
+                check_box = ttk.Checkbutton(self.scrollable_frame,
+                                            variable=self.selected_block,
+                                            onvalue=151,
+                                            offvalue=-1,
+                                            command=lambda idx=151: self.on_block_selected(idx))
+                check_box.grid(row=82, column=0, padx=5, pady=5)
+                block_label = ttk.Label(
+                    self.scrollable_frame,
+                    text="Enter Yard",
+                    style="smaller.TLabel"
+                )
+                block_label.grid(row=82, column=1, padx=5, pady=5)
 
-                    desired = self.controller.get_block_data(151)
-                    occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
-                    occupied_label.grid(row=1, column=2, padx=5, pady=5)
-                    switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
-                    switch_label.grid(row=1, column=3, padx=5, pady=5)
-                    light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
-                    light_label.grid(row=1, column=4, padx=5, pady=5)
-                    gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"]}", style="smaller.TLabel")
-                    gate_label.grid(row=1, column=5, padx=5, pady=5)
-                    failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")
-                    failure_label.grid(row=1, column=6, padx=5, pady=5)
+                desired = self.controller.get_block_data(151)
+                occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                occupied_label.grid(row=82, column=2, padx=5, pady=5)
+                switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
+                switch_label.grid(row=82, column=3, padx=5, pady=5)
+                light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                light_label.grid(row=82, column=4, padx=5, pady=5)
+                gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"]}", style="smaller.TLabel")
+                gate_label.grid(row=82, column=5, padx=5, pady=5)
+                failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")
+                failure_label.grid(row=82, column=6, padx=5, pady=5)
+
+                self.block_labels[151] = {
+                    "occupied": occupied_label,
+                    "switch": switch_label,
+                    "light": light_label,
+                    "gate": gate_label,
+                    "failure": failure_label
+                }
             
             elif (os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py"):
                 #build for 77 blocks
@@ -413,6 +441,26 @@ class sw_wayside_controller_ui(tk.Tk):
                     failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")  
                     failure_label.grid(row=i+1, column=6, padx=5, pady=5)
 
+                    self.block_labels[block_num] = {
+                        "occupied": occupied_label,
+                        "switch": switch_label,
+                        "light": light_label,
+                        "gate": gate_label,
+                        "failure": failure_label
+                    }
+    def update_block_labels(self):
+        for block_id, labels in self.block_labels.items():
+            data = self.controller.get_block_data(block_id)
+            labels["occupied"].config(text=f"{data['occupied']}")
+            labels["switch"].config(text=f"{data['switch_state']}")
+            labels["light"].config(text=f"{data['light_state']}")
+            labels["gate"].config(text=f"{data['gate_state']}")
+            labels["failure"].config(text=f"{data['Failure']}")
+        
+        if self.selected_block != -1:
+            self.build_selected_block_frame()
+
+        self.after(200, self.update_block_labels)  # Update every second
 
     def on_block_selected(self, idx: int):
         # If user clicks the same checkbox again, deselect it
@@ -425,7 +473,7 @@ class sw_wayside_controller_ui(tk.Tk):
             self.selected_block = idx
 
         # Update the right-side info frame
-        self.build_selected_block_frame()
+        #self.build_selected_block_frame()
     
     def build_map_frame(self):
         # Define a style for the map frame widgets
