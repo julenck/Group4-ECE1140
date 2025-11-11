@@ -87,27 +87,20 @@ def _discover_block_count() -> int:
         print(f"[WARN] Track file read failed: {e}")
     return 152
 
-def _build_blocks_like_sw() -> Dict[str, List[str]]:
-    """
-    Mirror the SW controller's Green Line XL partitioning:
+def _discover_blocks_B() -> List[str]:
+    """Return the block id list for Wayside B (SW XL Down partition).
 
-    - XL Up  -> [0:73] + [144:151]   -> Wayside A
-    - XL Down-> [70:146]             -> Wayside B
+    Kept minimal: mirrors the previous range logic but only returns B's list.
     """
-    n = _discover_block_count()  # usually 152
+    n = _discover_block_count()
 
     def clamp_range(start: int, end_excl: int) -> List[int]:
         start = max(0, start)
         end_excl = min(n, end_excl)
         return list(range(start, end_excl))
 
-    up_main = clamp_range(0, 73)       # 0..72
-    up_tail = clamp_range(144, 151)    # 144..150
-    down    = clamp_range(70, 146)     # 70..145
-
-    blocks_A = [str(i) for i in (up_main + up_tail)]
-    blocks_B = [str(i) for i in down]
-    return {"A": blocks_A, "B": blocks_B}
+    down = clamp_range(70, 146)  # 70..145
+    return [str(i) for i in down]
 
 # ------------------------------------------------------------------------------------
 # Poll loop driving both waysides (unchanged call pattern)
@@ -136,34 +129,26 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
 # ------------------------------------------------------------------------------------
 
 def main() -> None:
-    # Build real block lists the same way SW slices the Green Line
-    parts = _build_blocks_like_sw()
-    blocks_A: List[str] = parts.get("A", [])
-    blocks_B: List[str] = parts.get("B", [])
-
-    print(f"[INFO] blocks_A: {len(blocks_A)} -> {blocks_A[:8]}")
+    # Build block list for Wayside B only (Wayside A is handled elsewhere)
+    blocks_B: List[str] = _discover_blocks_B()
     print(f"[INFO] blocks_B: {len(blocks_B)} -> {blocks_B[:8]}")    
 
     root = tk.Tk()
-    
-   # A
-    ws_a_ctrl = HW_Wayside_Controller("A", blocks_A)
-    win_a = tk.Toplevel(root); win_a.title("Wayside A"); win_a.geometry("900x520")
-    ws_a_ui   = HW_Wayside_Controller_UI(win_a, ws_a_ctrl, title="Wayside A")
-    ws_a_ui.pack(fill="both", expand=True)
-    ws_a_ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
 
-    # B
+    # Only create Wayside B UI/controller here. Wayside A is handled by
+    # the SW module externally per the user's request.
+    root.title("Wayside B")
+    root.geometry("900x520")
+
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
-    win_b = tk.Toplevel(root); win_b.title("Wayside B"); win_b.geometry("900x520")
-    ws_b_ui   = HW_Wayside_Controller_UI(win_b, ws_b_ctrl, title="Wayside B")
+    ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Wayside B")
     ws_b_ui.pack(fill="both", expand=True)
     ws_b_ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
 
-    # Start polling loop
-    controllers = [ws_a_ctrl, ws_b_ctrl]
-    uis = [ws_a_ui, ws_b_ui]
-    blocks = [blocks_A, blocks_B]
+    # Start polling loop with only Wayside B
+    controllers = [ws_b_ctrl]
+    uis = [ws_b_ui]
+    blocks = [blocks_B]
 
     _poll_json_loop(root, controllers, uis, blocks)
     root.mainloop()

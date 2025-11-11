@@ -89,10 +89,6 @@ class HW_Wayside_Controller:
     def change_plc(self, enable: bool, *_args, **_kwargs):
         self._plc_loaded = bool(enable)
 
-    # SW compat: match earlier traceback style (safe no-op)
-    def apply_vital_inputs(self, *args, **kwargs):
-        return True
-
     # --------------- UI hooks ----------------
 
     def on_selected_block(self, block_id: str):

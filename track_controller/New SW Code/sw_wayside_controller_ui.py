@@ -94,7 +94,7 @@ class sw_wayside_controller_ui(tk.Tk):
         self.selected_file_str = tk.StringVar(value="N/A")
         self.selected_file_str.set(self.start_plc)
 
-        self.train_data_frame: dict = {}
+        self.train_data_labels: dict = {}
 
         self.build_maintenance_frame()
         self.build_input_frame()
@@ -234,37 +234,37 @@ class sw_wayside_controller_ui(tk.Tk):
         title_label = ttk.Label(self.input_frame, text="Active Train Data", style="Input.TLabel")
         title_label.pack(pady=10)
 
-        #sub frame for train data
-        self.train_data_frame = ttk.Frame(self.input_frame)
-        self.train_data_frame.pack(fill="both", expand=True, padx=10, pady=10)
-        #read in cmd train data from controller
-        train_data = self.controller.get_active_trains()
-        if train_data == {}:
-            no_train_label = ttk.Label(self.train_data_frame, text="No active trains", style="smaller.TLabel")
-            no_train_label.pack(pady=10)
-        else:
-            for train in train_data:
-            #if on first wayside
-                if self.selected_file_str.get() == "Green_Line_PLC_XandLup.py":
-                    if train_data[train]["pos"] <= 73 or train_data[train]["pos"] >= 144:
-                        train_label = ttk.Label(self.train_data_frame, text=f"Train {train}:", style="smaller.TLabel")
-                        train_label.grid(row=int(train[-1])-1, column=0, padx=5, pady=5, sticky="w")
-                        speed_label = ttk.Label(self.train_data_frame, text=f"  Commanded Speed: {train_data[train]['cmd speed']} m/s", style="smaller.TLabel")
-                        speed_label.grid(row=int(train[-1])-1, column=1, padx=5, pady=5, sticky="w")
-                        auth_label = ttk.Label(self.train_data_frame, text=f"  Commanded Authority: {train_data[train]['cmd auth']} m", style="smaller.TLabel" )
-                        auth_label.grid(row=int(train[-1])-1, column=2, padx=5, pady=5, sticky="w")
-                        pos_label = ttk.Label(self.train_data_frame, text=f"  Position: {train_data[train]['pos']}", style="smaller.TLabel")
-                        pos_label.grid(row=int(train[-1])-1, column=3, padx=5, pady=5, sticky="w")
-        
-                self.train_data_labels={
-                                self.train_data_labels[train]: {
-                                    "train": train_label,
-                                    "speed": speed_label,
-                                    "auth": auth_label,
-                                    "pos": pos_label
-                                }
-                }
-        self.update_train_data_labels()
+        # #sub frame for train data
+        # self.train_data_frame = ttk.Frame(self.input_frame)
+        # self.train_data_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # #read in cmd train data from controller
+        # train_data = self.controller.get_active_trains()
+        # if train_data == {}:
+        #     no_train_label = ttk.Label(self.train_data_frame, text="No active trains", style="smaller.TLabel")
+        #     no_train_label.pack(pady=10)
+        # else:
+        #     i=0
+        #     for train in train_data:
+        #     #if on first wayside
+        #         if self.selected_file_str.get() == "Green_Line_PLC_XandLup.py":
+        #             if train_data[train]["pos"] <= 73 or train_data[train]["pos"] >= 144:
+        #                 train_label = ttk.Label(self.train_data_frame, text=f"Train {train}:", style="smaller.TLabel")
+        #                 train_label.grid(row=int(train[-1])-1, column=0, padx=5, pady=5, sticky="w")
+        #                 speed_label = ttk.Label(self.train_data_frame, text=f"  Commanded Speed: {train_data[train]['cmd speed']} m/s", style="smaller.TLabel")
+        #                 speed_label.grid(row=int(train[-1])-1, column=1, padx=5, pady=5, sticky="w")
+        #                 auth_label = ttk.Label(self.train_data_frame, text=f"  Commanded Authority: {train_data[train]['cmd auth']} m", style="smaller.TLabel" )
+        #                 auth_label.grid(row=int(train[-1])-1, column=2, padx=5, pady=5, sticky="w")
+        #                 pos_label = ttk.Label(self.train_data_frame, text=f"  Position: {train_data[train]['pos']}", style="smaller.TLabel")
+        #                 pos_label.grid(row=int(train[-1])-1, column=3, padx=5, pady=5, sticky="w")
+
+        #         self.train_data_labels[i] = {
+        #                             "train": train_label,
+        #                             "speed": speed_label,
+        #                             "auth": auth_label,
+        #                             "pos": pos_label
+        #                         }
+        #         i+=1      
+        #self.update_train_data_labels()
             
 
         
@@ -482,15 +482,15 @@ class sw_wayside_controller_ui(tk.Tk):
                         "failure": failure_label
                     }
 
-    def update_train_data_labels(self):
-        for train, labels in self.train_data_labels.items():
-            data = self.controller.get_active_trains().get(train, {})
-            if data!={}:  # Ensure data exists for the train
-                labels["speed"].config(text=f"  Commanded Speed: {data.get('cmd speed', 'N/A')} m/s")
-                labels["auth"].config(text=f"  Commanded Authority: {data.get('cmd auth', 'N/A')} m")
-                labels["pos"].config(text=f"  Position: {data.get('pos', 'N/A')}")
+    #def update_train_data_labels(self):
+        #for train, labels in self.train_data_labels.items():
+            #data = self.controller.get_active_trains().get(train, {})
+            #if data!={}:  # Ensure data exists for the train
+                #labels["speed"].config(text=f"  Commanded Speed: {data.get('cmd speed', 'N/A')} m/s")
+                #labels["auth"].config(text=f"  Commanded Authority: {data.get('cmd auth', 'N/A')} m")
+                #labels["pos"].config(text=f"  Position: {data.get('pos', 'N/A')}")
             
-        self.after(200, self.update_train_data_labels)  # Update every second
+        #self.after(200, self.update_train_data_labels)  # Update every second
 
     def update_block_labels(self):
         for block_id, labels in self.block_labels.items():

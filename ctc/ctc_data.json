@@ -3,13 +3,13 @@
         "Trains": {
             "Train 1": {
                 "Line": "Green",
-                "Suggested Speed": 0,
-                "Authority": 0,
+                "Suggested Speed": 49,
+                "Authority": 1094,
                 "Station Destination": "Poplar",
-                "Arrival Time": "16:11",
-                "Position": 88,
+                "Arrival Time": "18:06",
+                "Position": 46,
                 "State": 0,
-                "Current Station": "---"
+                "Current Station": "Mt. Lebanon"
             },
             "Train 2": {
                 "Line": "",

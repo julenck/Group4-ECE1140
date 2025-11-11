@@ -29,7 +29,7 @@ class sw_wayside_controller:
         self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
         self.active_plc: str = plc
-        self.ctc_comm_file: str = "ctc_to_wayside.json"
+        self.ctc_comm_file: str = "C:\\Users\\snowb\\Documents\\School\\Trains\\Group4-ECE1140\\ctc_track_controller.json"
         self.track_comm_file: str = "track_to_wayside.json"
         self.block_status: list = []
         self.detected_faults: dict = {}
@@ -141,6 +141,13 @@ class sw_wayside_controller:
             self.cmd_trains[cmd_train]["cmd auth"] = auth
             self.cmd_trains[cmd_train]["cmd speed"] = speed
             self.cmd_trains[cmd_train]["pos"] = pos + 1
+
+            with self.file_lock:
+                with open(self.ctc_comm_file,'r') as f:
+                    data = json.load(f)
+                with open(self.ctc_comm_file,'w') as f:
+                    data["Trains"][cmd_train]["Train Position"] = self.cmd_trains[cmd_train]["pos"]
+                    json.dump(data,f,indent=4)
 
         for tr in ttr:
             self.cmd_trains.pop(tr)

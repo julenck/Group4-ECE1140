@@ -19,6 +19,10 @@ try:
 except Exception:
     _LCD = None
 
+# Shared LCD instance used by both Wayside UIs so we can write line 0 for A
+# and line 1 for B (minimal coordination).
+_SHARED_LCD = None
+
 
 class HW_Wayside_Controller_UI(ttk.Frame):
     def __init__(self, root: tk.Misc, controller: HW_Wayside_Controller, title: str = "Wayside"):
@@ -117,15 +121,48 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             self._update_lcd_for(block)
 
     def _update_lcd_for(self, block_id: str | None):
-
+        # Use a process-wide shared LCD helper so both waysides can write
+        # separate rows: Wayside A -> row 0, Wayside B -> row 1.
+        global _SHARED_LCD
         try:
-            from lcd_i2c_wayside_hw import I2CLcd  
-            _lcd = I2CLcd(bus=1, addr=0x27)
+            if _SHARED_LCD is None:
+                from lcd_i2c_wayside_hw import I2CLcd
+                _SHARED_LCD = I2CLcd(bus=1, addr=0x27)
+                try:
+                    # clear once on first init to avoid leftover gibberish
+                    if _SHARED_LCD.present():
+                        _SHARED_LCD.clear()
+                except Exception:
+                    pass
         except Exception:
-            _lcd = None
+            _SHARED_LCD = None
 
-        if not block_id or not _lcd or not _lcd.present():
+        if not block_id or not _SHARED_LCD or not _SHARED_LCD.present():
             return
-        
+
         st = self.controller.get_block_state(block_id)
-        _lcd.show_speed_auth(block_id, st.get("speed_mph", 0.0), st.get("authority_yards", 0))
+        spd = int(float(st.get("speed_mph", 0)))
+        auth = int(st.get("authority_yards", 0))
+
+        # Only Wayside B should write to the physical LCD. Everything about
+        # Wayside A is ignored per the user's request.
+        try:
+            wid = getattr(self.controller, "wayside_id", "").upper()
+        except Exception:
+            wid = ""
+
+        if wid != "B":
+            return
+
+        # Format two lines for Wayside B:
+        # Line 0: "Blk:XXX Spd:YYY"  (fits within 16 chars)
+        # Line 1: "Auth: ZZZZ yd"     (fits within 16 chars)
+        blk = str(block_id)[:6] if block_id else "-"
+        line0 = f"Blk:{blk:<6} Spd:{spd:3d}"[:16]
+        line1 = f"Auth:{auth:5d} yd"[:16]
+        try:
+            _SHARED_LCD.write_line(0, line0)
+            _SHARED_LCD.write_line(1, line1)
+        except Exception:
+            # fail soft — don't let LCD issues crash the UI
+            pass
