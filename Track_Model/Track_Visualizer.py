@@ -1322,9 +1322,9 @@ class RailwayDiagram:
                 self.canvas.itemconfig(
                     element["id"], fill="yellow", font=("Arial", 10, "bold")
                 )
-                bbox = self.canvas.bbox(element["id"])
-                if bbox:
-                    self.canvas.see(element["id"])
+                ##bbox = self.canvas.bbox(element["id"])
+                ##if bbox:
+                ##self.canvas.see(element["id"])
                 self.highlighted_block_id = element["id"]
                 break
 

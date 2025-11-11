@@ -210,7 +210,7 @@ class TrackModelUI(tk.Tk):
         # Internal Data
         self.static_data = {}
         self.block_selected = False
-        self.load_json_data()
+        self.load_data()
 
         # === Added check for pre-existing static.json === #
         self.check_existing_static_data()
@@ -414,9 +414,9 @@ class TrackModelUI(tk.Tk):
             except Exception as e:
                 print(f"Failed to highlight block '{selected_block}': {e}")
 
-    def load_json_data(self):
-        if not os.path.exists("track_model_state.json"):
-            self.after(500, self.load_json_data)
+    def load_data(self):
+        if not os.path.exists("track_model_Track_controller.json"):
+            self.after(500, self.load_data)
             return
 
         try:
@@ -424,30 +424,30 @@ class TrackModelUI(tk.Tk):
             selected_block = self.block_selector.get()
 
             if not selected_line or not selected_block:
-                self.after(500, self.load_json_data)
+                self.after(500, self.load_data)
                 return
 
-            with open("track_model_state.json", "r") as f:
+            with open("track_model_Track_controller.json", "r") as f:
                 data = json.load(f)
 
-            line_data = data.get(selected_line, {})
-            block_data = line_data.get(selected_block, {})
+            line_data = data.get(selected_line, {}) -- No longer available
+            block_data = line_data.get(selected_block, {}) -- No longer available
 
-            block = block_data.get("block", {})
-            env = block_data.get("environment", {})
-            failures = block_data.get("failures", {})
-            station = block_data.get("station", {})
-            commanded = block_data.get("commanded", {})
+            block = block_data.get("block", {}) -- Should now get from Block Manager
+            env = block_data.get("environment", {}) -- Should now get from Block Manager
+            failures = block_data.get("failures", {}) -- Should now get from Block Manager
+            station = block_data.get("station", {}) -- Should now get from Block Manager
+            commanded = block_data.get("commanded", {}) -- Should now get from Block Manager
 
-            temp = env.get("temperature", 0)
-            occupancy = block.get("occupancy", "NA")
-            authority = commanded.get("authority", "NA")
-            speed = commanded.get("speed", "NA")
-            light_input = block.get("light", "N/A")
-            gate_input = block.get("gate", "N/A")
+            temp = env.get("temperature", 0) -- Should now get from Block Manager
+            occupancy = block.get("occupancy", "NA") -- Should now get from Block Manager
+            authority = commanded.get("authority", "NA") -- Should now get from Block Manager
+            speed = commanded.get("speed", "NA") -- Should now get from Block Manager
+            light_input = block.get("light", "N/A") -- Should now get from Block Manager
+            gate_input = block.get("gate", "N/A") -- Should now get from Block Manager
 
-            switch_position = block_data.get("switch_position", "N/A")
-            branching_value = next(
+            switch_position = block_data.get("switch_position", "N/A") -- Should now get from Block Manager
+            branching_value = next( -- DO NOT MODIFY RELIES ON STATIC DATA NO MODIFICATIONS TILL CLEAR**
                 (
                     b["Branching"]
                     for b in self.static_data
@@ -509,7 +509,7 @@ class TrackModelUI(tk.Tk):
                 traffic_light = light_input
                 gate_status = gate_input
 
-            self.block_labels["Direction of Travel:"].set("--")
+            self.block_labels["Direction of Travel:"].set("--") -- 
             self.block_labels["Traffic Light:"].set(traffic_light)
             self.block_labels["Gate:"].set(gate_status)
             self.dynamic_labels["Commanded Speed (mph):"].set(speed)
@@ -521,9 +521,6 @@ class TrackModelUI(tk.Tk):
                 text="ON" if heating_on else "OFF",
                 foreground="green" if heating_on else "red",
             )
-
-            # Boarding removed
-            self.station_vars["Disembarking:"].set(station.get("disembarking", "N/A"))
 
             for key in self.failure_vars:
                 state_key = key.split()[0].lower()
@@ -548,7 +545,7 @@ class TrackModelUI(tk.Tk):
         except Exception as e:
             print(f"Error loading block {selected_line}/{selected_block}: {e}")
 
-        self.after(500, self.load_json_data)
+        self.after(500, self.load_data)
 
     def increase_temp_immediate(self):
         try:
@@ -567,10 +564,10 @@ class TrackModelUI(tk.Tk):
         self.update_json_temperature()
 
     def update_json_temperature(self):
-        if not os.path.exists("track_model_state.json"):
+        if not os.path.exists("track_model_Track_controller.json"):
             return
         try:
-            with open("track_model_state.json", "r") as f:
+            with open("track_model_Track_controller.json", "r") as f:
                 data = json.load(f)
             selected_line = self.line_selector.get()
             selected_block = self.block_selector.get()
@@ -581,16 +578,16 @@ class TrackModelUI(tk.Tk):
             data[selected_line][selected_block].setdefault("environment", {})
             data[selected_line][selected_block]["environment"]["temperature"] = temp
 
-            with open("track_model_state.json", "w") as f:
+            with open("track_model_Track_controller.json", "w") as f:
                 json.dump(data, f, indent=4)
         except Exception:
             print("Error updating temperature in JSON.")
 
     def update_failures(self):
-        if not os.path.exists("track_model_state.json"):
+        if not os.path.exists("track_model_Track_controller.json"):
             return
         try:
-            with open("track_model_state.json", "r") as f:
+            with open("track_model_Track_controller.json", "r") as f:
                 data = json.load(f)
             selected_line = self.line_selector.get()
             selected_block = self.block_selector.get()
@@ -608,7 +605,7 @@ class TrackModelUI(tk.Tk):
                 data[selected_line][selected_block]["failures"]["broken"] = (
                     self.failure_vars["Broken Track"].get()
                 )
-                with open("track_model_state.json", "w") as f:
+                with open("track_model_Track_controller.json", "w") as f:
                     json.dump(data, f, indent=4)
         except Exception:
             print("Error updating failures in JSON.")
