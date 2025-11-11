@@ -5,6 +5,7 @@ Fails soft on non-Pi so dev laptops can run without hardware.
 
 from __future__ import annotations
 
+import time
 try:
     from smbus2 import SMBus
 except Exception:  # not on a Pi or smbus2 not installed
@@ -32,7 +33,9 @@ class I2CLcd:
         packet = (data & 0xF0) | rs | self.backlight
         self.bus.write_byte(self.addr, packet | en)
         self.bus.write_byte(self.addr, packet)
-        # small pauses are usually not necessary at Python speed
+        # small pauses are usually not necessary at Python speed, but some
+        # PCF8574 backpacks are slow — a tiny delay prevents garbled output.
+        time.sleep(0.001)
 
     def _send(self, value: int, rs: int):
         self._write4(value, rs)
@@ -47,11 +50,17 @@ class I2CLcd:
     def _init(self):
         # init sequence for 4-bit mode
         self._write4(0x30, rs=0)
+        time.sleep(0.005)
         self._write4(0x30, rs=0)
+        time.sleep(0.005)
         self._write4(0x20, rs=0)  # 4-bit
+        time.sleep(0.005)
         self._command(0x28)       # 2 lines, 5x8 font
+        time.sleep(0.002)
         self._command(0x0C)       # display on, cursor off
+        time.sleep(0.002)
         self._command(0x06)       # entry mode set
+        time.sleep(0.002)
         self.clear()
 
     # ---------------- Friendly API ----------------
