@@ -164,6 +164,7 @@ class TrainModelUI(tk.Tk):
         self.boarding_last_cycle = 0
         self.last_disembark_station = None
         self.last_passengers_disembarking = 0
+        self.last_station_processed = None  # NEW: track last station where adjustment applied
 
         # UI containers
         container = ttk.Frame(self, padding=10)
@@ -357,7 +358,7 @@ class TrainModelUI(tk.Tk):
             print("train_states write error:", e)
 
     def load_track_inputs(self):
-        """Load track inputs; if signal failure, freeze beacon values."""
+        """Read all inputs from Track Model and include passengers_onboard."""
         try:
             with open(self.track_input_path, "r") as f:
                 data = json.load(f)
@@ -365,8 +366,8 @@ class TrainModelUI(tk.Tk):
             return {}
         block = data.get("block", {})
         beacon = data.get("beacon", {})
-        if self.signal_failure:
-            if self._last_beacon:
+        if getattr(self, "signal_failure", False):
+            if getattr(self, "_last_beacon", {}):
                 beacon = self._last_beacon
         else:
             self._last_beacon = beacon
@@ -377,34 +378,53 @@ class TrainModelUI(tk.Tk):
             "side_door": beacon.get("side_door", ""),
             "current station": beacon.get("current station", ""),
             "next station": beacon.get("next station", ""),
-            "passengers_boarding": beacon.get("passengers_boarding", 0)
+            "passengers_boarding": int(beacon.get("passengers_boarding", 0) or 0),
+            "passengers_onboard": int(beacon.get("passengers_onboard", getattr(self, "passengers_onboard", 0)) or 0)
         }
 
-    def compute_passengers_disembarking(self, current_station, velocity_mph):
-        if not current_station:
-            return 0
-        stopped = velocity_mph < 0.5
-        if stopped and current_station != self.last_disembark_station:
-            # Up to 40% of non-crew, cap 30 each stop
-            non_crew = max(0, self.passengers_onboard - self.specs.get("crew_count", 0))
-            max_out = min(30, int(non_crew * 0.4))
-            count = random.randint(0, max_out) if max_out > 0 else 0
-            self.last_disembark_station = current_station
-            self.last_passengers_disembarking = count
-            return count
-        if stopped:
-            return self.last_passengers_disembarking
-        return 0
+    def adjust_passengers_at_station(self, station, velocity_mph, requested_boarding):
+        """
+        Apply passenger changes only once per arrival at a new station when stopped.
+        Returns tuple: (disembarking_count, actual_boarding, onboard_after)
+        """
+        # Not stopped or no station -> no change
+        if not station or velocity_mph >= 0.5:
+            return (0, 0, self.passengers_onboard)
 
-    def write_track_output(self, passengers_disembarking):
-        out = {"passengers_disembarking": passengers_disembarking}
-        try:
-            with open(self.track_output_path, "w") as f:
-                json.dump(out, f, indent=4)
-        except Exception as e:
-            print("track output write error:", e)
+        # If already processed this station and still stopped, just reuse previous values
+        if self.last_station_processed == station:
+            return (self.last_passengers_disembarking, self.boarding_last_cycle, self.passengers_onboard)
+
+        # New station arrival while stopped -> compute fresh changes
+        non_crew = max(0, self.passengers_onboard - self.specs.get("crew_count", 0))
+        max_disembark = min(30, int(non_crew * 0.4))
+        disembark = random.randint(0, max_disembark) if max_disembark > 0 else 0
+        onboard_after_disembark = max(self.specs.get("crew_count", 0),
+                                      self.passengers_onboard - disembark)
+
+        # Boarding realism: allow +-20% variation around requested_boarding, but not negative
+        if requested_boarding < 0:
+            requested_boarding = 0
+        variation = int(requested_boarding * 0.2)
+        actual_board = requested_boarding + random.randint(-variation, variation)
+        actual_board = max(0, actual_board)
+
+        # Cap by remaining capacity
+        available = self.specs.get("capacity", 0) - onboard_after_disembark
+        actual_board = min(actual_board, available)
+
+        final_onboard = onboard_after_disembark + actual_board
+
+        # Persist cycle values
+        self.last_station_processed = station
+        self.last_passengers_disembarking = disembark
+        self.boarding_last_cycle = actual_board
+        self.passengers_onboard = final_onboard
+
+        return (disembark, actual_board, final_onboard)
 
     def overwrite_train_data(self, inputs, outputs):
+        """Mirror Track Model passenger inputs into outputs; do not mutate onboard here."""
         state = self.get_train_state()
         inputs_full = {
             **inputs,
@@ -415,9 +435,10 @@ class TrainModelUI(tk.Tk):
         }
         outputs_extended = {
             **outputs,
-            "passengers_onboard": self.passengers_onboard,
-            "passengers_boarding": self.boarding_last_cycle,
-            "passengers_disembarking": self.last_passengers_disembarking
+            # Echo passengers from Track Model into outputs
+            "passengers_onboard": int(inputs_full.get("passengers_onboard", getattr(self, "passengers_onboard", 0)) or 0),
+            "passengers_boarding": int(inputs_full.get("passengers_boarding", 0) or 0),
+            "passengers_disembarking": int(getattr(self, "last_passengers_disembarking", 0) or 0)
         }
         data = {"specs": self.specs, "inputs": inputs_full, "outputs": outputs_extended}
         try:
@@ -426,115 +447,99 @@ class TrainModelUI(tk.Tk):
         except Exception as e:
             print("train_data write error:", e)
 
+    def write_track_output(self, passengers_disembarking: int):
+        """Send passengers_disembarking back to the Track Model."""
+        try:
+            out = {"passengers_disembarking": int(passengers_disembarking)}
+            # Ensure folder exists
+            out_dir = os.path.dirname(os.path.abspath(self.track_output_path))
+            if out_dir and not os.path.exists(out_dir):
+                os.makedirs(out_dir, exist_ok=True)
+            with open(self.track_output_path, "w") as f:
+                json.dump(out, f, indent=4)
+        except Exception as e:
+            print("track output write error:", e)
+
     # === Main loop ===
     def update_loop(self):
-        try:
-            track_inputs = self.load_track_inputs()
-            state = self.get_train_state()
+        track_inputs = self.load_track_inputs()
+        state = self.get_train_state()
 
-            # Inputs
-            commanded_speed = track_inputs.get("commanded speed", state.get("commanded_speed", 0.0))
-            commanded_authority = track_inputs.get("commanded authority", state.get("commanded_authority", 0.0))
-            speed_limit = track_inputs.get("speed limit", state.get("speed_limit", commanded_speed))
-            current_station = track_inputs.get("current station", "")
-            next_station = track_inputs.get("next station", "")
-            side_door = track_inputs.get("side_door", "Right")
-            passengers_boarding = track_inputs.get("passengers_boarding", 0)
+        # Set from Track Model (source of truth)
+        self.passengers_onboard = int(track_inputs.get("passengers_onboard", getattr(self, "passengers_onboard", 0)) or 0)
+        self.boarding_last_cycle = int(track_inputs.get("passengers_boarding", 0) or 0)
 
-            outputs_sim = self.model.update(
-                commanded_speed=commanded_speed,
-                commanded_authority=commanded_authority,
-                speed_limit=speed_limit,
-                current_station=current_station,
-                next_station=next_station,
-                side_door=side_door,
-                power_command=state.get("power_command", 0.0),
-                emergency_brake=state.get("emergency_brake", False),
-                service_brake=state.get("service_brake", False),
-                set_temperature=state.get("set_temperature", state.get("train_temperature", 68.0)),
-                left_door=state.get("left_door", False),
-                right_door=state.get("right_door", False),
-                engine_failure=state.get("engine_failure", False),
-                brake_failure=state.get("brake_failure", False)
-            )
+        commanded_speed = track_inputs.get("commanded speed", state.get("commanded_speed", 0.0))
+        commanded_authority = track_inputs.get("commanded authority", state.get("commanded_authority", 0.0))
+        speed_limit = track_inputs.get("speed limit", state.get("speed_limit", commanded_speed))
+        current_station = track_inputs.get("current station", "")
+        next_station = track_inputs.get("next station", "")
+        side_door = track_inputs.get("side_door", "Right")
 
-            # Passenger logic
-            passengers_out = self.compute_passengers_disembarking(current_station, outputs_sim["velocity_mph"])
-            stopped = outputs_sim["velocity_mph"] < 0.5
-            at_station = bool(current_station)
+        outputs_sim = self.model.update(
+            commanded_speed=commanded_speed,
+            commanded_authority=commanded_authority,
+            speed_limit=speed_limit,
+            current_station=current_station,
+            next_station=next_station,
+            side_door=side_door,
+            power_command=state.get("power_command", 0.0),
+            emergency_brake=state.get("emergency_brake", False),
+            service_brake=state.get("service_brake", False),
+            set_temperature=state.get("set_temperature", state.get("train_temperature", 68.0)),
+            left_door=state.get("left_door", False),
+            right_door=state.get("right_door", False),
+            engine_failure=state.get("engine_failure", False),
+            brake_failure=state.get("brake_failure", False)
+        )
 
-            if stopped and at_station:
-                # Apply disembark first
-                self.passengers_onboard = max(
-                    self.specs.get("crew_count", 0),
-                    self.passengers_onboard - passengers_out
-                )
-                # Then boarding up to available capacity
-                available = max(0, self.specs.get("capacity", 0) - self.passengers_onboard)
-                actual_boarding = min(available, max(0, passengers_boarding))
-                self.passengers_onboard += actual_boarding
-                self.boarding_last_cycle = actual_boarding
-            else:
-                self.boarding_last_cycle = 0
+        # Compute disembarking only; do NOT change onboard here
+        passengers_out = self.compute_passengers_disembarking(current_station, outputs_sim["velocity_mph"])
+        self.last_passengers_disembarking = passengers_out
 
-            # Outputs for train_data.json
-            train_model_outputs = {
-                "velocity_mph": outputs_sim["velocity_mph"],
-                "acceleration_ftps2": outputs_sim["acceleration_ftps2"],
-                "position_yds": outputs_sim["position_yds"],
-                "authority_yds": outputs_sim["authority_yds"],
-                "station_name": outputs_sim["station_name"],
-                "next_station": outputs_sim["next_station"],
-                "left_door_open": outputs_sim["left_door_open"],
-                "right_door_open": outputs_sim["right_door_open"],
-                "speed_limit": outputs_sim["speed_limit"],
-                "temperature_F": self.model.temperature_F,
-                "door_side": side_door
-            }
-            self.last_passengers_disembarking = passengers_out
+        train_model_outputs = {
+            "velocity_mph": outputs_sim["velocity_mph"],
+            "acceleration_ftps2": outputs_sim["acceleration_ftps2"],
+            "position_yds": outputs_sim["position_yds"],
+            "authority_yds": outputs_sim["authority_yds"],
+            "station_name": outputs_sim["station_name"],
+            "next_station": outputs_sim["next_station"],
+            "left_door_open": outputs_sim["left_door_open"],
+            "right_door_open": outputs_sim["right_door_open"],
+            "speed_limit": outputs_sim["speed_limit"],
+            "temperature_F": self.model.temperature_F,
+            "door_side": side_door
+        }
 
-            # Write JSONs
-            self.overwrite_train_data(track_inputs, train_model_outputs)
-            self.write_track_output(passengers_out)
-            # Push some fields to controller state for visibility
-            self.update_train_state({
-                "train_velocity": outputs_sim["velocity_mph"],
-                "train_temperature": self.model.temperature_F,
-                "next_stop": next_station,
-                "station_side": side_door
-            })
+        # Write JSONs
+        self.overwrite_train_data(track_inputs, train_model_outputs)
+        self.write_track_output(passengers_out)
 
-            # UI updates
-            self.info_labels["Velocity (mph)"].config(text=f"{outputs_sim['velocity_mph']:.2f} mph")
-            self.info_labels["Acceleration (ft/s²)"].config(text=f"{outputs_sim['acceleration_ftps2']:.2f} ft/s²")
-            self.info_labels["Position (yds)"].config(text=f"{outputs_sim['position_yds']:.1f} yds")
-            self.info_labels["Authority Remaining (yds)"].config(text=f"{outputs_sim['authority_yds']:.1f} yds")
-            self.info_labels["Train Temperature (°F)"].config(text=f"{self.model.temperature_F:.1f} °F")
-            self.info_labels["Set Temperature (°F)"].config(text=f"{state.get('set_temperature', 70.0):.1f} °F")
-            self.info_labels["Current Station"].config(text=f"{current_station or '—'}")
-            self.info_labels["Next Station"].config(text=f"{next_station or '—'}")
-            self.info_labels["Speed Limit (mph)"].config(text=f"{speed_limit} mph")
-            self.env_labels["Left Door"].config(text="Open" if outputs_sim['left_door_open'] else "Closed")
-            self.env_labels["Right Door"].config(text="Open" if outputs_sim['right_door_open'] else "Closed")
-            self.lbl_onboard.config(text=f"{self.passengers_onboard}")
-            self.lbl_boarding.config(text=f"{self.boarding_last_cycle}")
-            self.lbl_disembark.config(text=f"{passengers_out}")
+        # UI mirrors Track Model values
+        self.lbl_onboard.config(text=f"{self.passengers_onboard}")
+        self.lbl_boarding.config(text=f"{self.boarding_last_cycle}")
+        self.lbl_disembark.config(text=f"{passengers_out}")
 
-            # Update KPI cards
-            self._kpi_velocity.config(text=f"{outputs_sim['velocity_mph']:.1f} mph")
-            self._kpi_accel.config(text=f"{outputs_sim['acceleration_ftps2']:.2f} ft/s²")
-            self._kpi_temp.config(text=f"{self.model.temperature_F:.1f} °F")
+        # ...keep your other UI label updates...
+        self.after(int(self.model.dt * 1000), self.update_loop)
 
-            # Update status bar
-            failures = int(state.get("engine_failure", 0)) + int(state.get("signal_failure", 0)) + int(state.get("brake_failure", 0))
-            self.status_var.set(f"Auto-sync: ON • Limit {speed_limit} mph • Station: {current_station or '—'} • Failures: {failures}")
-        except RecursionError:
-            self.status_var.set("Error: recursion detected, loop paused")
-            return
-        except Exception as e:
-            self.status_var.set(f"Error: {e}")
-        finally:
-            self.after_id = self.after(int(self.model.dt * 1000), self.update_loop)
+    def compute_passengers_disembarking(self, current_station: str, velocity_mph: float) -> int:
+        """Compute disembarking once when stopped at a new station.
+        Does not change onboard; Track Model remains source of truth."""
+        station = (current_station or "").strip()
+        if not station:
+            self.last_passengers_disembarking = 0
+            return 0
+        if velocity_mph >= 0.5:
+            return 0
+        if self.last_disembark_station != station:
+            non_crew = max(0, int(self.passengers_onboard) - int(self.specs.get("crew_count", 0)))
+            cap = min(30, int(non_crew * 0.4))
+            count = random.randint(0, cap) if cap > 0 else 0
+            self.last_disembark_station = station
+            self.last_passengers_disembarking = count
+            return count
+        return int(self.last_passengers_disembarking)
 
 if __name__ == "__main__":
     app = TrainModelUI()

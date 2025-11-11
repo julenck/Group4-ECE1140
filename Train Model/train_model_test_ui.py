@@ -298,7 +298,8 @@ class TrainModelTestUI(tk.Tk):
                 "temperature_F": out["temperature_F"],
                 "door_side": inp["side_door"],
                 "passengers_onboard": self.passengers_onboard,
-                "passengers_boarding": self.boarding_last_cycle,
+                # Echo the input boarding value in outputs
+                "passengers_boarding": inp["passengers_boarding"],
                 "passengers_disembarking": passengers_out
             }
         }

@@ -6,8 +6,8 @@
     "beacon": {
         "speed limit": 30,
         "side_door": "Right",
-        "current station": "Central Station",
+        "current station": " Penn Station",
         "next station": "Park Street",
-        "passengers_boarding": 15
+        "passengers_boarding": 25
     }
 }
