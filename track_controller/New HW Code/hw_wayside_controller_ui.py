@@ -1,131 +1,131 @@
-# hw_wayside_controller_ui.py
-# Wayside Controller HW module UI logic.
-# Oliver Kettelson-Belinkie, 2025
+"""
+One UI window per wayside. Mirrors the SW UI shape but stays minimal.
+- Block selection updates the LCD (if present)
+- Periodic refresh pulls state from controller
+"""
 
 from __future__ import annotations
-from typing import Dict, List
-from hw_wayside_controller import HW_Wayside_Controller
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+from typing import Optional
+
 from hw_display import HW_Display
-import os
-from tkinter import filedialog
+from hw_wayside_controller import HW_Wayside_Controller
 
-class HW_Wayside_Controller_UI:
+# optional LCD
+try:
+    from lcd_i2c import I2CLcd
+    _LCD = I2CLcd(bus=1, addr=0x27)
+except Exception:
+    _LCD = None
 
-    toggle_maintenance_mode: bool = False       # UI starting states
-    selected_block: int | None = None
-    maintenance_active: bool = False
 
-    def __init__(self, controller: HW_Wayside_Controller, display: HW_Display) -> None:
-
+class HW_Wayside_Controller_UI(ttk.Frame):
+    def __init__(self, root: tk.Misc, controller: HW_Wayside_Controller, title: str = "Wayside"):
+        super().__init__(root, padding=8)
         self.controller = controller
-        self.display = display
+        self.root = root if isinstance(root, (tk.Tk, tk.Toplevel)) else self.winfo_toplevel()
+        self.root.title(title)
 
-        self.display.set_handlers(                              # Callbacks for UI actions
-            on_upload_plc=self._on_upload_plc_clicked,
-            on_select_block=self.select_block,
-            on_set_switch=self.set_switch_state,
-            on_toggle_maintenance=self._on_toggle_maintenance,
-        )
+        # toolbar
+        bar = ttk.Frame(self)
+        self.btn_load = ttk.Button(bar, text="Upload PLC", command=self._on_upload_plc)
+        self.btn_load.pack(side="left")
+        self.var_maint = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bar, text="Maintenance", variable=self.var_maint,
+                    command=self._on_toggle_maint).pack(side="left", padx=8)
+        bar.pack(fill="x", pady=(0, 6))
 
-    def select_block(self, block_id: str) -> None:
+        self._selected_block: Optional[str] = None
+        self._last_lcd_tuple: Optional[tuple] = None  # <-- make sure this exists early
 
-        self.selected_block = block_id  # store for UI
-        data = self.controller.get_block_data(block_id)
-        self.show_block_data(data)
+        # display area (create once)
+        self.display = HW_Display(self)
+        self.display.pack(fill="both", expand=True)
 
-    def show_block_data(self, data: Dict) -> None:
+        # block list
+        ids = self.controller.get_block_ids()
+        self.display.set_blocks(ids)
+        self.display.bind_on_select(self._on_select_block)
 
-        print("[BLOCK DATA]", data)
+        # pick a first block immediately so the panel renders
+        if ids:
+            self._selected_block = ids[0]
+            self.display.select_block(ids[0])
 
-    def update_display(self, emergency: bool, speed_mph: float, authority_yards: int) -> None:
+        # now it's safe to render once
+        self._push_to_display() 
 
-        # Push inputs to controller (these originate from external modules; UI just forwards)
-
-        self.controller.apply_vital_inputs(
-
-            self.controller.block_ids,
-            {"emergency": emergency, "speed_mph": speed_mph, "authority_yards": authority_yards},
-        )
-        self._push_to_display()
-
-
-    def _on_toggle_maintenance(self, active: bool):
-
-        self.controller.maintenance_active = active
-        self.display.show_status("Maintenance ON" if active else "Maintenance OFF")
-
-    def set_plc(self, path: str) -> bool:
-
-        ok = self.controller.load_plc(path)
-
-        if ok:
-
-            self.controller.change_plc(True, path) 
-
-        self._push_to_display()
-        return ok
-
-    def set_switch_state(self, block_id: str, state: int) -> bool:
-
-        ok = self.controller.set_switch_state(block_id, state)
-        self._push_to_display()
-        return ok
-
-    def show_safety_report(self, report: Dict) -> None:
-
-        self.display.show_safety(report)
-
-    # frame builders
-    def build_input_frame(self) -> None: pass
-    def build_display_frame(self) -> None: pass
-    def build_maintenance_frame(self) -> None: pass
-
-    def _ask_plc_path(self) -> str:
-
-        return filedialog.askopenfilename(
-
-            title="Select PLC file",
-            filetypes=[("Python PLC files", "*.py"), ("All files", "*.*")],
-        )
-
-    def _on_upload_plc_clicked(self):
-
-        path = self._ask_plc_path()
-
-        if not path:
-
-            self.display.show_status("PLC load canceled")
-            return
-
-        ok = self.controller.load_plc(path)
-
-        if ok:
-
-            self.display.show_status(f"PLC loaded: {os.path.basename(path)}")
-
-            # Run one safety + PLC pass so new states appear
-            vital_in = {"speed_mph": 0, "authority_yards": 0, "emergency": False,
-                        "occupied_blocks": [], "closed_blocks": []}
-            
-            self.controller.assess_safety(list(self.controller.light_states.keys()), vital_in)
-            self._push_to_display()
-        else:
-
-            self.display.show_status("PLC load failed")
-
-
-    # ----- internal helper -----
-
-    def _push_to_display(self) -> None:         # Push current controller state to UI display
+    # -------- public compatibility method (SW parity) --------
+    def update_display(self, *, emergency: bool, speed_mph: float, authority_yards: int):
         
-        outs = {
-            "emergency": self.controller.emergency,
-            "speed_mph": int(self.controller.speed_mph),
-            "authority_yards": int(self.controller.authority_yards),
-            "light_states": list(self.controller.light_states.items()),
-            "gate_states": list(self.controller.gate_states.items()),
-            "switch_states": list(self.controller.switch_states.items()),
-            "occupied_blocks": list(self.controller.occupied_blocks),
-            "active_plc": self.controller.active_plc or "",
-        }
-        self.display.show_vital(**outs)
+        self.controller.update_from_feed(
+            speed_mph=speed_mph,
+            authority_yards=authority_yards,
+            emergency=emergency,
+        )
+        self._push_to_display()
+
+    # -------- UI callbacks --------
+    def _on_upload_plc(self):
+        path = filedialog.askopenfilename(
+            title="Select PLC file",
+            filetypes=[("Python", "*.py"), ("All files", "*.*")]
+        )
+        if not path:
+            return
+        ok = self.controller.load_plc(path)
+        if ok:
+            self.controller.change_plc(True)
+            messagebox.showinfo("PLC", f"Loaded: {path}")
+        else:
+            messagebox.showerror("PLC", "Failed to load PLC")
+
+    def _on_toggle_maint(self):
+        self.controller.maintenance_active = bool(self.var_maint.get())
+
+    def _on_select_block(self, block_id: str):
+
+        self._selected_block = block_id
+        self.controller.on_selected_block(block_id)
+        self._push_to_display()
+
+    # -------- periodic refresh --------
+    def _push_to_display(self):
+
+        ids = self.controller.get_block_ids()
+
+        if self._selected_block is None and ids:
+
+            self._selected_block = ids[0]
+            self.display.select_block(ids[0])
+
+        if self._selected_block:
+
+            state = self.controller.get_block_state(self._selected_block)
+            self.display.update_details(state)
+            self._update_lcd_tuple(state)
+
+    # LCD updater with change detection
+    def _update_lcd_tuple(self, state):
+        block = state.get("block_id")
+        spd = float(state.get("speed_mph", 0.0))
+        auth = float(state.get("authority_yards", 0))
+        tup = (block, int(spd), int(auth))
+        if tup != self._last_lcd_tuple:
+            self._last_lcd_tuple = tup
+            self._update_lcd_for(block)
+
+    def _update_lcd_for(self, block_id: str | None):
+
+        try:
+            from lcd_i2c_wayside_hw import I2CLcd  
+            _lcd = I2CLcd(bus=1, addr=0x27)
+        except Exception:
+            _lcd = None
+
+        if not block_id or not _lcd or not _lcd.present():
+            return
+        
+        st = self.controller.get_block_state(block_id)
+        _lcd.show_speed_auth(block_id, st.get("speed_mph", 0.0), st.get("authority_yards", 0))
