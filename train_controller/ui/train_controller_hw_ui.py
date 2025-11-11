@@ -85,21 +85,19 @@ class train_controller:
         # build a vital_train_controls candidate from current state + changes
         state = self.api.get_state().copy()
         candidate = vital_train_controls(
-            kp = state.get('kp', 0.0),
-            ki = state.get('ki', 0.0),
-            train_velocity = state.get('train_velocity', 0.0),
+            kp = changes.get('kp', state.get('kp', 0.0)),
+            ki = changes.get('ki', state.get('ki', 0.0)),
+            train_velocity = changes.get('train_velocity', state.get('train_velocity', 0.0)),
             driver_velocity = changes.get('driver_velocity', state.get('driver_velocity', 0.0)),
             emergency_brake = changes.get('emergency_brake', state.get('emergency_brake', False)),
             service_brake = changes.get('service_brake', state.get('service_brake', False)),
-            power_command = state.get('power_command', 0.0),
-            commanded_authority = state.get('commanded_authority', 0.0),
-            speed_limit = state.get('speed_limit', 0.0)
+            power_command = changes.get('power_command', state.get('power_command', 0.0)),
+            commanded_authority = changes.get('commanded_authority', state.get('commanded_authority', 0.0)),
+            speed_limit = changes.get('speed_limit', state.get('speed_limit', 0.0))
         )
 
         for v in self.validators:
-            ok, reason = v.validate(candidate)
-            if not ok:
-                print(f"Vital validation failed: {reason}")
+            if not v.validate(candidate):
                 return False
 
         # validators passed -> commit only the requested vital fields
@@ -560,57 +558,94 @@ class train_controller_ui(tk.Tk):
             tk.messagebox.showerror("Error", "Kp and Ki must be valid numbers")
 
 class vital_train_controls:
-    def __init__(self, kp=0.0, ki=0.0, train_velocity=0.0, velocity=None,
-                 driver_velocity=0.0, emergency_brake=False, service_brake=False,
-                 power_command=0.0, commanded_authority=0.0, speed_limit=0.0):
+    def __init__(self, kp: float = 0.0, ki: float = 0.0, train_velocity: float = 0.0,
+                 driver_velocity: float = 0.0, emergency_brake: bool = False,
+                 service_brake: bool = False, power_command: float = 0.0,
+                 commanded_authority: float = 0.0, speed_limit: float = 0.0):
+        """Initialize vital train controls with given values.
+
+        Args:
+            kp: Proportional gain.
+            ki: Integral gain.
+            train_velocity: Current velocity.
+            driver_velocity: Driver's set velocity.
+            emergency_brake: Emergency brake state.
+            service_brake: Service brake state.
+            power_command: Power command.
+            commanded_authority: Commanded authority.
+            speed_limit: Speed limit.
+        """
         self.kp = kp
         self.ki = ki
         self.train_velocity = train_velocity
-        # validators expect .velocity, provide alias
-        self.velocity = train_velocity if velocity is None else velocity
+        self.velocity = train_velocity  # Alias for validators
         self.driver_velocity = driver_velocity
-        self.emergency_brake = bool(emergency_brake)
-        self.service_brake = bool(service_brake)
+        self.emergency_brake = emergency_brake
+        self.service_brake = service_brake
         self.power_command = power_command
         self.commanded_authority = commanded_authority
         self.speed_limit = speed_limit
 
-class vital_validator:
-    def validate(self, candidate: vital_train_controls) -> (bool, str):
-        """Validate the given vital train controls.
+class vital_control_first_check:
+    def validate(self, v: vital_train_controls) -> bool:
+        """Validate vital train controls (first check - hard rules).
         
         Args:
-            vital_controls (vital_train_controls): The vital controls to validate.
-        
+            v: The vital train controls to validate.
+            
         Returns:
-            (bool, str): Tuple of (is_valid, reason). is_valid is True if valid, False otherwise.
-                         reason is a string explaining the validation result.
+            True if validation passes, False otherwise.
         """
-        raise NotImplementedError("Subclasses must implement validate method.")
-
-class vital_control_first_check:
-    def validate(self, v):
-        if v.velocity > v.speed_limit:
-            return False, "velocity > speed_limit"
+        # Check 1: Velocity must not exceed speed limit (if speed limit is set)
+        if v.speed_limit > 0 and v.velocity > v.speed_limit:
+            print(f"VALIDATION FAILED: Velocity {v.velocity} exceeds speed limit {v.speed_limit}")
+            return False
+        
+        # Check 2: Power command must be within valid range (0-120000W)
         if v.power_command < 0 or v.power_command > 120000:
-            return False, "power_command out of range"
+            print(f"VALIDATION FAILED: Power command {v.power_command} out of range [0, 120000]")
+            return False
+        
+        # Check 3: Cannot have both service and emergency brake active
         if v.service_brake and v.emergency_brake:
-            return False, "both service and emergency brakes active"
+            print("VALIDATION FAILED: Both service brake and emergency brake are active")
+            return False
+        
+        # Check 4: Cannot have power when authority is depleted
         if v.commanded_authority <= 0 and v.power_command > 0:
-            return False, "authority depleted but power requested"
-        return True, ""
+            print(f"VALIDATION FAILED: Power command {v.power_command} with no authority")
+            return False
+        
+        return True
 
 class vital_control_second_check:
-    def validate(self, v):
-        # maybe slightly different implementation or thresholding
-        safe_speed = v.speed_limit * 1.02  # allows 2% margin
-        if v.velocity > safe_speed:
-            return False, "velocity exceeds safe margin"
+    def validate(self, v: vital_train_controls) -> bool:
+        """Validate vital train controls (second check - with margin).
+        
+        Args:
+            v: The vital train controls to validate.
+            
+        Returns:
+            True if validation passes, False otherwise.
+        """
+        # Check 1: Allow 2% margin over speed limit for realistic deceleration (if speed limit is set)
+        if v.speed_limit > 0:
+            safe_speed = v.speed_limit * 1.02
+            if v.velocity > safe_speed:
+                print(f"VALIDATION FAILED: Velocity {v.velocity} exceeds safe speed {safe_speed}")
+                return False
+        
+        # Check 2: Cannot have both brakes active
         if v.service_brake and v.emergency_brake:
-            return False, "both service and emergency brakes active"
-        if not (v.commanded_authority > 0 or v.power_command == 0):
-            return False, "no authority while power requested"
-        return True, ""
+            print("VALIDATION FAILED: Both brakes active (second check)")
+            return False
+        
+        # Check 3: Authority check
+        if v.commanded_authority > 0 or v.power_command == 0:
+            return True
+        else:
+            print("VALIDATION FAILED: No authority but power commanded (second check)")
+            return False
 
 class beacon:
     #define beacon attributes here, get them from the api with a function?!
