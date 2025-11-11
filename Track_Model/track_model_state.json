@@ -93,7 +93,12 @@
     "Green": {
         "A1": {
             "environment": {
-                "temperature": 7
+                "temperature": "75"
+            },
+            "failures": {
+                "power": false,
+                "circuit": false,
+                "broken": false
             }
         }
     }

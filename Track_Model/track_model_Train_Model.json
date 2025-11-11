@@ -1,7 +1,19 @@
 {
     "block": {
-        "commanded speed": 40,
-        "commanded authority": 0
+        "commanded speed": [
+            40,
+            67,
+            90,
+            30,
+            30
+        ],
+        "commanded authority": [
+            5,
+            10,
+            15,
+            3,
+            3
+        ]
     },
     "beacon": {
         "speed limit": 30,
