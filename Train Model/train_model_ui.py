@@ -1,16 +1,17 @@
+import os
+import json
+import random
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
-import json
-import os
-import math
 
 
 # === File paths ===
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
-TRAIN_SPECS_FILE = "train_data.json"  # Keep for static specs only
+TRACK_INPUT_FILE = "../Track_Model/track_model_to_Train_Model.json"
+TRAIN_DATA_FILE = "train_data.json"
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # ensures relative paths work
 
 
 # === Train Model Core ===
@@ -75,52 +76,38 @@ class TrainModel:
         return round(self.temperature_F * 2) / 2
     
     def update(self, commanded_speed, commanded_authority, speed_limit,
-               current_station, next_station, side_door, power_command=0, 
+               current_station, next_station, side_door, power_command=0,
                emergency_brake=False, service_brake=False, set_temperature=70.0,
-               left_door=False, right_door=False):
-        """Simulate motion and update station/door status"""
-        # Apply brakes first
+               left_door=False, right_door=False,
+               engine_failure=False, brake_failure=False):
+        # Emergency brake overrides everything
         if emergency_brake:
             self.acceleration_ftps2 = self.emergency_brake_ftps2
-        elif service_brake:
-            self.acceleration_ftps2 = self.service_brake_ftps2
         else:
-            # Use power command to calculate acceleration
-            # Power command comes in Watts from train controller
-            power_watts = power_command  # Already in watts, no conversion needed
-            if self.velocity_mph > 0.1:  # Avoid division by zero
-                velocity_ftps = self.velocity_mph * 1.46667  # mph to ft/s
-                velocity_mps = velocity_ftps * 0.3048  # ft/s to m/s
-                force_newtons = power_watts / velocity_mps  # F = P/v
-                force_lbs = force_newtons * 0.224809  # N to lbs
-                self.acceleration_ftps2 = (force_lbs / self.mass_lbs) * 32.174  # a = F/m
+            if service_brake and not brake_failure:
+                self.acceleration_ftps2 = self.service_brake_ftps2
             else:
-                # At rest, use max acceleration if power is applied
-                self.acceleration_ftps2 = self.max_accel_ftps2 if power_command > 0 else 0
-            
-            # Limit acceleration to max
-            self.acceleration_ftps2 = max(min(self.acceleration_ftps2, self.max_accel_ftps2), 
-                                         self.service_brake_ftps2)
-
-        # Integrate velocity and position
+                target_mph = min(commanded_speed, speed_limit if speed_limit > 0 else commanded_speed)
+                target_ftps = target_mph / 0.681818
+                current_ftps = self.velocity_mph / 0.681818
+                diff = target_ftps - current_ftps
+                accel_max = self.max_accel_ftps2
+                raw_accel = max(-accel_max, min(accel_max, diff / self.dt))
+                # Engine failure: no positive propulsion (allow coasting & braking)
+                if engine_failure and raw_accel > 0:
+                    raw_accel = 0.0
+                self.acceleration_ftps2 = raw_accel
         delta_v_ftps = self.acceleration_ftps2 * self.dt
         delta_v_mph = delta_v_ftps * 0.681818
-        self.velocity_mph = max(self.velocity_mph + delta_v_mph, 0)
+        self.velocity_mph = max(self.velocity_mph + delta_v_mph, 0.0)
         delta_x_ft = (self.velocity_mph / 0.681818) * self.dt
         self.position_yds += delta_x_ft / 3.0
         self.authority_yds = commanded_authority
-
-        # Door logic - use actual door states from train controller
         self.left_door_open = left_door
         self.right_door_open = right_door
-
-        # Regulate temperature toward set point
         self.regulate_temperature(set_temperature)
-
-        # Update route info
         self.current_station = current_station
         self.next_station = next_station
-
         return {
             "velocity_mph": self.velocity_mph,
             "acceleration_ftps2": self.acceleration_ftps2,
@@ -135,273 +122,278 @@ class TrainModel:
         }
 
 
+DEFAULT_SPECS = {
+    "length_ft": 66.0,
+    "width_ft": 10.0,
+    "height_ft": 11.5,
+    "mass_lbs": 90100,
+    "max_power_hp": 169,
+    "max_accel_ftps2": 1.64,
+    "service_brake_ftps2": -3.94,
+    "emergency_brake_ftps2": -8.86,
+    "capacity": 222,
+    "crew_count": 2
+}
+
 # === Train Model UI ===
 class TrainModelUI(tk.Tk):
     def __init__(self):
-        super().__init__()
-        self.title("Train Model - Integrated with Train Controller")
-        self.geometry("1450x900")
-
+        # Prepare paths and specs BEFORE tk init to avoid early callbacks needing specs
         self.train_states_path = TRAIN_STATES_FILE
-        self.specs_path = TRAIN_SPECS_FILE
-        
-        # Load static specs
-        specs = self.load_train_specs()
-        self.model = TrainModel(specs)
+        self.train_data_path = TRAIN_DATA_FILE
+        self.track_input_path = TRACK_INPUT_FILE
+        self.specs = self._load_or_default_specs()
+        super().__init__()
+        self.title("Train Model")
+        self.geometry("800x600")
+        self.model = TrainModel(self.specs)
         
         # Initialize train temperature from JSON file
         state = self.get_train_state()
-        self.model.temperature_F = state.get("train_temperature", 68.0)
+        self.model.temperature_F = state.get("train_temperature", self.specs.get("default_temperature", 68.0))
 
-        # Layout configuration
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=1)
-
-        # Left panel
-        left_frame = ttk.Frame(self)
-        left_frame.grid(row=0, column=0, sticky="NSEW", padx=10, pady=10)
-        self.create_info_panel(left_frame)
-        self.create_env_panel(left_frame)
-        self.create_specs_panel(left_frame)
-        self.create_control_panel(left_frame)
-        self.create_failure_panel(left_frame)   # <-- NEW PANEL ADDED HERE
-        self.create_announcements_panel(left_frame)
-
-        # Right panel (map)
-        right_frame = ttk.Frame(self)
-        right_frame.grid(row=0, column=1, sticky="NSEW", padx=10, pady=10)
-        self.create_static_map_panel(right_frame)
-
+        # UI elements
+        self.last_disembark_station = None
+        self.last_passengers_disembarking = 0
+        self.info_labels = {}
+        self.env_labels = {}
+        
+        self.build_basic_ui()
+        self.build_failure_controls()
         # Start update loop
         self.update_loop()
 
+    def _load_or_default_specs(self):
+        """Return specs from train_data.json or defaults, then ensure train_data.json has them."""
+        if os.path.exists(self.train_data_path):
+            try:
+                with open(self.train_data_path, "r") as f:
+                    data = json.load(f)
+                specs = data.get("specs", {})
+                # Validate required keys
+                missing = [k for k in DEFAULT_SPECS if k not in specs]
+                if missing:
+                    for k in missing:
+                        specs[k] = DEFAULT_SPECS[k]
+                    data["specs"] = specs
+                    with open(self.train_data_path, "w") as f:
+                        json.dump(data, f, indent=4)
+                return specs
+            except Exception:
+                pass
+        # Write fresh file if absent/corrupt
+        base = {
+            "specs": DEFAULT_SPECS,
+            "inputs": {},
+            "outputs": {}
+        }
+        try:
+            with open(self.train_data_path, "w") as f:
+                json.dump(base, f, indent=4)
+        except Exception as e:
+            print("Spec file init error:", e)
+        return DEFAULT_SPECS
+
+    def build_basic_ui(self):
+        frame = ttk.LabelFrame(self, text="Info")
+        frame.pack(fill="x", padx=10, pady=10)
+        for k in ["Velocity (mph)", "Acceleration (ft/s²)", "Position (yds)",
+                  "Authority Remaining (yds)", "Train Temperature (°F)",
+                  "Set Temperature (°F)", "Current Station", "Next Station",
+                  "Speed Limit (mph)", "Passengers Disembarking"]:
+            lbl = ttk.Label(frame, text=f"{k}:")
+            lbl.pack(anchor="w")
+            self.info_labels[k] = lbl
+        env = ttk.LabelFrame(self, text="Environment")
+        env.pack(fill="x", padx=10, pady=10)
+        for k in ["Left Door", "Right Door"]:
+            lbl = ttk.Label(env, text=f"{k}:")
+            lbl.pack(anchor="w")
+            self.env_labels[k] = lbl
+
     def load_train_specs(self):
-        """Load static train specifications from train_data.json"""
-        if not os.path.exists(self.specs_path):
-            default_specs = {
-                "specs": {
-                    "length_ft": 66.0,
-                    "width_ft": 10.0,
-                    "height_ft": 11.5,
-                    "mass_lbs": 90100,
-                    "max_power_hp": 161,
-                    "max_accel_ftps2": 1.64,
-                    "service_brake_ftps2": -3.94,
-                    "emergency_brake_ftps2": -8.86,
-                    "capacity": 222,
-                    "crew_count": 2
-                }
-            }
-            with open(self.specs_path, "w") as f:
-                json.dump(default_specs, f, indent=4)
-            return default_specs["specs"]
-        
-        with open(self.specs_path, "r") as f:
+        if not os.path.exists(self.train_data_path):
+            return {}
+        with open(self.train_data_path, "r") as f:
             data = json.load(f)
-            return data.get("specs", {})
+        return data.get("specs", {})
 
     def get_train_state(self):
-        """Read train state from train_states.json"""
         try:
             with open(self.train_states_path, "r") as f:
                 return json.load(f)
-        except FileNotFoundError:
-            # Initialize with default state if file doesn't exist
-            default_state = {
-                "commanded_speed": 0.0,
-                "commanded_authority": 0.0,
-                "speed_limit": 0.0,
-                "train_velocity": 0.0,
-                "next_stop": "",
-                "station_side": "",
-                "train_temperature": 70.0,
-                "engine_failure": False,
-                "signal_failure": False,
-                "brake_failure": False,
-                "manual_mode": False,
-                "driver_velocity": 0.0,
-                "service_brake": False,
-                "right_door": False,
-                "left_door": False,
-                "interior_lights": False,
-                "exterior_lights": False,
-                "set_temperature": 70.0,
-                "temperature_up": False,
-                "temperature_down": False,
-                "announcement": "",
-                "announce_pressed": False,
-                "emergency_brake": False,
-                "kp": 0.0,
-                "ki": 0.0,
-                "engineering_panel_locked": False,
-                "power_command": 0.0
-            }
-            with open(self.train_states_path, "w") as f:
-                json.dump(default_state, f, indent=4)
-            return default_state
+        except Exception:
+            return {}
 
     def update_train_state(self, updates):
-        """Write train outputs back to train_states.json"""
         state = self.get_train_state()
         state.update(updates)
-        with open(self.train_states_path, "w") as f:
-            json.dump(state, f, indent=4)
+        try:
+            with open(self.train_states_path, "w") as f:
+                json.dump(state, f, indent=4)
+        except Exception as e:
+            print("train_states write error:", e)
 
-    def create_info_panel(self, parent):
-        frame = ttk.LabelFrame(parent, text="Train Dynamics (Imperial Units)")
-        frame.pack(fill="x", pady=5)
-        self.info_labels = {}
-        for key in [
-            "Velocity (mph)",
-            "Acceleration (ft/s²)",
-            "Position (yds)",
-            "Authority Remaining (yds)",
-            "Train Temperature (°F)",
-            "Set Temperature (°F)",
-            "Current Station",
-            "Next Station",
-            "Speed Limit (mph)"
-        ]:
-            lbl = ttk.Label(frame, text=f"{key}: --")
-            lbl.pack(anchor="w", padx=10, pady=2)
-            self.info_labels[key] = lbl
+    def load_track_inputs(self):
+        try:
+            with open(self.track_input_path, "r") as f:
+                data = json.load(f)
+        except Exception:
+            return {}
+        block = data.get("block", {})
+        beacon = data.get("beacon", {})
+        return {
+            "commanded speed": block.get("commanded speed", 0.0),
+            "commanded authority": block.get("commanded authority", 0.0),
+            "speed limit": beacon.get("speed limit", 0.0),
+            "side_door": beacon.get("side_door", ""),
+            "current station": beacon.get("current station", ""),
+            "next station": beacon.get("next station", "")
+        }
 
-    def create_env_panel(self, parent):
-        frame = ttk.LabelFrame(parent, text="Environment Status")
-        frame.pack(fill="x", pady=5)
-        self.env_labels = {}
-        for key in ["Left Door", "Right Door"]:
-            lbl = ttk.Label(frame, text=f"{key}: --")
-            lbl.pack(anchor="w", padx=10, pady=2)
-            self.env_labels[key] = lbl
-
-    def create_specs_panel(self, parent):
-        frame = ttk.LabelFrame(parent, text="Train Specifications")
-        frame.pack(fill="x", pady=5)
-        specs = self.load_train_specs()
-        for k, v in specs.items():
-            ttk.Label(frame, text=f"{k}: {v}").pack(anchor="w", padx=10, pady=1)
-
-    def create_control_panel(self, parent):
-        frame = ttk.LabelFrame(parent, text="Controls")
-        frame.pack(fill="x", pady=10)
-        self.emergency_button = ttk.Button(frame, text="EMERGENCY BRAKE", 
-                                           command=self.toggle_emergency_brake)
-        self.emergency_button.pack(fill="x", padx=20, pady=10)
-    
-    def toggle_emergency_brake(self):
-        """Toggle emergency brake state"""
+    def overwrite_train_data(self, inputs, outputs):
         state = self.get_train_state()
-        current_state = state.get("emergency_brake", False)
-        self.update_train_state({"emergency_brake": not current_state})
+        # Failures & emergency brake included in inputs section
+        inputs_full = {
+            **inputs,
+            "engine_failure": state.get("engine_failure", False),
+            "signal_failure": state.get("signal_failure", False),
+            "brake_failure": state.get("brake_failure", False),
+            "emergency_brake": state.get("emergency_brake", False)
+        }
+        data = {"specs": self.specs, "inputs": inputs_full, "outputs": outputs}
+        try:
+            with open(self.train_data_path, "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print("train_data write error:", e)
 
-    def create_failure_panel(self, parent):
-        """Panel for setting failure modes."""
-        frame = ttk.LabelFrame(parent, text="Failure Modes")
-        frame.pack(fill="x", pady=5)
+    def compute_passengers_disembarking(self, current_station, velocity_mph):
+        if not current_station:
+            return 0
+        stopped = velocity_mph < 0.5
+        if stopped and current_station != self.last_disembark_station:
+            max_out = min(30, int(self.model.capacity * 0.5))
+            count = random.randint(0, max_out)
+            self.last_disembark_station = current_station
+            self.last_passengers_disembarking = count
+            return count
+        if stopped:
+            return self.last_passengers_disembarking
+        return 0
 
-        # Boolean variables for each failure mode
-        self.engine_failure_var = tk.BooleanVar(value=False)
-        self.signal_failure_var = tk.BooleanVar(value=False)
-        self.brake_failure_var = tk.BooleanVar(value=False)
+    def build_failure_controls(self):
+        frm = ttk.LabelFrame(self, text="Failures / Safety")
+        frm.pack(fill="x", padx=10, pady=5)
+        self.var_engine = tk.BooleanVar(value=False)
+        self.var_signal = tk.BooleanVar(value=False)
+        self.var_brake = tk.BooleanVar(value=False)
+        self.var_emergency = tk.BooleanVar(value=False)
 
-        # Checkbuttons for each failure mode
-        ttk.Checkbutton(frame, text="Train Engine Failure",
-                        variable=self.engine_failure_var,
-                        command=self.update_failures).pack(anchor="w", padx=10, pady=2)
-        ttk.Checkbutton(frame, text="Signal Pickup Failure",
-                        variable=self.signal_failure_var,
-                        command=self.update_failures).pack(anchor="w", padx=10, pady=2)
-        ttk.Checkbutton(frame, text="Brake Failure",
-                        variable=self.brake_failure_var,
-                        command=self.update_failures).pack(anchor="w", padx=10, pady=2)
+        ttk.Checkbutton(frm, text="Engine Failure", variable=self.var_engine,
+                        command=self._on_failure_toggle).pack(anchor="w")
+        ttk.Checkbutton(frm, text="Signal Pickup Failure", variable=self.var_signal,
+                        command=self._on_failure_toggle).pack(anchor="w")
+        ttk.Checkbutton(frm, text="Brake Failure", variable=self.var_brake,
+                        command=self._on_failure_toggle).pack(anchor="w")
+        ttk.Checkbutton(frm, text="Emergency Brake", variable=self.var_emergency,
+                        command=self._on_emergency_toggle).pack(anchor="w")
 
-    def update_failures(self):
-        """Write failure mode states directly to train_states.json"""
+        self.fail_status_lbl = ttk.Label(frm, text="Status: OK")
+        self.fail_status_lbl.pack(anchor="w")
+
+    def _on_failure_toggle(self):
+        self.engine_failure = self.var_engine.get()
+        self.signal_failure = self.var_signal.get()
+        self.brake_failure = self.var_brake.get()
+        self._push_failures_to_state()
+        status = []
+        if self.engine_failure: status.append("Engine")
+        if self.signal_failure: status.append("Signal")
+        if self.brake_failure: status.append("Brake")
+        self.fail_status_lbl.config(text=f"Status: {' / '.join(status) if status else 'OK'}")
+
+    def _on_emergency_toggle(self):
+        self.emergency_brake = self.var_emergency.get()
+        self._push_failures_to_state()
+
+    def _push_failures_to_state(self):
         self.update_train_state({
-            "engine_failure": self.engine_failure_var.get(),
-            "signal_failure": self.signal_failure_var.get(),
-            "brake_failure": self.brake_failure_var.get(),
+            "engine_failure": self.engine_failure,
+            "signal_failure": self.signal_failure,
+            "brake_failure": self.brake_failure,
+            "emergency_brake": self.emergency_brake
         })
-
-    def create_announcements_panel(self, parent):
-        frame = ttk.LabelFrame(parent, text="Announcements")
-        frame.pack(fill="both", expand=True, pady=5)
-        self.announcement_box = tk.Text(frame, height=6, wrap="word", state='normal')
-        self.announcement_box.insert("end", "Train Model Running (Integrated Mode)...\n")
-        self.announcement_box.pack(fill="both", expand=True, padx=5, pady=5)
-
-    def create_static_map_panel(self, parent):
-        map_path = os.path.join(os.path.dirname(__file__), "map.png")
-        if os.path.exists(map_path):
-            img = Image.open(map_path).resize((850, 650))
-            self.map_img = ImageTk.PhotoImage(img)
-            lbl = ttk.Label(parent, image=self.map_img)
-            lbl.pack(fill="both", expand=True)
-        else:
-            ttk.Label(parent, text="Map not found").pack()
 
     def update_loop(self):
-        """Periodic update: read from train_states.json, compute, write back"""
-        # 1. Read inputs from train_states.json (from Train Controller)
+        track_inputs = self.load_track_inputs()
         state = self.get_train_state()
 
-        # 2. Run train model simulation with all inputs
-        outputs = self.model.update(
-            commanded_speed=state.get("commanded_speed", 0),
-            commanded_authority=state.get("commanded_authority", 0),
-            speed_limit=state.get("speed_limit", 30),
-            current_station=state.get("next_stop", "Unknown"),
-            next_station=state.get("next_stop", "Unknown"),
-            side_door=state.get("station_side", "Right"),
-            power_command=state.get("power_command", 0),
+        commanded_speed = track_inputs.get("commanded speed", state.get("commanded_speed", 0.0))
+        commanded_authority = track_inputs.get("commanded authority", state.get("commanded_authority", 0.0))
+        speed_limit = track_inputs.get("speed limit", state.get("speed_limit", commanded_speed))
+        current_station = track_inputs.get("current station", "")
+        next_station = track_inputs.get("next station", "")
+        side_door = track_inputs.get("side_door", "Right")
+
+        outputs_sim = self.model.update(
+            commanded_speed=commanded_speed,
+            commanded_authority=commanded_authority,
+            speed_limit=speed_limit,
+            current_station=current_station,
+            next_station=next_station,
+            side_door=side_door,
+            power_command=state.get("power_command", 0.0),
             emergency_brake=state.get("emergency_brake", False),
             service_brake=state.get("service_brake", False),
-            set_temperature=state.get("set_temperature", 70.0),
+            set_temperature=state.get("set_temperature", state.get("train_temperature", 68.0)),
             left_door=state.get("left_door", False),
-            right_door=state.get("right_door", False)
+            right_door=state.get("right_door", False),
+            engine_failure=state.get("engine_failure", False),
+            brake_failure=state.get("brake_failure", False)
         )
-
-        # 3. Write train model outputs back to train_states.json
+        passengers_out = self.compute_passengers_disembarking(current_station, outputs_sim["velocity_mph"])
+        train_model_outputs = {
+            "velocity_mph": outputs_sim["velocity_mph"],
+            "acceleration_ftps2": outputs_sim["acceleration_ftps2"],
+            "position_yds": outputs_sim["position_yds"],
+            "authority_yds": outputs_sim["authority_yds"],
+            "station_name": outputs_sim["station_name"],
+            "next_station": outputs_sim["next_station"],
+            "left_door_open": outputs_sim["left_door_open"],
+            "right_door_open": outputs_sim["right_door_open"],
+            "speed_limit": outputs_sim["speed_limit"],
+            "temperature_F": self.model.temperature_F,
+            "passengers_disembarking": passengers_out,
+            "door_side": side_door
+        }
+        self.overwrite_train_data(track_inputs, train_model_outputs)
         self.update_train_state({
-            "train_velocity": outputs['velocity_mph'],
-            "train_temperature": outputs['temperature_F'],
+            "train_velocity": outputs_sim["velocity_mph"],
+            "train_temperature": self.model.temperature_F,
+            "next_stop": next_station,
+            "station_side": side_door
         })
+        # UI labels
+        self.info_labels["Velocity (mph)"].config(text=f"Velocity (mph): {outputs_sim['velocity_mph']:.2f}")
+        self.info_labels["Acceleration (ft/s²)"].config(text=f"Acceleration (ft/s²): {outputs_sim['acceleration_ftps2']:.2f}")
+        self.info_labels["Position (yds)"].config(text=f"Position (yds): {outputs_sim['position_yds']:.1f}")
+        self.info_labels["Authority Remaining (yds)"].config(text=f"Authority Remaining (yds): {outputs_sim['authority_yds']:.1f}")
+        self.info_labels["Train Temperature (°F)"].config(text=f"Train Temperature (°F): {self.model.temperature_F:.1f}")
+        self.info_labels["Set Temperature (°F)"].config(text=f"Set Temperature (°F): {state.get('set_temperature', 70.0):.1f}")
+        self.info_labels["Current Station"].config(text=f"Current Station: {current_station or '---'}")
+        self.info_labels["Next Station"].config(text=f"Next Station: {next_station or '---'}")
+        self.info_labels["Speed Limit (mph)"].config(text=f"Speed Limit (mph): {speed_limit}")
+        self.info_labels["Passengers Disembarking"].config(text=f"Passengers Disembarking: {passengers_out}")
 
-        # 4. Update UI labels
-        self.info_labels["Velocity (mph)"].config(text=f"Velocity: {outputs['velocity_mph']:.2f} mph")
-        self.info_labels["Acceleration (ft/s²)"].config(text=f"Acceleration: {outputs['acceleration_ftps2']:.2f} ft/s²")
-        self.info_labels["Position (yds)"].config(text=f"Position: {outputs['position_yds']:.1f} yds")
-        self.info_labels["Authority Remaining (yds)"].config(text=f"Authority: {outputs['authority_yds']:.1f} yds")
-        self.info_labels["Train Temperature (°F)"].config(text=f"Train Temperature: {outputs['temperature_F']:.1f}°F")
-        self.info_labels["Set Temperature (°F)"].config(text=f"Set Temperature: {state.get('set_temperature', 70.0):.1f}°F")
-        self.info_labels["Current Station"].config(text=f"Current Station: {outputs['station_name']}")
-        self.info_labels["Next Station"].config(text=f"Next Station: {outputs['next_station']}")
-        self.info_labels["Speed Limit (mph)"].config(text=f"Speed Limit: {outputs['speed_limit']} mph")
+        self.env_labels["Left Door"].config(text=f"Left Door: {'Open' if outputs_sim['left_door_open'] else 'Closed'}")
+        self.env_labels["Right Door"].config(text=f"Right Door: {'Open' if outputs_sim['right_door_open'] else 'Closed'}")
 
-        self.env_labels["Left Door"].config(text=f"Left Door: {'Open' if outputs['left_door_open'] else 'Closed'}")
-        self.env_labels["Right Door"].config(text=f"Right Door: {'Open' if outputs['right_door_open'] else 'Closed'}")
-
-        # 5. Handle announcements from train controller
-        announcement = state.get("announcement", "")
-        announce_pressed = state.get("announce_pressed", False)
-        
-        # Display announcement only while button is pressed
-        if announce_pressed and announcement:
-            # Show the announcement
-            self.announcement_box.config(state='normal')
-            self.announcement_box.delete("1.0", "end")  # Clear previous content
-            self.announcement_box.insert("end", f"[ANNOUNCEMENT]\n{announcement}")
-            self.announcement_box.config(state='disabled')
-        else:
-            # Clear announcement when button is not pressed
-            self.announcement_box.config(state='normal')
-            self.announcement_box.delete("1.0", "end")
-            self.announcement_box.insert("end", "Train Model Running (Integrated Mode)...\n")
-            self.announcement_box.config(state='disabled')
-
-        # 6. Repeat periodically
+        # Add failure/emergency display
+        self.fail_status_lbl.config(
+            text=f"Status: {'EMERGENCY BRAKE' if state.get('emergency_brake') else 'OK'} | "
+                 f"Eng:{int(state.get('engine_failure',0))} Sig:{int(state.get('signal_failure',0))} Brk:{int(state.get('brake_failure',0))}"
+        )
         self.after(int(self.model.dt * 1000), self.update_loop)
 
 

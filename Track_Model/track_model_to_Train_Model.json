@@ -1,6 +1,6 @@
 {
     "block": {
-        "commanded speed": 0,
+        "commanded speed": 40,
         "commanded authority": 0
     },
     "beacon": {

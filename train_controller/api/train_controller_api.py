@@ -251,29 +251,20 @@ class train_controller_api:
         Args:
             data: Dictionary containing Train Model outputs
         """
-        # Get current state to check if speed/temperature are changing
         current_state = self.get_state()
-        
-        # Filter relevant data from train model
         relevant_data = {
             k: v for k, v in data.items() 
             if k in ['commanded_speed', 'commanded_authority', 'speed_limit',
-                    'train_velocity', 'next_stop', 'station_side', 'train_temperature',
-                    'engine_failure', 'signal_failure', 'brake_failure', 'manual_mode']
+                     'train_velocity', 'next_stop', 'station_side', 'train_temperature',
+                     'engine_failure', 'signal_failure', 'brake_failure',
+                     'manual_mode', 'emergency_brake']
         }
-        
-        # If commanded_speed is changing and driver_velocity matches old commanded_speed,
-        # update driver_velocity to match new commanded_speed
         if ('commanded_speed' in relevant_data and 
             current_state['driver_velocity'] == current_state['commanded_speed']):
-            relevant_data['driver_velocity'] = relevant_data['commanded_speed']
-            
-        # If train_temperature is changing and set_temperature matches old train_temperature,
-        # update set_temperature to match new train_temperature
+            relevant_data.setdefault('driver_velocity', relevant_data['commanded_speed'])
         if ('train_temperature' in relevant_data and 
             current_state['set_temperature'] == current_state['train_temperature']):
-            relevant_data['set_temperature'] = relevant_data['train_temperature']
-            
+            relevant_data.setdefault('set_temperature', relevant_data['train_temperature'])
         self.update_state(relevant_data)
 
     def send_to_train_model(self) -> dict:

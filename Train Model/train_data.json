@@ -12,27 +12,29 @@
         "crew_count": 2
     },
     "inputs": {
-        "commanded speed": 69.0,
-        "commanded authority": 0.0,
-        "speed limit": 0.0,
-        "side_door": "",
-        "current station": "",
-        "next station": "",
-        "station name": "",
+        "commanded speed": 40,
+        "commanded authority": 0,
+        "speed limit": 30,
+        "side_door": "Right",
+        "current station": "Central Station",
+        "next station": "Park Street",
         "engine_failure": false,
-        "signal_failure": true,
-        "brake_failure": false
+        "signal_failure": false,
+        "brake_failure": false,
+        "emergency_brake": false
     },
     "outputs": {
-        "velocity_mph": 0.0,
+        "velocity_mph": 30.0,
         "acceleration_ftps2": 0.0,
-        "position_yds": 0.0,
-        "authority_yds": 0.0,
-        "station_name": "",
-        "next_station": "",
+        "position_yds": 650.2367879111443,
+        "authority_yds": 0,
+        "station_name": "Central Station",
+        "next_station": "Park Street",
         "left_door_open": false,
         "right_door_open": false,
-        "speed_limit": 0.0,
+        "speed_limit": 30,
+        "temperature_F": 70.75000000000017,
+        "passengers_disembarking": 0,
         "door_side": "Right"
     }
 }
