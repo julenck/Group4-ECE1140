@@ -19,6 +19,10 @@ try:
 except Exception:
     _LCD = None
 
+# Shared LCD instance used by both Wayside UIs so we can write line 0 for A
+# and line 1 for B (minimal coordination).
+_SHARED_LCD = None
+
 
 class HW_Wayside_Controller_UI(ttk.Frame):
     def __init__(self, root: tk.Misc, controller: HW_Wayside_Controller, title: str = "Wayside"):
@@ -117,15 +121,32 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             self._update_lcd_for(block)
 
     def _update_lcd_for(self, block_id: str | None):
-
+        # Use a process-wide shared LCD helper so both waysides can write
+        # separate rows: Wayside A -> row 0, Wayside B -> row 1.
+        global _SHARED_LCD
         try:
-            from lcd_i2c_wayside_hw import I2CLcd  
-            _lcd = I2CLcd(bus=1, addr=0x27)
+            if _SHARED_LCD is None:
+                from lcd_i2c_wayside_hw import I2CLcd
+                _SHARED_LCD = I2CLcd(bus=1, addr=0x27)
         except Exception:
-            _lcd = None
+            _SHARED_LCD = None
 
-        if not block_id or not _lcd or not _lcd.present():
+        if not block_id or not _SHARED_LCD or not _SHARED_LCD.present():
             return
-        
+
         st = self.controller.get_block_state(block_id)
-        _lcd.show_speed_auth(block_id, st.get("speed_mph", 0.0), st.get("authority_yards", 0))
+        spd = int(float(st.get("speed_mph", 0)))
+        auth = int(st.get("authority_yards", 0))
+
+        # choose row by wayside id (A -> 0, B -> 1). Default to row 0.
+        row = 0
+        try:
+            wid = getattr(self.controller, "wayside_id", "").upper()
+            if wid == "B":
+                row = 1
+        except Exception:
+            row = 0
+
+        # format a concise one-line summary: "A: Speed: XXX Auth: YYY"
+        line = f"{wid}: Speed:{spd:3d} Auth:{auth:4d}"
+        _SHARED_LCD.write_line(row, line)
