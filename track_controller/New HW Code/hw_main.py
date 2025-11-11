@@ -145,25 +145,21 @@ def main() -> None:
     print(f"[INFO] blocks_B: {len(blocks_B)} -> {blocks_B[:8]}")    
 
     root = tk.Tk()
-    
-   # A
-    ws_a_ctrl = HW_Wayside_Controller("A", blocks_A)
-    win_a = tk.Toplevel(root); win_a.title("Wayside A"); win_a.geometry("900x520")
-    ws_a_ui   = HW_Wayside_Controller_UI(win_a, ws_a_ctrl, title="Wayside A")
-    ws_a_ui.pack(fill="both", expand=True)
-    ws_a_ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
 
-    # B
+    # Only create Wayside B UI/controller here. Wayside A is handled by
+    # the SW module externally per the user's request.
+    root.title("Wayside B")
+    root.geometry("900x520")
+
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
-    win_b = tk.Toplevel(root); win_b.title("Wayside B"); win_b.geometry("900x520")
-    ws_b_ui   = HW_Wayside_Controller_UI(win_b, ws_b_ctrl, title="Wayside B")
+    ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Wayside B")
     ws_b_ui.pack(fill="both", expand=True)
     ws_b_ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
 
-    # Start polling loop
-    controllers = [ws_a_ctrl, ws_b_ctrl]
-    uis = [ws_a_ui, ws_b_ui]
-    blocks = [blocks_A, blocks_B]
+    # Start polling loop with only Wayside B
+    controllers = [ws_b_ctrl]
+    uis = [ws_b_ui]
+    blocks = [blocks_B]
 
     _poll_json_loop(root, controllers, uis, blocks)
     root.mainloop()
