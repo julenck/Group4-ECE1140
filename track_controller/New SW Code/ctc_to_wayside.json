@@ -4,14 +4,14 @@
             "Active": 0,
             "Suggested Speed": 15,
             "Suggested Authority": 100,
-            "Train Position": 0,
+            "Train Position": 7,
             "Train State": 0
         },
         "Train 2": {
             "Active": 0,
             "Suggested Speed": 20,
             "Suggested Authority": 200,
-            "Train Position": 0,
+            "Train Position": 10,
             "Train State": 0
         },
         "Train 3": {
