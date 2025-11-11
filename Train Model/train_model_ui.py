@@ -71,7 +71,7 @@ def ensure_train_data(path):
     return data
 
 # === Track input loader (maps underscores -> spaces) ===
-def read_track_input():
+def read_track_input(train_index: int = 0):
     t = safe_read_json(TRACK_INPUT_FILE)
     block = t.get("block", {})
     beacon = t.get("beacon", {})
@@ -85,10 +85,11 @@ def read_track_input():
         "current station": beacon.get("current_station"),
         "next station": beacon.get("next_stop"),
     }
-    # Optional boarding queue support
+    # Passengers boarding by train index (beacon/common; only list varies)
     q = train.get("passengers_boarding_")
     if isinstance(q, list) and q:
-        mapped["passengers_boarding"] = int(q[0])
+        idx = train_index if 0 <= train_index < len(q) else 0
+        mapped["passengers_boarding"] = int(q[idx])
     return {k: v for k, v in mapped.items() if v is not None}
 
 # === Merge inputs (precedence: Track > train_data.inputs > controller fallbacks) ===
@@ -181,8 +182,8 @@ class TrainModelUI(tk.Tk):
         self.title(title)
         self.geometry("820x560")
         self.minsize(760, 520)
-        # Per-train data file
-        self.train_data_path = f"train_data_{train_id}.json" if train_id else "train_data.json"
+        # Always use shared train_data.json; per-train data lives under train_{id}
+        self.train_data_path = TRAIN_SPECS_FILE
 
         # Styles
         style = ttk.Style(self)
@@ -196,7 +197,11 @@ class TrainModelUI(tk.Tk):
 
         # State
         td = ensure_train_data(self.train_data_path)
-        self.specs = td["specs"]
+        # Prefer per-train specs if already present; otherwise fall back to root specs
+        if self.train_id is not None and f"train_{self.train_id}" in td:
+            self.specs = td[f"train_{self.train_id}"].get("specs", td.get("specs", DEFAULT_SPECS))
+        else:
+            self.specs = td.get("specs", DEFAULT_SPECS)
         self.model = TrainModel(self.specs)
         self._last_disembark_station = None
         self._last_disembarking = 0
@@ -382,7 +387,26 @@ class TrainModelUI(tk.Tk):
 
     # Train data IO
     def write_train_data(self, specs, inputs, outputs):
-        safe_write_json(self.train_data_path, {"specs": specs, "inputs": inputs, "outputs": outputs})
+        # Merge into shared train_data.json under train_{id} (or root if legacy)
+        data = safe_read_json(self.train_data_path)
+        if not isinstance(data, dict):
+            data = {}
+        # Ensure original root keys stay present
+        data.setdefault("specs", data.get("specs", self.specs))
+        data.setdefault("inputs", data.get("inputs", {}))
+        data.setdefault("outputs", data.get("outputs", {}))
+        if self.train_id is None:
+            data["specs"] = specs
+            data["inputs"] = inputs
+            data["outputs"] = outputs
+        else:
+            key = f"train_{self.train_id}"
+            data[key] = {
+                "specs": specs,
+                "inputs": inputs,
+                "outputs": outputs
+            }
+        safe_write_json(self.train_data_path, data)
 
     # Main loop (refactor into runner + scheduler)
     def update_loop(self):
@@ -392,7 +416,9 @@ class TrainModelUI(tk.Tk):
         # Load all sources
         td = ensure_train_data(self.train_data_path)
         ctrl = self.get_train_state()
-        track_in = read_track_input()
+        # Select passengers_boarding by train index (train_id-1); default to 0 for legacy
+        idx = max(((self.train_id or 1) - 1), 0)
+        track_in = read_track_input(idx)
 
         # Signal pickup failure -> freeze beacon-derived fields
         if ctrl.get("signal_failure", False):
@@ -405,8 +431,16 @@ class TrainModelUI(tk.Tk):
                     self._last_beacon_inputs[k] = track_in[k]
 
         # Merge
-        onboard_fallback = td["inputs"].get("passengers_onboard", 0)
-        merged_inputs = merge_inputs(td["inputs"], track_in, ctrl, onboard_fallback)
+        # Prefer per-train inputs/specs if present, fall back to root
+        if self.train_id is not None and f"train_{self.train_id}" in td:
+            td_section = td[f"train_{self.train_id}"]
+            td_inputs = td_section.get("inputs", td.get("inputs", {}))
+            specs_for_write = td_section.get("specs", td.get("specs", DEFAULT_SPECS))
+        else:
+            td_inputs = td.get("inputs", {})
+            specs_for_write = td.get("specs", DEFAULT_SPECS)
+        onboard_fallback = td_inputs.get("passengers_onboard", 0)
+        merged_inputs = merge_inputs(td_inputs, track_in, ctrl, onboard_fallback)
 
         # Simulate (pass failure flags)
         outputs = self.model.update(
@@ -434,15 +468,8 @@ class TrainModelUI(tk.Tk):
         )
         write_ctc_output(disembarking)
 
-        # Write train_data.json (echo inputs + outputs)
-        td_outputs = {
-            **outputs,
-            "door_side": merged_inputs.get("side_door", "Right"),
-            "passengers_onboard": passengers_onboard,
-            "passengers_boarding": passengers_boarding,
-            "passengers_disembarking": disembarking
-        }
-        self.write_train_data(self.specs, merged_inputs, td_outputs)
+        # Write train_data.json (echo inputs + outputs) into per-train section
+        self.write_train_data(specs_for_write, merged_inputs, td_inputs)
 
         # Update controller state (for UI/telemetry)
         self.update_train_state({
