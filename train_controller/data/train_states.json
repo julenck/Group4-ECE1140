@@ -55,5 +55,6 @@
         "ki": 50.0,
         "engineering_panel_locked": false,
         "power_command": 0.0
-    }
+    },
+    "passengers_disembarking": 0
 }
