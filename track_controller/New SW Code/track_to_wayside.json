@@ -649,5 +649,6 @@
         0,
         0
     ],
-    "G-Trains": {}
+    "G-Commanded Authorty": [],
+    "G-Commanded Speed": []
 }
