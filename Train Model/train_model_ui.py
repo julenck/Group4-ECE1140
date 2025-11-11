@@ -3,6 +3,25 @@ import json
 import random
 import tkinter as tk
 from tkinter import ttk
+import time
+from threading import Thread, Event
+
+# === Safe IO helpers (module-level) ===
+def safe_read_json(path):
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def safe_write_json(path, data):
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=4)
+        os.replace(tmp, path)  # atomic on Windows
+    except Exception as e:
+        print(f"write error {path}: {e}")
 
 # === File paths ===
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
@@ -207,6 +226,13 @@ class TrainModelUI(tk.Tk):
         # Status bar
         self._build_status_bar(self)
 
+        # Watcher state
+        self.last_track_mtime = 0.0
+        self.last_controller_mtime = 0.0
+        self.stop_event = Event()
+        # Start watcher threads (non-blocking)
+        Thread(target=self._watch_files, daemon=True).start()
+
         # Start loop
         self.after_id = None
         self.update_loop()
@@ -216,13 +242,27 @@ class TrainModelUI(tk.Tk):
             try:
                 with open(TRAIN_DATA_FILE, "r") as f:
                     data = json.load(f)
-                specs = data.get("specs", {})
-                for k, v in DEFAULT_SPECS.items():
-                    specs.setdefault(k, v)
-                return specs
             except Exception:
-                pass
-        return DEFAULT_SPECS
+                data = {}
+        else:
+            data = {}
+
+        specs = data.get("specs", {})
+        # Fill any missing spec keys
+        for k, v in DEFAULT_SPECS.items():
+            specs.setdefault(k, v)
+
+        # Ensure standard structure and write back
+        data["specs"] = specs
+        data.setdefault("inputs", {})
+        data.setdefault("outputs", {})
+        try:
+            with open(TRAIN_DATA_FILE, "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print("train_data init/write error:", e)
+
+        return specs
 
     # Helper to build KPI card
     def _build_kpi(self, parent, col, name, initial_text):
@@ -340,34 +380,21 @@ class TrainModelUI(tk.Tk):
         self.status_var = tk.StringVar(value="Auto-sync: ON • Ready")
         ttk.Label(bar, textvariable=self.status_var).pack(side="left", padx=8, pady=4)
 
-    # === Data IO helpers ===
+    # Replace get_train_state with safe read
     def get_train_state(self):
-        try:
-            with open(self.train_states_path, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        return safe_read_json(self.train_states_path)
 
     def update_train_state(self, updates):
         state = self.get_train_state()
         state.update(updates)
-        try:
-            with open(self.train_states_path, "w") as f:
-                json.dump(state, f, indent=4)
-        except Exception as e:
-            print("train_states write error:", e)
+        safe_write_json(self.train_states_path, state)
 
     def load_track_inputs(self):
-        """Read all inputs from Track Model and include passengers_onboard."""
-        try:
-            with open(self.track_input_path, "r") as f:
-                data = json.load(f)
-        except Exception:
-            return {}
+        data = safe_read_json(self.track_input_path)
         block = data.get("block", {})
         beacon = data.get("beacon", {})
-        if getattr(self, "signal_failure", False):
-            if getattr(self, "_last_beacon", {}):
+        if self.signal_failure:
+            if self._last_beacon:
                 beacon = self._last_beacon
         else:
             self._last_beacon = beacon
@@ -379,95 +406,72 @@ class TrainModelUI(tk.Tk):
             "current station": beacon.get("current station", ""),
             "next station": beacon.get("next station", ""),
             "passengers_boarding": int(beacon.get("passengers_boarding", 0) or 0),
-            "passengers_onboard": int(beacon.get("passengers_onboard", getattr(self, "passengers_onboard", 0)) or 0)
+            "passengers_onboard": int(beacon.get("passengers_onboard", self.passengers_onboard) or self.passengers_onboard)
         }
 
-    def adjust_passengers_at_station(self, station, velocity_mph, requested_boarding):
-        """
-        Apply passenger changes only once per arrival at a new station when stopped.
-        Returns tuple: (disembarking_count, actual_boarding, onboard_after)
-        """
-        # Not stopped or no station -> no change
-        if not station or velocity_mph >= 0.5:
-            return (0, 0, self.passengers_onboard)
-
-        # If already processed this station and still stopped, just reuse previous values
-        if self.last_station_processed == station:
-            return (self.last_passengers_disembarking, self.boarding_last_cycle, self.passengers_onboard)
-
-        # New station arrival while stopped -> compute fresh changes
-        non_crew = max(0, self.passengers_onboard - self.specs.get("crew_count", 0))
-        max_disembark = min(30, int(non_crew * 0.4))
-        disembark = random.randint(0, max_disembark) if max_disembark > 0 else 0
-        onboard_after_disembark = max(self.specs.get("crew_count", 0),
-                                      self.passengers_onboard - disembark)
-
-        # Boarding realism: allow +-20% variation around requested_boarding, but not negative
-        if requested_boarding < 0:
-            requested_boarding = 0
-        variation = int(requested_boarding * 0.2)
-        actual_board = requested_boarding + random.randint(-variation, variation)
-        actual_board = max(0, actual_board)
-
-        # Cap by remaining capacity
-        available = self.specs.get("capacity", 0) - onboard_after_disembark
-        actual_board = min(actual_board, available)
-
-        final_onboard = onboard_after_disembark + actual_board
-
-        # Persist cycle values
-        self.last_station_processed = station
-        self.last_passengers_disembarking = disembark
-        self.boarding_last_cycle = actual_board
-        self.passengers_onboard = final_onboard
-
-        return (disembark, actual_board, final_onboard)
+    def write_track_output(self, passengers_disembarking: int):
+        out = {
+            "passengers_disembarking": int(passengers_disembarking),
+            "timestamp": time.time()
+        }
+        safe_write_json(self.track_output_path, out)
 
     def overwrite_train_data(self, inputs, outputs):
-        """Mirror Track Model passenger inputs into outputs; do not mutate onboard here."""
         state = self.get_train_state()
         inputs_full = {
             **inputs,
             "engine_failure": state.get("engine_failure", False),
             "signal_failure": state.get("signal_failure", False),
             "brake_failure": state.get("brake_failure", False),
-            "emergency_brake": state.get("emergency_brake", False)
+            "emergency_brake": state.get("emergency_brake", False),
+            "left_door": state.get("left_door", False),
+            "right_door": state.get("right_door", False),
+            "service_brake": state.get("service_brake", False),
+            "set_temperature": state.get("set_temperature", 70.0)
         }
         outputs_extended = {
             **outputs,
-            # Echo passengers from Track Model into outputs
-            "passengers_onboard": int(inputs_full.get("passengers_onboard", getattr(self, "passengers_onboard", 0)) or 0),
-            "passengers_boarding": int(inputs_full.get("passengers_boarding", 0) or 0),
-            "passengers_disembarking": int(getattr(self, "last_passengers_disembarking", 0) or 0)
+            "passengers_onboard": inputs_full.get("passengers_onboard", self.passengers_onboard),
+            "passengers_boarding": inputs_full.get("passengers_boarding", 0),
+            "passengers_disembarking": self.last_passengers_disembarking
         }
         data = {"specs": self.specs, "inputs": inputs_full, "outputs": outputs_extended}
-        try:
-            with open(self.train_data_path, "w") as f:
-                json.dump(data, f, indent=4)
-        except Exception as e:
-            print("train_data write error:", e)
+        safe_write_json(self.train_data_path, data)
 
-    def write_track_output(self, passengers_disembarking: int):
-        """Send passengers_disembarking back to the Track Model."""
-        try:
-            out = {"passengers_disembarking": int(passengers_disembarking)}
-            # Ensure folder exists
-            out_dir = os.path.dirname(os.path.abspath(self.track_output_path))
-            if out_dir and not os.path.exists(out_dir):
-                os.makedirs(out_dir, exist_ok=True)
-            with open(self.track_output_path, "w") as f:
-                json.dump(out, f, indent=4)
-        except Exception as e:
-            print("track output write error:", e)
+    def _watch_files(self):
+        """Background thread: detect external edits and trigger immediate UI refresh."""
+        while not self.stop_event.is_set():
+            try:
+                # Track model input changes
+                mt_track = os.path.getmtime(self.track_input_path) if os.path.exists(self.track_input_path) else 0
+                if mt_track != self.last_track_mtime:
+                    self.last_track_mtime = mt_track
+                    # Force an immediate physics update (in GUI thread)
+                    self.after(1, self._single_cycle)
 
-    # === Main loop ===
+                # Controller state changes
+                mt_ctrl = os.path.getmtime(self.train_states_path) if os.path.exists(self.train_states_path) else 0
+                if mt_ctrl != self.last_controller_mtime:
+                    self.last_controller_mtime = mt_ctrl
+                    self.after(1, self._single_cycle)
+            except Exception:
+                pass
+            time.sleep(0.2)  # polling interval
+
+    def _single_cycle(self):
+        """One physics + IO cycle without scheduling next (used by watcher)."""
+        self._run_cycle(schedule=False)
+
     def update_loop(self):
+        self._run_cycle(schedule=True)
+
+    def _run_cycle(self, schedule=True):
         track_inputs = self.load_track_inputs()
         state = self.get_train_state()
 
-        # Set from Track Model (source of truth)
-        self.passengers_onboard = int(track_inputs.get("passengers_onboard", getattr(self, "passengers_onboard", 0)) or 0)
-        self.boarding_last_cycle = int(track_inputs.get("passengers_boarding", 0) or 0)
+        # Source passengers from Track
+        self.passengers_onboard = int(track_inputs.get("passengers_onboard", self.passengers_onboard))
+        self.boarding_last_cycle = int(track_inputs.get("passengers_boarding", 0))
 
         commanded_speed = track_inputs.get("commanded speed", state.get("commanded_speed", 0.0))
         commanded_authority = track_inputs.get("commanded authority", state.get("commanded_authority", 0.0))
@@ -493,7 +497,6 @@ class TrainModelUI(tk.Tk):
             brake_failure=state.get("brake_failure", False)
         )
 
-        # Compute disembarking only; do NOT change onboard here
         passengers_out = self.compute_passengers_disembarking(current_station, outputs_sim["velocity_mph"])
         self.last_passengers_disembarking = passengers_out
 
@@ -511,37 +514,67 @@ class TrainModelUI(tk.Tk):
             "door_side": side_door
         }
 
-        # Write JSONs
         self.overwrite_train_data(track_inputs, train_model_outputs)
         self.write_track_output(passengers_out)
 
-        # UI mirrors Track Model values
+        self.update_train_state({
+            "train_velocity": outputs_sim["velocity_mph"],
+            "train_temperature": self.model.temperature_F,
+            "next_stop": next_station,
+            "station_side": side_door
+        })
+
+        # UI
         self.lbl_onboard.config(text=f"{self.passengers_onboard}")
         self.lbl_boarding.config(text=f"{self.boarding_last_cycle}")
         self.lbl_disembark.config(text=f"{passengers_out}")
+        self.info_labels["Velocity (mph)"].config(text=f"{outputs_sim['velocity_mph']:.2f} mph")
+        self.info_labels["Acceleration (ft/s²)"].config(text=f"{outputs_sim['acceleration_ftps2']:.2f} ft/s²")
+        self.info_labels["Position (yds)"].config(text=f"{outputs_sim['position_yds']:.1f} yds")
+        self.info_labels["Authority Remaining (yds)"].config(text=f"{outputs_sim['authority_yds']:.1f} yds")
+        self.info_labels["Train Temperature (°F)"].config(text=f"{self.model.temperature_F:.1f} °F")
+        self.info_labels["Set Temperature (°F)"].config(text=f"{state.get('set_temperature', 70.0):.1f} °F")
+        self.info_labels["Current Station"].config(text=f"{current_station or '—'}")
+        self.info_labels["Next Station"].config(text=f"{next_station or '—'}")
+        self.info_labels["Speed Limit (mph)"].config(text=f"{speed_limit} mph")
+        self.env_labels["Left Door"].config(text="Open" if outputs_sim["left_door_open"] else "Closed")
+        self.env_labels["Right Door"].config(text="Open" if outputs_sim["right_door_open"] else "Closed")
+        self._kpi_velocity.config(text=f"{outputs_sim['velocity_mph']:.1f} mph")
+        self._kpi_accel.config(text=f"{outputs_sim['acceleration_ftps2']:.2f} ft/s²")
+        self._kpi_temp.config(text=f"{self.model.temperature_F:.1f} °F")
 
-        # ...keep your other UI label updates...
-        self.after(int(self.model.dt * 1000), self.update_loop)
+        failures = int(state.get("engine_failure", 0)) + int(state.get("signal_failure", 0)) + int(state.get("brake_failure", 0))
+        self.status_var.set(f"Live • Track OK • Failures: {failures}")
+
+        if schedule:
+            self.after(int(self.model.dt * 1000), self.update_loop)
+
+    def on_close(self):
+        self.stop_event.set()
+        self.destroy()
 
     def compute_passengers_disembarking(self, current_station: str, velocity_mph: float) -> int:
-        """Compute disembarking once when stopped at a new station.
-        Does not change onboard; Track Model remains source of truth."""
+        """
+        Generate disembarking count only when first stopped at a station.
+        Does not modify passengers_onboard (Track Model is source of truth).
+        """
         station = (current_station or "").strip()
-        if not station:
-            self.last_passengers_disembarking = 0
+        if not station or velocity_mph >= 0.5:
             return 0
-        if velocity_mph >= 0.5:
-            return 0
-        if self.last_disembark_station != station:
+        # New station stop
+        if getattr(self, "_last_disembark_station", None) != station:
             non_crew = max(0, int(self.passengers_onboard) - int(self.specs.get("crew_count", 0)))
             cap = min(30, int(non_crew * 0.4))
             count = random.randint(0, cap) if cap > 0 else 0
-            self.last_disembark_station = station
+            self._last_disembark_station = station
             self.last_passengers_disembarking = count
             return count
-        return int(self.last_passengers_disembarking)
+        # Same station, still stopped -> reuse
+        return int(getattr(self, "last_passengers_disembarking", 0))
 
+# Add the main launcher so the panel actually opens
 if __name__ == "__main__":
     app = TrainModelUI()
+    app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
 
