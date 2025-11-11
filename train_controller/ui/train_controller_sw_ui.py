@@ -96,7 +96,7 @@ class vital_train_controls:
 		train_velocity: Current train velocity in mph (float).
 		driver_velocity: Driver's set velocity in mph (float).
 		emergency_brake: Emergency brake state (bool).
-		service_brake: Service brake percentage 0-100 (int).
+		service_brake: Service brake state (bool).
 		power_command: Power command in Watts (float).
 		commanded_authority: Commanded authority in yards (float).
 		speed_limit: Current speed limit in mph (float).
@@ -104,7 +104,7 @@ class vital_train_controls:
 	
 	def __init__(self, kp: float = 0.0, ki: float = 0.0, train_velocity: float = 0.0,
 	             driver_velocity: float = 0.0, emergency_brake: bool = False,
-	             service_brake: int = 0, power_command: float = 0.0,
+	             service_brake: bool = False, power_command: float = 0.0,
 	             commanded_authority: float = 0.0, speed_limit: float = 0.0):
 		"""Initialize vital train controls with given values.
 		
@@ -114,7 +114,7 @@ class vital_train_controls:
 			train_velocity: Current velocity.
 			driver_velocity: Driver's set velocity.
 			emergency_brake: Emergency brake state.
-			service_brake: Service brake percentage.
+			service_brake: Service brake state.
 			power_command: Power command.
 			commanded_authority: Commanded authority.
 			speed_limit: Speed limit.
@@ -136,7 +136,7 @@ class vital_train_controls:
 		- Real-time accumulated error tracking
 		- Anti-windup protection
 		- Power limiting
-		- Zero power when error is zero
+		- Zero power when error is zero or negative (train going too fast)
 		
 		Args:
 			accumulated_error: Current accumulated error for integral term.
@@ -148,8 +148,8 @@ class vital_train_controls:
 		# Calculate speed error
 		speed_error = self.driver_velocity - self.train_velocity
 		
-		# If speed error is effectively zero (within small threshold), return zero power
-		if abs(speed_error) < 0.01:  # 0.01 MPH threshold
+		# If speed error is zero or negative (train at or above target), return zero power
+		if speed_error <= 0.01:  # 0.01 MPH threshold for stability
 			return (0.0, 0.0, time.time())  # Reset accumulated error
 		
 		# Get current time
@@ -202,8 +202,8 @@ class vital_validator_first_check:
 		Returns:
 			True if validation passes, False otherwise.
 		"""
-		# Check 1: Velocity must not exceed speed limit
-		if v.train_velocity > v.speed_limit:
+		# Check 1: Velocity must not exceed speed limit (if speed limit is set)
+		if v.speed_limit > 0 and v.train_velocity > v.speed_limit:
 			print(f"VALIDATION FAILED: Velocity {v.train_velocity} exceeds speed limit {v.speed_limit}")
 			return False
 		
@@ -213,7 +213,7 @@ class vital_validator_first_check:
 			return False
 		
 		# Check 3: Cannot have both service and emergency brake active
-		if v.service_brake > 0 and v.emergency_brake:
+		if v.service_brake and v.emergency_brake:
 			print("VALIDATION FAILED: Both service brake and emergency brake are active")
 			return False
 		
@@ -240,14 +240,15 @@ class vital_validator_second_check:
 		Returns:
 			True if validation passes, False otherwise.
 		"""
-		# Check 1: Allow 2% margin over speed limit for realistic deceleration
-		safe_speed = v.speed_limit * 1.02
-		if v.train_velocity > safe_speed:
-			print(f"VALIDATION FAILED: Velocity {v.train_velocity} exceeds safe speed {safe_speed}")
-			return False
+		# Check 1: Allow 2% margin over speed limit for realistic deceleration (if speed limit is set)
+		if v.speed_limit > 0:
+			safe_speed = v.speed_limit * 1.02
+			if v.train_velocity > safe_speed:
+				print(f"VALIDATION FAILED: Velocity {v.train_velocity} exceeds safe speed {safe_speed}")
+				return False
 		
 		# Check 2: Cannot have both brakes active
-		if v.service_brake > 0 and v.emergency_brake:
+		if v.service_brake and v.emergency_brake:
 			print("VALIDATION FAILED: Both brakes active (second check)")
 			return False
 		
@@ -387,7 +388,7 @@ class train_controller:
 			activate: True to activate service brake, False to release.
 		"""
 		changes = {
-			'service_brake': 100 if activate else 0,
+			'service_brake': activate,
 			'power_command': 0 if activate else self.api.get_state()['power_command']
 		}
 		self.vital_control_check_and_update(changes)
@@ -435,13 +436,32 @@ class train_controller:
 		self.api.update_state({'exterior_lights': not state['exterior_lights']})
 	
 	def set_announcement(self, active: bool) -> None:
-		"""Set announcement state.
+		"""Set announcement state and generate announcement text.
 		
 		Args:
 			active: True to activate announcement, False to deactivate.
 		"""
 		state = self.api.get_state()
-		self.api.update_state({'announce_pressed': active})
+		
+		if active:
+			# Generate announcement based on next station
+			next_stop = self.beacon_info.next_stop
+			station_side = self.beacon_info.station_side
+			
+			if next_stop:
+				announcement = f"Next stop: {next_stop}. Doors will open on the {station_side.lower()} side."
+			else:
+				announcement = "Welcome aboard!"
+			
+			self.api.update_state({
+				'announce_pressed': True,
+				'announcement': announcement
+			})
+		else:
+			self.api.update_state({
+				'announce_pressed': False,
+				'announcement': ''
+			})
 	
 	def toggle_manual_mode(self) -> None:
 		"""Toggle between manual and automatic mode."""
@@ -460,7 +480,14 @@ class train_controller:
 		if increase:
 			commanded_speed = self.cmd_speed_auth.commanded_speed
 			speed_limit = state['speed_limit']
-			max_allowed_speed = min(commanded_speed, speed_limit)
+			
+			# In manual mode or if commanded_speed is 0, only limit by speed_limit
+			# In automatic mode, limit by both commanded_speed and speed_limit
+			if state.get('manual_mode', False) or commanded_speed == 0:
+				max_allowed_speed = speed_limit if speed_limit > 0 else 100  # Default max 100 mph
+			else:
+				max_allowed_speed = min(commanded_speed, speed_limit) if speed_limit > 0 else commanded_speed
+			
 			new_speed = min(max_allowed_speed, current_set_speed + 1)
 		else:
 			new_speed = max(0, current_set_speed - 1)
@@ -584,20 +611,26 @@ class train_controller_ui(tk.Tk):
         self.speed_display = ttk.Label(speed_display_frame, text="0 MPH", font=('Arial', 36, 'bold'))
         self.speed_display.pack(pady=10)
         
-        # Speed control buttons in their own frame
-        control_frame = ttk.Frame(speed_frame)
-        control_frame.pack(fill="x", padx=20, pady=10)
-        
-        # Speed Up/Down buttons side by side
-        ttk.Button(control_frame, text="▲ Speed Up", command=self.speed_up).pack(side="left", expand=True, padx=5)
-        ttk.Button(control_frame, text="▼ Speed Down", command=self.speed_down).pack(side="right", expand=True, padx=5)
-        
-        # Set speed display
+        # Driver set speed input
         set_speed_frame = ttk.Frame(speed_frame)
-        set_speed_frame.pack(fill="x", pady=10)
-        ttk.Label(set_speed_frame, text="Driver Set Speed:").pack()
-        self.set_speed_label = ttk.Label(set_speed_frame, text="0 MPH", font=('Arial', 12, 'bold'))
-        self.set_speed_label.pack()
+        set_speed_frame.pack(fill="x", padx=20, pady=10)
+        
+        ttk.Label(set_speed_frame, text="Set Driver Speed (mph):").pack()
+        
+        # Entry and button in a horizontal frame
+        input_frame = ttk.Frame(set_speed_frame)
+        input_frame.pack(pady=5)
+        
+        self.speed_entry = ttk.Entry(input_frame, width=10, font=('Arial', 14))
+        self.speed_entry.pack(side="left", padx=5)
+        self.speed_entry.insert(0, "0")
+        self.speed_entry.bind('<Return>', lambda e: self.set_driver_speed())  # Press Enter to set speed
+        
+        ttk.Button(input_frame, text="Set Speed", command=self.set_driver_speed).pack(side="left", padx=5)
+        
+        # Display current set speed
+        self.set_speed_label = ttk.Label(set_speed_frame, text="Current Set: 0 MPH", font=('Arial', 12, 'bold'))
+        self.set_speed_label.pack(pady=5)
     
     def create_info_table(self):
         """Create the information table displaying train status and inputs from Train Model."""
@@ -720,12 +753,12 @@ class train_controller_ui(tk.Tk):
         ttk.Label(eng_frame, text="Kp:").grid(row=0, column=0, padx=5, pady=5)
         self.kp_entry = ttk.Entry(eng_frame)
         self.kp_entry.grid(row=0, column=1, padx=5, pady=5)
-        self.kp_entry.insert(0, "10.0")  # Default Kp value for good control
+        self.kp_entry.insert(0, "1500.0")  # Balanced Kp for quick response without saturation
         
         ttk.Label(eng_frame, text="Ki:").grid(row=0, column=2, padx=5, pady=5)
         self.ki_entry = ttk.Entry(eng_frame)
         self.ki_entry.grid(row=0, column=3, padx=5, pady=5)
-        self.ki_entry.insert(0, "0.5")  # Default Ki value for good control
+        self.ki_entry.insert(0, "50.0")  # Ki for eliminating steady-state error
         
         self.lock_btn = ttk.Button(eng_frame, text="Lock Values", command=self.lock_engineering_values)
         self.lock_btn.grid(row=0, column=4, padx=20, pady=5)
@@ -771,7 +804,7 @@ class train_controller_ui(tk.Tk):
             self.info_table.set("commanded_speed", column="Value", value=f"{current_state['commanded_speed']:.1f}")
             self.info_table.set("speed_limit", column="Value", value=f"{current_state['speed_limit']:.1f}")
             self.info_table.set("authority", column="Value", value=f"{current_state['commanded_authority']:.1f}")
-            self.info_table.set("temperature", column="Value", value=f"{current_state['train_temperature']:.1f}")
+            self.info_table.set("temperature", column="Value", value=f"{int(round(current_state['train_temperature']))}")
             self.info_table.set("next_stop", column="Value", value=current_state['next_stop'])
             self.info_table.set("power", column="Value", value=f"{current_state['power_command']:.1f}")
             self.info_table.set("station_side", column="Value", value=current_state['station_side'])
@@ -802,11 +835,23 @@ class train_controller_ui(tk.Tk):
             
             # Update speed displays
             self.speed_display.config(text=f"{current_state['train_velocity']:.1f} MPH")
-            self.set_speed_label.config(text=f"{current_state['driver_velocity']:.1f} MPH")
+            self.set_speed_label.config(text=f"Current Set: {current_state['driver_velocity']:.1f} MPH")
+            
+            # Update speed entry if user is not currently typing (check if entry has focus)
+            if self.speed_entry.focus_get() != self.speed_entry:
+                current_entry = self.speed_entry.get()
+                try:
+                    if float(current_entry) != current_state['driver_velocity']:
+                        self.speed_entry.delete(0, tk.END)
+                        self.speed_entry.insert(0, f"{current_state['driver_velocity']:.1f}")
+                except ValueError:
+                    # If entry is invalid, update it with current value
+                    self.speed_entry.delete(0, tk.END)
+                    self.speed_entry.insert(0, f"{current_state['driver_velocity']:.1f}")
             
             # Update temperature displays
-            self.set_temp_label.config(text=f"{current_state['set_temperature']}°F")
-            self.current_temp_label.config(text=f"{current_state['train_temperature']}°F")
+            self.set_temp_label.config(text=f"{int(round(current_state['set_temperature']))}°F")
+            self.current_temp_label.config(text=f"{int(round(current_state['train_temperature']))}°F")
             
             # Update control button states
             self.update_button_states(current_state)
@@ -853,13 +898,45 @@ class train_controller_ui(tk.Tk):
             self.emergency_brake_btn.configure(bg=self.normal_color, state='normal')
     
     # Control methods
-    def speed_up(self):
-        """Increase driver's set speed and update power command."""
-        self.controller.update_speed(increase=True)
-    
-    def speed_down(self):
-        """Decrease driver's set speed and update power command."""
-        self.controller.update_speed(increase=False)
+    def set_driver_speed(self):
+        """Set driver speed from text input."""
+        try:
+            desired_speed = float(self.speed_entry.get())
+            
+            # Get current state for limits
+            state = self.api.get_state()
+            commanded_speed = self.controller.cmd_speed_auth.commanded_speed
+            speed_limit = state['speed_limit']
+            
+            # Apply same limiting logic as update_speed
+            if state.get('manual_mode', False) or commanded_speed == 0:
+                max_allowed_speed = speed_limit if speed_limit > 0 else 100
+            else:
+                max_allowed_speed = min(commanded_speed, speed_limit) if speed_limit > 0 else commanded_speed
+            
+            # Clamp the speed to valid range
+            new_speed = max(0, min(max_allowed_speed, desired_speed))
+            
+            # Calculate new power command with new speed
+            state_copy = state.copy()
+            state_copy['driver_velocity'] = new_speed
+            power = self.controller.calculate_power_command(state_copy)
+            
+            # Apply changes through vital validation
+            self.controller.vital_control_check_and_update({
+                'driver_velocity': new_speed,
+                'power_command': power
+            })
+            
+            # Update the entry to show the actual set value (in case it was clamped)
+            self.speed_entry.delete(0, tk.END)
+            self.speed_entry.insert(0, f"{new_speed:.1f}")
+            
+        except ValueError:
+            # If invalid input, reset to current driver velocity
+            state = self.api.get_state()
+            self.speed_entry.delete(0, tk.END)
+            self.speed_entry.insert(0, f"{state['driver_velocity']:.1f}")
     
     def toggle_left_door(self):
         """Toggle left door state."""
