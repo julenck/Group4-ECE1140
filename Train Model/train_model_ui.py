@@ -447,4 +447,3 @@ class TrainModelUI(tk.Tk):
 if __name__ == "__main__":
     app = TrainModelUI()
     app.mainloop()
-
