@@ -577,4 +577,3 @@ if __name__ == "__main__":
     app = TrainModelUI()
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
-
