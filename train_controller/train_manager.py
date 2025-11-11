@@ -158,11 +158,18 @@ class TrainManager:
         # Create TrainModel instance
         model = TrainModel(train_specs)
         
-        # Create train_controller_api instance for this train
-        api = train_controller_api()
-        
-        # Create train_controller instance
-        controller = train_controller(api)
+        # NOTE: For hardware controller, the API and controller are created inside train_controller_ui
+        # For software controller, we create them here
+        if not use_hardware:
+            # Create train_controller_api instance for this train
+            api = train_controller_api(train_id=train_id)
+            
+            # Create train_controller instance
+            controller = train_controller(api)
+        else:
+            # Hardware controller creates its own API and controller internally
+            api = None
+            controller = None
         
         # Create UI instances if requested
         model_ui = None
@@ -180,6 +187,11 @@ class TrainManager:
             controller_ui = train_controller_ui(train_id=train_id)
             # Position controller UI to the right of model UI
             controller_ui.geometry(f"600x800+{x_offset + 1460}+{y_offset}")
+            
+            # For hardware controller, get the controller and API references from the UI
+            if use_hardware:
+                controller = controller_ui.controller
+                api = controller_ui.api
             
             print(f"Train {train_id} UIs created (Model and Controller windows)")
         
