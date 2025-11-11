@@ -23,13 +23,13 @@ class train_controller_api:
         # Default state template
         self.train_states = {
             # Inputs FROM Train Model
-            'commanded_speed': 0.0,      # mph
-            'commanded_authority': 0.0,   # yards
-            'speed_limit': 0.0,         # mph
-            'train_velocity': 0.0,             # mph
-            'next_stop': '',             # station name
-            'station_side': '',     # left/right
-            'train_temperature': 0.0,   # °F
+            'commanded_speed': 60.0,      # mph - realistic commanded speed
+            'commanded_authority': 1000.0,   # yards - enough authority to move
+            'speed_limit': 60.0,         # mph - realistic speed limit
+            'train_velocity': 0.0,             # mph - train starts at rest
+            'next_stop': 'Station A',             # station name
+            'station_side': 'Right',     # left/right
+            'train_temperature': 70.0,   # °F - comfortable room temperature
             'engine_failure': False,
             'signal_failure': False,
             'brake_failure': False,
@@ -37,19 +37,19 @@ class train_controller_api:
             
             # Internal Train Controller State
             'driver_velocity': 0.0,           # mph - driver's set speed, will be initialized to match commanded_speed
-            'service_brake': 0,         # percentage (0-100)
+            'service_brake': False,         # boolean
             'right_door': False,        # door state
             'left_door': False,         # door state
-            'interior_lights': False,   # interior lights state
-            'exterior_lights': False,   # exterior lights state
-            'set_temperature': 0.0,     # Driver's desired temperature (°F) - will be initialized to match train_temperature
+            'interior_lights': True,   # interior lights state - on by default
+            'exterior_lights': True,   # exterior lights state - on by default
+            'set_temperature': 70.0,     # Driver's desired temperature (°F) - will be initialized to match train_temperature
             'temperature_up': False,    # temperature control
             'temperature_down': False,   # temperature control
             'announcement': '',         # current announcement
             'announce_pressed': False,  # tracks if announcement button is pressed
             'emergency_brake': False,   # emergency brake state
-            'kp': 0.0,                 # proportional gain
-            'ki': 0.0,                 # integral gain
+            'kp': 1500.0,                 # proportional gain - balanced for quick response without saturation
+            'ki': 50.0,                 # integral gain - eliminates steady-state error
             'engineering_panel_locked': False,  # engineering panel state
             
             # Outputs TO Train Model
