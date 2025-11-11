@@ -197,7 +197,6 @@ class train_controller_api:
         if not data:
             return
 
-        # === Map relevant keys from train_data.json ===
         inputs = data.get("inputs", {})
         outputs = data.get("outputs", {})
 
@@ -207,13 +206,13 @@ class train_controller_api:
             'speed_limit': inputs.get('speed limit', 0.0),
             'train_velocity': outputs.get('velocity_mph', 0.0),
             'train_temperature': outputs.get('temperature_F', 70.0),
+            'next_stop': inputs.get('next station', ''),
+            'station_side': inputs.get('side_door', ''),
             'engine_failure': inputs.get('engine_failure', False),
             'signal_failure': inputs.get('signal_failure', False),
             'brake_failure': inputs.get('brake_failure', False),
-            'manual_mode': inputs.get('manual_mode', False),
         }
 
-        # Update controller state
         self.receive_from_train_model(mapped_data)
 
     # --- New: automatic sync loop ---
