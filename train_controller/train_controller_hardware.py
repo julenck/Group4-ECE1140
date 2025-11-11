@@ -34,19 +34,28 @@ class train_controller_hardware:
         self.lcd_rw = 0x02 # Read/Write bit
         self.lcd_enable = 0x04 # Enable bit
 
+        self.debounce_time = 50 # milliseconds
+        self.last_button_press = {}
+
     def init_hardware(self):
         if GPIOZERO_AVAILABLE:
             try:
-                for name, pin in self.GPIO_PINS.items():
-                    if "button" in name:
-                        button = Button(pin, pull_up=True)
-                        # small hold to reduce bounce impact
-                        button.when_pressed = lambda n=name: self.gpio_button_pressed(n)
-                        self.gpio_buttons[name] = button
-                    elif "status_led" in name:
-                        led = LED(pin)
-                        led.off()
-                        self.gpio_leds[name] = led
+                for name, pin in self.gpio_pins.items():
+                    # convention: *_button and *_status_led keys in gpio_pins
+                    if name.endswith("_status_led"):
+                        try:
+                            self.gpio_leds[name] = LED(pin)
+                        except Exception as e:
+                            print(f"Failed to create LED for {name} pin {pin}: {e}")
+                    elif name.endswith("_button"):
+                        try:
+                            btn = Button(pin)
+                            # store and wire press to debounced handler
+                            self.gpio_buttons[name] = btn
+                            btn.when_pressed = lambda n=name: self._debounced_button(n)
+                        except Exception as e:
+                            print(f"Failed to create Button for {name} pin {pin}: {e}")
+                print("GPIO init complete. Buttons:", list(self.gpio_buttons.keys()), "LEDs:", list(self.gpio_leds.keys()))
             except Exception as e:
                 print(f"gpiozero Initialization Error: {e}")
         else:
@@ -55,75 +64,68 @@ class train_controller_hardware:
         if I2C_AVAILABLE:
             try:
                 self.i2c_bus = SMBus(self.i2c_bus_num)
-                for name, addr in self.i2c_address.items():
-                    try:
-                        self.i2c_bus.read_byte(addr)
-                        self.i2c_devices[name] = True
-                    except Exception:
-                        self.i2c_devices[name] = False
-                if self.i2c_devices.get("lcd", False) and self.i2c_bus:
-                    self.lcd_address = self.i2c_address["lcd"]
-                    self.lcd_backlight = 0x08
-                    self.lcd_rs = 0x01
-                    self.lcd_rw = 0x02
-                    self.lcd_enable = 0x04
-                    self.lcd_write_cmd(0x33) # Initialize
-                    self.lcd_write_cmd(0x32) # Set to 4-bit mode
-                    self.lcd_write_cmd(0x28) # 2 line, 5x7 matrix
-                    self.lcd_write_cmd(0x0C) # Turn cursor off
-                    self.lcd_write_cmd(0x06) # Shift cursor right
-                    self.lcd_write_cmd(0x01) # Clear display
-                if self.i2c_devices.get("seven_segment", False) and self.i2c_bus:
-                    self.seven_segment_address = self.i2c_address["seven_segment"]
-                    self.i2c_bus.write_byte(self.seven_segment_address, 0x21)
-                    self.i2c_bus.write_byte(self.seven_segment_address, 0x81)
-                    self.i2c_bus.write_byte(self.seven_segment_address, 0xE0 | 8)
-                    self.seven_segment_present = True
-                    try:
-                        self.seven_segment_raw_write([0] * 16)
-                        self.seven_segment_display_set_speed(0)
-                    except Exception as e:
-                        print(f"I2C 7-Segment Setup Error: {e}")
-                else:
-                    self.seven_segment_present = False
+                # simple device presence assumption based on provided addresses
+                if self.i2c_address.get("adc"):
+                    self.i2c_devices["adc"] = True
+                if self.i2c_address.get("lcd"):
+                    self.i2c_devices["lcd"] = True
+                if self.i2c_address.get("seven_segment"):
+                    self.i2c_devices["seven_segment"] = True
+
+                self.lcd_address = self.i2c_address.get("lcd")
+                self.seven_segment_address = self.i2c_address.get("seven_segment")
+                print("I2C init complete. Devices:", self.i2c_devices)
             except Exception as e:
                 print(f"I2C Initialization Error: {e}")
         else:
             print("I2C library not available. Running in simulation mode.")
 
+    def _debounced_button(self, name: str):
+        """Software debounce guard: ignore button events within _debounce_ms of the last one."""
+        try:
+            now = time.time()
+            last = self.last_button_press.get(name, 0.0)
+            if (now - last) * 1000.0 < self.debounce_time:
+                # ignored as bounce
+                # optional: print for debug
+                # print(f"Debounced press ignored: {name}")
+                return
+            self.last_button_press[name] = now
+            # forward to main handler
+            self.gpio_button_pressed(name)
+        except Exception as e:
+            print(f"_debounced_button error for {name}: {e}")
+
     def gpio_button_pressed(self, name):
-        """Handle a gpiozero button press by logical name (e.g. 'lights_button')."""
+        """Handle a gpiozero button press by logical name (e.g. 'exterior_lights_button')."""
         try:
             print(f"gpiozero Button pressed: {name}")
-            # Handle toggle buttons directly via API
-            if name in ("lights_button", "left_door_button", "right_door_button", "announcement_button"):
-                if name == "lights_button":
-                    current = self.api.get_state().get('lights', False)
-                    self.api.update_state({'lights': not current})
-                elif name == "left_door_button":
-                    current = self.api.get_state().get('left_door', False)
-                    self.api.update_state({'left_door': not current})
-                elif name == "right_door_button":
-                    current = self.api.get_state().get('right_door', False)
-                    self.api.update_state({'right_door': not current})
-                elif name == "announcement_button":
-                    current = self.api.get_state().get('announcement', '')
-                    self.api.update_state({'announcement': '' if current else 'Next station approaching'})
-                    # Toggle announce_pressed boolean (like SW UI) and update announcement text
-                    announce_flag = self.api.get_state().get('announce_pressed', False)
-                    self.api.update_state({
-                        'announce_pressed': not announce_flag,
-                        'announcement': '' if announce_flag else 'Next station approaching'
-                    })
-                return
-            # Handle vital buttons via controller
-            if self.controller:
-                if name == "service_brake_button":
-                    current = self.api.get_state().get('service_brake', False)
-                    self.controller.vital_control_check_and_update({'service_brake': not current})
-                elif name == "emergency_brake_button":
-                    self.controller.vital_control_check_and_update({'emergency_brake': True})
-                    self.after(5000, lambda: self.controller.vital_control_check_and_update({'emergency_brake': False}))
+            # map button key to API state key (strip _button suffix)
+            api_key = name.replace("_button", "")
+            # special handling for vital buttons
+            if api_key in ("service_brake", "emergency_brake"):
+                # toggle current value via controller's vital path if controller present
+                curr = bool(self.api.get_state().get(api_key, False))
+                new_val = not curr
+                if self.controller and hasattr(self.controller, "vital_control_check_and_update"):
+                    # send via controller's validator path
+                    ok = self.controller.vital_control_check_and_update({api_key: new_val})
+                    if not ok:
+                        print(f"Vital update rejected for {api_key}")
+                else:
+                    self.api.update_state({api_key: new_val})
+            elif api_key == "mode":
+                # let controller toggle mode (keeps consistent)
+                if self.controller and hasattr(self.controller, "toggle_mode"):
+                    self.controller.toggle_mode()
+                else:
+                    curr = bool(self.api.get_state().get("manual_mode", False))
+                    self.api.update_state({"manual_mode": not curr})
+            else:
+                # non-vital toggles: update API directly
+                curr = bool(self.api.get_state().get(api_key, False))
+                self.api.update_state({api_key: not curr})
+
         except Exception as e:
             print(f"GPIO Callback Error: {e}")
 
@@ -246,8 +248,21 @@ class train_controller_hardware:
             print(f"LCD Expander Write Error: {e}")
 
     def lcd_pulse_enable(self, data):
-        self.lcd_expander_write(data | self.lcd_enable)
-        self.after(1, lambda: self.lcd_expander_write(data & ~self.lcd_enable))
+        try:
+            self.lcd_expander_write(data | self.lcd_enable)
+            if hasattr(self, 'ui') and getattr(self, 'ui', None) is not None:
+                try:
+                    # schedule on the UI thread if possible (non-blocking)
+                    self.ui.after(1, lambda: self.lcd_expander_write(data & ~self.lcd_enable))
+                    return
+                except Exception:
+                    # fall through to blocking sleep fallback
+                    pass
+            # fallback: tiny sleep then clear (safe for simple I2C timing)
+            time.sleep(0.001)
+            self.lcd_expander_write(data & ~self.lcd_enable)
+        except Exception as e:
+            print(f"LCD Pulse Enable Error: {e}")
 
     def lcd_write_char(self, char):
         try:
