@@ -26,6 +26,7 @@ class sw_wayside_controller:
         self.light_states: list = [0]*24
         self.gate_states: list = [0,0]
         self.switch_states: list = [0]*6
+        self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
         self.active_plc: str = plc
         self.ctc_comm_file: str = "ctc_to_wayside.json"
@@ -38,11 +39,13 @@ class sw_wayside_controller:
         self.blocks_with_gates: list = [19,108]
         self.running: bool = True
         self.file_lock = threading.Lock()
+        self.cmd_trains: dict = {}
 
 
 
         # Start PLC processing loop
         self.run_plc()
+        self.run_trains()
 
     # Methods
     def stop(self):
@@ -56,6 +59,7 @@ class sw_wayside_controller:
         #call plc function
         if self.active_plc != "":
             self.load_inputs_track()
+            
             if self.active_plc == "Green_Line_PLC_XandLup.py":
                 occ1 = self.occupied_blocks[0:73]
                 occ2 = self.occupied_blocks[144:151]
@@ -98,9 +102,57 @@ class sw_wayside_controller:
                 self.light_states[19]=signals[7]
                 self.gate_states[1] = crossing[0]
             self.load_track_outputs()
+            
             if self.running:
                 threading.Timer(0.2, self.run_plc).start()
+
+
+    def run_trains(self):      
+        if not self.running:
+            return
+        
+        self.load_inputs_ctc()
+
+        for train in self.active_trains:
+            if train not in self.cmd_trains and self.active_trains[train]["Active"]==1:
+                self.cmd_trains[train] = {
+                    "cmd auth": self.active_trains[train]["Suggested Authority"],
+                    "cmd speed": self.active_trains[train]["Suggested Speed"],
+                    "pos": 0
+                }
+
+        ttr = []
+        for cmd_train in self.cmd_trains:
+            auth = self.cmd_trains[cmd_train]["cmd auth"]
+            speed = self.cmd_trains[cmd_train]["cmd speed"]
+            pos = self.cmd_trains[cmd_train]["pos"]
+            auth = auth - speed
+            if auth <= 0:
+                auth = 0
+                with self.file_lock:
+                    with open(self.ctc_comm_file, 'r') as f:
+                        data = json.load(f)
+                    data["Trains"][cmd_train]["Active"] = 0
+                    with open(self.ctc_comm_file, 'w') as f:
+                        json.dump(data, f, indent=4)
+
+                ttr.append(cmd_train)
             
+            self.cmd_trains[cmd_train]["cmd auth"] = auth
+            self.cmd_trains[cmd_train]["cmd speed"] = speed
+            self.cmd_trains[cmd_train]["pos"] = pos + 1
+
+        for tr in ttr:
+            self.cmd_trains.pop(tr)
+
+        if self.running:
+            threading.Timer(1.0, self.run_trains).start()
+
+
+
+
+
+
     def override_light(self, block_id: int, state: int):
         if block_id in self.blocks_with_lights:
             self.light_states[self.blocks_with_lights.index(block_id)] = state
@@ -127,7 +179,14 @@ class sw_wayside_controller:
             return self.active_plc
 
     def load_inputs_ctc(self):
-        pass
+        with self.file_lock:
+            with open(self.ctc_comm_file, 'r') as f:
+                data = json.load(f)
+                self.active_trains = data.get("Trains", {})
+                self.closed_blocks = data.get("Block Closure", [])
+                self.ctc_sugg_switches = data.get("Switch Suggestion", [])
+            
+            
 
     def load_inputs_track(self):
         #read track to wayside json file
@@ -150,6 +209,11 @@ class sw_wayside_controller:
             data["G-lights"] = self.light_states
             data["G-gates"] = self.gate_states
 
+            if self.cmd_trains != {}:
+                data["G-Trains"] = self.cmd_trains
+            else:
+                data["G-Trains"] = {}
+
             
 
             # Now rewrite cleanly (overwrite file)
@@ -160,6 +224,9 @@ class sw_wayside_controller:
 
     def load_ctc_outputs(self):
         pass
+
+
+        
 
     def get_block_data(self, block_id: int):
         
@@ -202,6 +269,8 @@ class sw_wayside_controller:
         }
         return desired
 
+    def get_active_trains(self):
+        return self.cmd_trains
     def get_start_plc(self):
         return self.active_plc
 
