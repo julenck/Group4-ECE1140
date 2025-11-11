@@ -6,8 +6,8 @@
     "beacon": {
         "speed_limit": 30,
         "station_side": "Right",
-        "current_station": "Penn Station",
-        "next_stop": "Park Street"
+        "current_station": "Central Station",
+        "next_stop": "Fifth Street"
     },
     "train": {
         "passengers_boarding_": [
