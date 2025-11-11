@@ -138,15 +138,25 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         spd = int(float(st.get("speed_mph", 0)))
         auth = int(st.get("authority_yards", 0))
 
-        # choose row by wayside id (A -> 0, B -> 1). Default to row 0.
-        row = 0
+        # Only Wayside B should write to the physical LCD. Everything about
+        # Wayside A is ignored per the user's request.
         try:
             wid = getattr(self.controller, "wayside_id", "").upper()
-            if wid == "B":
-                row = 1
         except Exception:
-            row = 0
+            wid = ""
 
-        # format a concise one-line summary: "A: Speed: XXX Auth: YYY"
-        line = f"{wid}: Speed:{spd:3d} Auth:{auth:4d}"
-        _SHARED_LCD.write_line(row, line)
+        if wid != "B":
+            return
+
+        # Format two lines for Wayside B:
+        # Line 0: "Blk:XXX Spd:YYY"  (fits within 16 chars)
+        # Line 1: "Auth: ZZZZ yd"     (fits within 16 chars)
+        blk = str(block_id)[:6] if block_id else "-"
+        line0 = f"Blk:{blk:<6} Spd:{spd:3d}"[:16]
+        line1 = f"Auth:{auth:5d} yd"[:16]
+        try:
+            _SHARED_LCD.write_line(0, line0)
+            _SHARED_LCD.write_line(1, line1)
+        except Exception:
+            # fail soft — don't let LCD issues crash the UI
+            pass
