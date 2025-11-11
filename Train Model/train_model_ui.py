@@ -53,16 +53,22 @@ DEFAULT_SPECS = {
     "emergency_brake_ftps2": -8.86, "capacity": 222, "crew_count": 2
 }
 
-def ensure_train_data():
-    data = safe_read_json(TRAIN_SPECS_FILE)
+def ensure_train_data(path):
+    data = {}
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
     specs = data.get("specs", {})
-    specs = {**DEFAULT_SPECS, **specs}
-    inputs = data.get("inputs", {})
-    outputs = data.get("outputs", {})
-    fixed = {"specs": specs, "inputs": inputs, "outputs": outputs}
-    if data != fixed:
-        safe_write_json(TRAIN_SPECS_FILE, fixed)
-    return fixed
+    for k, v in DEFAULT_SPECS.items():
+        specs.setdefault(k, v)
+    data["specs"] = specs
+    data.setdefault("inputs", {})
+    data.setdefault("outputs", {})
+    safe_write_json(path, data)
+    return data
 
 # === Track input loader (maps underscores -> spaces) ===
 def read_track_input():
@@ -168,11 +174,15 @@ class TrainModel:
 
 # === UI ===
 class TrainModelUI(tk.Tk):
-    def __init__(self):
+    def __init__(self, train_id=None):
         super().__init__()
-        self.title("Train Model")
+        self.train_id = train_id  # None = single-train legacy mode
+        title = f"Train {train_id} Model" if train_id else "Train Model"
+        self.title(title)
         self.geometry("820x560")
         self.minsize(760, 520)
+        # Per-train data file
+        self.train_data_path = f"train_data_{train_id}.json" if train_id else "train_data.json"
 
         # Styles
         style = ttk.Style(self)
@@ -185,7 +195,7 @@ class TrainModelUI(tk.Tk):
         style.configure("Title.TLabel", font=("Segoe UI", 14, "bold"))
 
         # State
-        td = ensure_train_data()
+        td = ensure_train_data(self.train_data_path)
         self.specs = td["specs"]
         self.model = TrainModel(self.specs)
         self._last_disembark_station = None
@@ -290,11 +300,20 @@ class TrainModelUI(tk.Tk):
         self._toggle_flag("emergency_brake")
 
     def _toggle_flag(self, flag_name: str):
-        state = self.get_train_state()
-        current = bool(state.get(flag_name, False))
-        state[flag_name] = not current
-        safe_write_json(TRAIN_STATES_FILE, state)
-        # Immediate UI refresh of that flag only
+        all_states = safe_read_json(TRAIN_STATES_FILE)
+        if self.train_id is None:
+            current = bool(all_states.get(flag_name, False))
+            all_states[flag_name] = not current
+            new_val = all_states[flag_name]
+        else:
+            key = f"train_{self.train_id}"
+            sect = all_states.get(key, {})
+            current = bool(sect.get(flag_name, False))
+            sect[flag_name] = not current
+            all_states[key] = sect
+            new_val = sect[flag_name]
+        safe_write_json(TRAIN_STATES_FILE, all_states)
+        # Immediate UI refresh
         key_map = {
             "engine_failure": "Engine Failure",
             "brake_failure": "Brake Failure",
@@ -303,9 +322,10 @@ class TrainModelUI(tk.Tk):
         }
         ui_key = key_map.get(flag_name)
         if ui_key:
+            on = new_val
             self.fail_labels[ui_key].config(
-                text="On" if state[flag_name] else "Off",
-                style="Status.On.TLabel" if state[flag_name] else "Status.Off.TLabel"
+                text="On" if on else "Off",
+                style="Status.On.TLabel" if on else "Status.Off.TLabel"
             )
 
     def toggle_engine_failure(self):
@@ -340,17 +360,29 @@ class TrainModelUI(tk.Tk):
 
     # Controller state IO
     def get_train_state(self):
-        return safe_read_json(TRAIN_STATES_FILE)
+        try:
+            all_states = safe_read_json(TRAIN_STATES_FILE)
+        except Exception:
+            all_states = {}
+        if self.train_id is None:
+            return all_states  # legacy: whole file
+        return all_states.get(f"train_{self.train_id}", {})
 
     def update_train_state(self, updates: dict):
-        state = self.get_train_state()
-        state.update(updates)
-        safe_write_json(TRAIN_STATES_FILE, state)
+        all_states = safe_read_json(TRAIN_STATES_FILE)
+        if self.train_id is None:
+            # legacy single-train mode
+            all_states.update(updates)
+        else:
+            key = f"train_{self.train_id}"
+            cur = all_states.get(key, {})
+            cur.update(updates)
+            all_states[key] = cur
+        safe_write_json(TRAIN_STATES_FILE, all_states)
 
     # Train data IO
-    def write_train_data(self, specs: dict, inputs: dict, outputs: dict):
-        data = {"specs": specs, "inputs": inputs, "outputs": outputs}
-        safe_write_json(TRAIN_SPECS_FILE, data)
+    def write_train_data(self, specs, inputs, outputs):
+        safe_write_json(self.train_data_path, {"specs": specs, "inputs": inputs, "outputs": outputs})
 
     # Main loop (refactor into runner + scheduler)
     def update_loop(self):
@@ -358,7 +390,7 @@ class TrainModelUI(tk.Tk):
 
     def _run_cycle(self, schedule: bool):
         # Load all sources
-        td = ensure_train_data()
+        td = ensure_train_data(self.train_data_path)
         ctrl = self.get_train_state()
         track_in = read_track_input()
 
