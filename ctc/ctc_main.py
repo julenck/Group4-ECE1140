@@ -172,7 +172,11 @@ try:
             json.dump(data, f_data, indent=4)
 
         # iterate to go to next station
-        i = i+1
+        #i = i+1
+
+        if test == station: 
+            print("train at destination")
+            break 
 
 except KeyboardInterrupt:
     print("stopping observer")
