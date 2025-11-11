@@ -1,4 +1,4 @@
-import tkinter as tk, json, os, threading
+import tkinter as tk, json, os, threading, subprocess, sys
 from datetime import datetime
 from tkinter import filedialog, ttk 
 from watchdog.observers import Observer 
@@ -246,6 +246,11 @@ def manual_dispatch():
         json.dump(data1,f1,indent=4)
 
     update_active_trains_table()
+
+    # run ctc_main.py
+    python_exe = sys.executable 
+    script_path = os.path.join(os.path.dirname(__file__), "ctc_main.py")
+    subprocess.Popen([python_exe, script_path])
 
 # Maintenance Frame UI 
 maint_frame.grid_columnconfigure((0,1,2,3),weight=1)

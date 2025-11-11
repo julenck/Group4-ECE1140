@@ -31,6 +31,30 @@ for i in range(dest_id+1):
     total_dist = total_dist + route_lookup_via_id[i]["meters_to_next"]
 print(f"dist to destination = {total_dist}")
 
+# get suggested speed 
+now = datetime.now()
+print(now)
+total_dwell_time_s = dwell_time_s * dest_id
+print(total_dwell_time_s)
+
+# convert arrival time to datetime 
+arrival_time = datetime.strptime(arrival_time_str, "%H:%M")
+arrival_time = arrival_time.replace(year=now.year, month=now.month, day = now.day)
+print(arrival_time)
+
+total_time = arrival_time - now
+total_time_s = total_time.total_seconds()
+print(total_time_s)
+
+time_to_drive_s = total_time_s - total_dwell_time_s
+print(time_to_drive_s)
+
+speed_meters_s = int(total_dist / time_to_drive_s)
+speed_mph = int(speed_meters_s * 2.237)
+
+print(f"speed in m/s = {speed_meters_s}")
+print(f"speed in mph = {speed_mph}")
+
 # monitor ctc_track_controller.json for train position updates
 train_pos = None
 train_state = None
@@ -75,25 +99,6 @@ try:
         authority_yards = int(authority_meters * 1.094)
         print(f"authority in meters = {authority_meters}")
 
-        # get suggested speed 
-        now = datetime.now()
-        total_dwell_time_s = dwell_time_s * dest_id
-
-        # convert arrival time to datetime 
-        arrival_time = datetime.strptime(arrival_time_str, "%H:%M")
-        arrival_time = arrival_time.replace(year=now.year, month=now.month, day = now.day)
-        
-        total_time = arrival_time - now
-        total_time_s = total_time.total_seconds()
-
-        time_to_drive_s = total_time_s - total_dwell_time_s
-
-        speed_meters_s = int(total_dist / time_to_drive_s)
-        speed_mph = int(speed_meters_s * 2.237)
-
-        print(f"speed in m/s = {speed_meters_s}")
-        print(f"speed in mph = {speed_mph}")
-
         # get location of next station 
         next_station_loc = route_lookup_via_id[i]["block"]
         print(f"next station loc = {next_station_loc}")
@@ -127,12 +132,27 @@ try:
             time.sleep(0.5)
             print("here")
 
+        # train is at station -- update ctc_track_controller.json with speed = 0, authority = 0 
+        authority_at_station = 0
+        speed_at_station = 0
+    
+        with open(data_file_track_cont, "r") as f_updates: 
+            updates = json.load(f_updates)
+
+        updates["Trains"][train]["Suggested Authority"] = authority_at_station 
+        updates["Trains"][train]["Suggested Speed"] = speed_at_station
+
+        with open(data_file_track_cont,"w") as f_updates: 
+            json.dump(updates, f_updates, indent=4)
+        
         # train is at station -- update ctc_data.json
         current_station = test
         with open(data_file_ctc_data, "r") as f_data:
             data = json.load(f_data)
 
         data["Dispatcher"]["Trains"][train]["Current Station"] = current_station
+        data["Dispatcher"]["Trains"][train]["Authority"] = authority_at_station
+        data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_at_station
 
         with open(data_file_ctc_data, "w") as f_data:
             json.dump(data, f_data, indent=4)
@@ -152,7 +172,11 @@ try:
             json.dump(data, f_data, indent=4)
 
         # iterate to go to next station
-        i = i+1
+        #i = i+1
+
+        if test == station: 
+            print("train at destination")
+            break 
 
 except KeyboardInterrupt:
     print("stopping observer")
