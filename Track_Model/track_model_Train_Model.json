@@ -1,13 +1,13 @@
 {
     "block": {
-        "commanded speed": 40,
-        "commanded authority": 0
+        "commanded_speed": 40,
+        "commanded_authority": 0
     },
     "beacon": {
-        "speed limit": 30,
-        "side_door": "Right",
-        "current station": "Penn Station",
-        "next station": "Park Street"
+        "speed_limit": 30,
+        "station_side": "Right",
+        "current_station": "Penn Station",
+        "next_stop": "Park Street"
     },
     "train": {
         "passengers_boarding_": [
