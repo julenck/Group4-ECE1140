@@ -45,3 +45,19 @@ def sync_train_data():
 
 if __name__ == "__main__":
     sync_train_data()
+
+{
+  "templates": [
+    { "id": 1, "speed": 0, "mass": 40000, "...": "..." },
+    { "id": 2, "speed": 0, "mass": 42000, "...": "..." },
+    { "id": 3, "...": "..." }
+  ],
+  "beacons": [
+    { "block": 12, "data": "..." },
+    { "block": 13, "data": "..." }
+  ],
+  "trainStates": {
+    "train1": { "templateId": 1, "speed": 0, "mass": 40000, "...": "..." },
+    "train2": { "templateId": 2, "speed": 0, "mass": 42000, "...": "..." }
+  }
+}

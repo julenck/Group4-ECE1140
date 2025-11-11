@@ -31,7 +31,7 @@
         "commanded_speed": 60.0,
         "commanded_authority": 1000.0,
         "speed_limit": 60.0,
-        "train_velocity": 31.309082560000004,
+        "train_velocity": 59.99999999999999,
         "next_stop": "Park Street",
         "station_side": "Right",
         "train_temperature": 70.0,
