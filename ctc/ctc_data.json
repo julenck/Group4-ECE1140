@@ -3,13 +3,13 @@
         "Trains": {
             "Train 1": {
                 "Line": "Green",
-                "Suggested Speed": 31,
-                "Authority": 782,
-                "Station Destination": "Castle Shannon",
-                "Arrival Time": "18:50",
-                "Position": 96,
+                "Suggested Speed": 0,
+                "Authority": 0,
+                "Station Destination": "Poplar",
+                "Arrival Time": "15:50",
+                "Position": 88,
                 "State": 0,
-                "Current Station": "Castle Shannon"
+                "Current Station": "---"
             },
             "Train 2": {
                 "Line": "",
