@@ -52,15 +52,15 @@ class train_controller:
         self.lcd_rs = 0x01
         self.lcd_rw = 0x02
         self.lcd_enable = 0x04
-        self.validators = [VitalValidatorFirst(), VitalValidatorSecond()] # instantiate validators
+        self.validators = [vital_control_first_check(), vital_control_second_check()] # instantiate validators
 
     def init_hardware(self):
         try:
             self.hardware = train_controller_hardware(
-                ui = self,
+                ui = self.ui,
                 api = self.api,
-                gpio_pins = self.GPIO_PINS,
-                i2c_bus_number = self.i2c_bus_number,
+                gpio_pins = self.gpio_pins,
+                i2c_bus_num = self.i2c_bus_number,
                 i2c_address = self.i2c_address,
                 controller = self # pass controller reference
             )
@@ -118,7 +118,7 @@ class train_controller:
         """
         # Get current values
         train_velocity = state['train_velocity']
-        driver_velocity = state['set_speed']
+        driver_velocity = state['driver_velocity']
         kp = state['kp']
         ki = state['ki']
         
@@ -240,31 +240,22 @@ class train_controller:
         except Exception as e:
             print(f"apply_automatic_controls error: {e}")
 
-    def detect_failure_mode(self, curr: vital_train_controls, prev: vital_train_controls, dt: float):
-        """Detect engine, brake, or signal failure based on temporal behavior."""
-        # Engine failure: commanded power but no acceleration
-        if curr.power_command > 0 and (curr.current_velocity - prev.current_velocity)/dt < 0.05:
-            return "ENGINE_FAILURE"
-
-        # Brake failure: braking command but not decelerating
-        if (curr.service_brake or curr.emergency_brake) and \
-           (prev.current_velocity - curr.current_velocity)/dt < 0.05:
-            return "BRAKE_FAILURE"
-
-        # Signal failure: stale or inconsistent authority/commanded speed
-        if curr.authority <= 0 and curr.power_command > 0:
-            return "SIGNAL_FAILURE"
-
-        return None
+    def detect_failure_mode(self) -> None:
+        """Detect failure modes in the system.
+		
+		TODO: Implement failure detection logic.
+		"""
+        pass
     
-    def handle_failure_mode(self, mode):
-        if mode == "ENGINE_FAILURE":
-            self.api.update_state({"power_command": 0})
-        elif mode == "BRAKE_FAILURE":
-            self.api.update_state({"emergency_brake": True})
-        elif mode == "SIGNAL_FAILURE":
-            self.api.update_state({"authority": 0, "power_command": 0})
-        self.log_event(f"Failure detected: {mode}")
+    def handle_failure_mode(self, mode: str) -> None:
+        """Handle detected failure mode.
+		
+		Args:
+			mode: Type of failure mode detected.
+			
+		TODO: Implement failure handling logic.
+		"""
+        pass
 
 class train_controller_ui(tk.Tk):
 
@@ -296,23 +287,23 @@ class train_controller_ui(tk.Tk):
         self.inactive_color = "#dddddd"
 
         # Hardware configuration (GPIO pin mapping)
-        self.GPIO_PINS = {
+        self.gpio_pins = {
             "exterior_lights_button": 4,
             "exterior_lights_status_led": 13,
-            # "interior_lights_button": NEED TO ASSIGN GPIO PIN
-            # "interior_lights_status_led": NEED TO ASSIGN GPIO PIN
-            "left_door_button": 17,
-            "left_door_status_led": 19,
-            "right_door_button": 27,
-            "right_door_status_led": 26,
-            "announcement_button": 22,
-            "announcement_status_led": 20,
-            #"service_brake_button": NEED TO ASSIGN NEW GPIO PIN
-            #"service_brake_status_led": NEED TO ASSIGN NEW GPIO PIN
+            "interior_lights_button": 17,
+            "interior_lights_status_led": 19,
+            "left_door_button": 27,
+            "left_door_status_led": 26,
+            "right_door_button": 22,
+            "right_door_status_led": 20,
+            "announcement_button": 5,
+            "announcement_status_led": 16,
+            "service_brake_button": 25,
+            "service_brake_status_led": 12,
             "emergency_brake_button": 6,
-            "emergency_brake_status_led": 21,
-            #"mode_button": NEED TO ASSIGN GPIO PIN
-            #"mode_status_led": NEED TO ASSIGN GPIO PIN
+            "emergency_brake_status_led": 21, 
+            "mode_button": 24, #need to wire
+            "mode_status_led": 23 #need to wire
         }
 
         # I2C configuration
@@ -363,7 +354,7 @@ class train_controller_ui(tk.Tk):
         status_frame.pack(side="left", fill="both", expand=True)
 
         self.status_buttons = {}
-        statuses = ["Interior Lights", "Exterior Lights", "Left Door", "Right Door", "Announcement", "Service Brake", "Emergency Brake", "Mode"]
+        statuses = ["Exterior Lights", "Interior Lights", "Left Door", "Right Door", "Announcement", "Service Brake", "Emergency Brake", "Mode"]
 
         button_frame = ttk.Frame(status_frame)
         button_frame.pack(fill="x", padx=4, pady=6)
@@ -372,7 +363,7 @@ class train_controller_ui(tk.Tk):
             r = idx // 3
             c = idx % 3
             b = tk.Button(button_frame, text=status, width=22, height=3, 
-                           bg="#f0f0f0", command=lambda: None)
+                           bg="#f0f0f0", command=lambda s=status: self.toggle_status(s))
             b.grid(row=r, column=c, padx=10, pady=8, sticky="nsew")
             button_frame.grid_columnconfigure(c, weight=1)
             self.status_buttons[status] = {"button": b, "active": False}
@@ -395,7 +386,7 @@ class train_controller_ui(tk.Tk):
         self.controller = train_controller(
             ui = self,
             api = self.api,
-            gpio_pins = self.GPIO_PINS,
+            gpio_pins = self.gpio_pins,
             i2c_bus_number = self.i2c_bus_number,
             i2c_address = self.i2c_address
         )
@@ -421,9 +412,10 @@ class train_controller_ui(tk.Tk):
             state = self.api.get_state()
 
             # Read ADC (potentiometer inputs) and update driver_velocity, temperature, service_brake
-            if hasattr(self, 'hardware') and self.hardware:
+            hw = getattr(self.controller, 'hardware', None)
+            if hw and hw.i2c_devices.get('adc', False):
                 try:
-                    self.hardware.read_current_adc()
+                    hw.read_current_adc()
                 except Exception as e:
                     print(f"ADC read/update error: {e}")
             # try:
@@ -497,8 +489,8 @@ class train_controller_ui(tk.Tk):
 
     def update_status_indicators(self, state):
         mapping = {
-            "Interior Lights": bool(state.get('interior_lights', False)),
             "Exterior Lights": bool(state.get('exterior_lights', False)),
+            "Interior Lights": bool(state.get('interior_lights', False)),
             "Left Door": bool(state.get('left_door', False)),
             "Right Door": bool(state.get('right_door', False)),
             "Announcement": bool(state.get('announcement', '')),
@@ -518,9 +510,10 @@ class train_controller_ui(tk.Tk):
                 btn.config(bg=self.inactive_color, fg="black")
             # If gpiozero LEDs are present, mirror status to physical LED
             try:
-                if GPIOZERO_AVAILABLE and hasattr(self, 'gpio_leds'):
+                if GPIOZERO_AVAILABLE:
+                    gpio_leds = getattr(self.controller, 'gpio_leds', {}) or {}
                     key = name.lower().replace(' ', '_') + "_status_led"
-                    led = self.gpio_leds.get(key)
+                    led = gpio_leds.get(key)
                     if led is not None:
                         if val:
                             led.on()
@@ -528,6 +521,23 @@ class train_controller_ui(tk.Tk):
                             led.off()
             except Exception as e:
                 print(f"LED update error for {name}: {e}")
+
+    def toggle_status(self, name):
+        """Toggle API flag for a UI status button and refresh indicators."""
+        try:
+            # Mode uses controller.toggle_mode()
+            if name == "Mode":
+                self.controller.toggle_mode()
+            else:
+                key = name.lower().replace(' ', '_')
+                curr = bool(self.api.get_state().get(key, False))
+                self.api.update_state({key: not curr})
+
+            # Immediately refresh UI + hardware LEDs
+            state = self.api.get_state()
+            self.update_status_indicators(state)
+        except Exception as e:
+            print(f"toggle_status error for {name}: {e}")
 
     def lock_engineering_values(self):
         """Lock Kp and Ki values."""
@@ -550,15 +560,20 @@ class train_controller_ui(tk.Tk):
             tk.messagebox.showerror("Error", "Kp and Ki must be valid numbers")
 
 class vital_train_controls:
-    kp: float = 0.0
-    ki: float = 0.0
-    train_velocity: float = 0.0
-    driver_velocity: float = 0.0
-    emergency_brake: bool = False
-    service_brake: bool = False
-    power_command: float = 0.0
-    commanded_authority: float = 0.0
-    speed_limit: float = 0.0
+    def __init__(self, kp=0.0, ki=0.0, train_velocity=0.0, velocity=None,
+                 driver_velocity=0.0, emergency_brake=False, service_brake=False,
+                 power_command=0.0, commanded_authority=0.0, speed_limit=0.0):
+        self.kp = kp
+        self.ki = ki
+        self.train_velocity = train_velocity
+        # validators expect .velocity, provide alias
+        self.velocity = train_velocity if velocity is None else velocity
+        self.driver_velocity = driver_velocity
+        self.emergency_brake = bool(emergency_brake)
+        self.service_brake = bool(service_brake)
+        self.power_command = power_command
+        self.commanded_authority = commanded_authority
+        self.speed_limit = speed_limit
 
 class vital_validator:
     def validate(self, candidate: vital_train_controls) -> (bool, str):
@@ -576,24 +591,26 @@ class vital_validator:
 class vital_control_first_check:
     def validate(self, v):
         if v.velocity > v.speed_limit:
-            return False
+            return False, "velocity > speed_limit"
         if v.power_command < 0 or v.power_command > 120000:
-            return False
+            return False, "power_command out of range"
         if v.service_brake and v.emergency_brake:
-            return False
+            return False, "both service and emergency brakes active"
         if v.commanded_authority <= 0 and v.power_command > 0:
-            return False
-        return True
+            return False, "authority depleted but power requested"
+        return True, ""
 
 class vital_control_second_check:
     def validate(self, v):
         # maybe slightly different implementation or thresholding
         safe_speed = v.speed_limit * 1.02  # allows 2% margin
-        return (
-            v.velocity <= safe_speed and
-            not (v.service_brake and v.emergency_brake) and
-            (v.commanded_authority > 0 or v.power_command == 0)
-        )
+        if v.velocity > safe_speed:
+            return False, "velocity exceeds safe margin"
+        if v.service_brake and v.emergency_brake:
+            return False, "both service and emergency brakes active"
+        if not (v.commanded_authority > 0 or v.power_command == 0):
+            return False, "no authority while power requested"
+        return True, ""
 
 class beacon:
     #define beacon attributes here, get them from the api with a function?!

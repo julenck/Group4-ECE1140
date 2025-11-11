@@ -2,58 +2,55 @@
     "Dispatcher": {
         "Trains": {
             "Train 1": {
-                "Line": "",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": ""
+                "Line": "Green",
+                "Suggested Speed": 0,
+                "Authority": 0,
+                "Station Destination": "Poplar",
+                "Arrival Time": "16:11",
+                "Position": 88,
+                "State": 0,
+                "Current Station": "---"
             },
             "Train 2": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 3": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 4": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 5": {
-                "Line": "Green",
-                "Suggested Speed": 0,
-                "Authority": 600,
-                "Station Destination": "Whited",
-                "Arrival Time": 0
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             }
         }
-    },
-    "TrackController": {
-        "Train Position": "",
-        "State of the Train": "",
-        "Train Failure Mode": "",
-        "Section and Block1": "",
-        "Light Color": "",
-        "Section and Block2": "",
-        "Gate": ""
-    },
-    "TrackModel": {
-        "Station": "",
-        "Passengers Leaving Station": "",
-        "Passengers Entering Station": ""
-    },
-    "MaintenenceModeOutputs": {
-        "Block Line": "",
-        "Closed Block": ""
     }
 }

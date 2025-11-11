@@ -1,4 +1,5 @@
-import tkinter as tk, json, os, threading
+import tkinter as tk, json, os, threading, subprocess, sys
+from datetime import datetime
 from tkinter import filedialog, ttk 
 from watchdog.observers import Observer 
 from watchdog.events import FileSystemEventHandler 
@@ -24,57 +25,54 @@ default_data = {
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 2": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 3": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-               "Arrival Time": "" 
+               "Arrival Time": "",
+               "Position": "",
+               "State": "",
+               "Current Station": ""
+
             },
             "Train 4": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             },
             "Train 5": {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
-                "Arrival Time": ""
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
             }
         }
-    },
-    "TrackController": {
-        "Train Position": "",
-        "State of the Train": "",
-        "Train Failure Mode": "",
-        "Section and Block1": "",
-        "Light Color": "",
-        "Section and Block2": "",
-        "Gate": ""
-    },
-    "TrackModel": {
-        "Station": "",
-        "Passengers Leaving Station": "",
-        "Passengers Entering Station": "",
-    },
-    "MaintenenceModeOutputs": {
-        "Block Line": "",
-        "Closed Block": ""
     }
-
 }
 
 # Check if json file structure is ok 
@@ -90,58 +88,15 @@ else:
         with open(data_file, "w") as f:
             json.dump(default_data, f, indent=4)
 
-# save_to_json
-def save_to_json(section, data):
-    with open(data_file, "r") as f:
-        json_data = json.load(f)
-    json_data[section].update(data)
-    with open(data_file, "w") as f:
-        json.dump(json_data, f, indent=4)
-    print(f"{section} data saved:", data)
-
 # save_data 
 def save_data(data):
     with open(data_file, "w") as f:
         json.dump(data, f, indent=4)
 
-# update_ui
-def update_ui():
-    data = load_data()
-    dispatcher = data.get("Dispatcher", {})
-    track_controller = data.get("TrackController", {})
-    track_model = data.get("TrackModel", {})
-
-    # Dispatcher
-    train_data = dispatcher.get("Train", "")
-    line_data = dispatcher.get("Line","")
-    sugg_speed_data = dispatcher.get("Suggested Speed","")
-    authority_data = dispatcher.get("Authority","")
-    station_dest_data = dispatcher.get("Station Destination","")
-    arrival_time_data = dispatcher.get("Arrival Time","")
-
-    # Track Controller 
-    train_position_data = track_controller.get("Train Position","")
-    state_of_train_data = track_controller.get("State of the Train","")
-    failure_mode_data = track_controller.get("Track Failure Mode","")
-    lights_gates_line = track_controller.get("Line","")
-    light_loc_data = track_controller.get("Section and Block1","")
-    light_color_data = track_controller.get("Light Color","")
-    gate_loc_data = track_controller.get("Section and Block2","")
-    gate_data = track_controller.get("Gate","")
-
-    # Track Model 
-    station_data = track_model.get("Station", "")
-    passengers_leaving_data = track_model.get("Passengers Leaving Station")
-    passengers_entering_data = track_model.get("Passengers Entering Station")
-
-    active_trains_table.insert("", "end", values=(train_data, line_data, train_position_data, state_of_train_data, sugg_speed_data, authority_data, "", station_dest_data, arrival_time_data, ""))
-    lights_table.insert("","end",values=(lights_gates_line,light_loc_data,light_color_data))
-    gates_table.insert("","end",values=(lights_gates_line,gate_loc_data,gate_data))
-
 class FileChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path.endswith("ctc_data.json"):
-            root.after(100, update_ui)
+            root.after(100, update_active_trains_table)
 
 # Root window
 root = tk.Tk()
@@ -154,8 +109,18 @@ root.grid_columnconfigure(0, weight=1)
 datetime_frame = tk.Frame(root)
 datetime_frame.grid(row=0, column=0, sticky="w", padx=10, pady=5)
 
-tk.Label(datetime_frame, text="9/30/2025", font=('Times New Roman', 15, 'bold')).pack(side='left')
-tk.Label(datetime_frame, text="    4:12 PM", font=('Times New Roman', 15, 'bold')).pack(side='left')
+date_label = tk.Label(datetime_frame, font=('Times New Roman', 15, 'bold'))
+date_label.pack(side='left')
+time_label = tk.Label(datetime_frame, font=('Times New Roman', 15, 'bold'))
+time_label.pack(side='left')
+
+def update_datetime(): 
+    now = datetime.now()
+    date_label.config(text=now.date())
+    time_label.config(text=f"      {now.strftime("%H:%M:%S")}")
+    root.after(1000,update_datetime)
+
+update_datetime()
 
 # Button Row
 button_frame = tk.Frame(root)
@@ -235,18 +200,29 @@ manual_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
 tk.Label(manual_frame, text="Select a Train to Dispatch", font=label_font, bg="lightgreen").grid(row=0, column=0, sticky='w', padx=10, pady=5)
 tk.Label(manual_frame, text="Select a Line", font=label_font, bg="lightgreen").grid(row=0, column=1, sticky='w', padx=10, pady=5)
-tk.Label(manual_frame, text="Enter Suggested Speed in mph", font=label_font, bg="lightgreen").grid(row=0, column=2, sticky='w', padx=10, pady=5)
-tk.Label(manual_frame, text="Enter Authority in yards", font=label_font, bg="lightgreen").grid(row=0, column=3, sticky='w', padx=10, pady=5)
+tk.Label(manual_frame, text="Select a Destination Station", font=label_font, bg="lightgreen").grid(row=0, column=2, sticky='w', padx=10, pady=5)
+tk.Label(manual_frame, text="Enter Arrival Time", font=label_font, bg="lightgreen").grid(row=0, column=3, sticky='w', padx=10, pady=5)
 
-manual_train_box = ttk.Combobox(manual_frame, values=["Train 1", "Train 2", "Train 3"], font=input_font)
-manual_line_box = ttk.Combobox(manual_frame, values=["Red", "Blue", "Green"], font=input_font)
-manual_sugg_speed_box = tk.Entry(manual_frame, font=input_font)
-manual_authority_box = tk.Entry(manual_frame, font=input_font)
+manual_train_box = ttk.Combobox(manual_frame, values=["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"], font=input_font)
+manual_line_box = ttk.Combobox(manual_frame, values=["Green"], font=input_font)
+manual_dest_box = ttk.Combobox(manual_frame, values=["Pioneer",
+                                                     "Edgebrook",
+                                                     "Whited",
+                                                     "South Bank",
+                                                     "Central",
+                                                     "Inglewood",
+                                                     "Overbrook",
+                                                     "Glenbury",
+                                                     "Dormont",
+                                                     "Mt. Lebanon",
+                                                     "Poplar",
+                                                     "Castle Shannon"],font=input_font)
+manual_time_box = tk.Entry(manual_frame, font=input_font)
 
 manual_train_box.grid(row=1, column=0, padx=5, sticky='ew')
 manual_line_box.grid(row=1, column=1, padx=5, sticky='ew')
-manual_sugg_speed_box.grid(row=1, column=2, padx=5, sticky='ew')
-manual_authority_box.grid(row=1, column=3, padx=5, sticky='ew')
+manual_dest_box.grid(row=1, column=2, padx=5, sticky='ew')
+manual_time_box.grid(row=1, column=3, padx=5, sticky='ew')
 
 manual_dispatch_button = tk.Button(manual_frame, text='DISPATCH', command=lambda: manual_dispatch(), **button_style)
 manual_dispatch_button.grid(row=2,column=0,columnspan=4,pady=10,padx=500,sticky='ew')
@@ -254,25 +230,27 @@ manual_dispatch_button.grid(row=2,column=0,columnspan=4,pady=10,padx=500,sticky=
 def manual_dispatch():
     train = manual_train_box.get()
     line = manual_line_box.get()
-    speed = manual_sugg_speed_box.get()
-    authority = manual_authority_box.get()
+    dest = manual_dest_box.get()
+    arrival = manual_time_box.get()
 
-    data = load_data()
-    dispatcher = data.get("Dispatcher", {})
-    trains = dispatcher.get("Trains", {})
+    ############# write to ctc_ui_inputs.json ##############
+    with open('ctc_ui_inputs.json',"r") as f1: 
+        data1 = json.load(f1)
+    
+    data1["Train"] = train
+    data1["Line"] = line
+    data1["Station"] = dest
+    data1["Arrival Time"] = arrival
 
-    # Add or update this train entry
-    trains[train] = {
-        "Line": line,
-        "Suggested Speed": speed,
-        "Authority": authority,
-    }
+    with open('ctc_ui_inputs.json',"w") as f1: 
+        json.dump(data1,f1,indent=4)
 
-    dispatcher["Trains"] = trains
-    data["Dispatcher"] = dispatcher
-
-    save_data(data)
     update_active_trains_table()
+
+    # run ctc_main.py
+    python_exe = sys.executable 
+    script_path = os.path.join(os.path.dirname(__file__), "ctc_main.py")
+    subprocess.Popen([python_exe, script_path])
 
 # Maintenance Frame UI 
 maint_frame.grid_columnconfigure((0,1,2,3),weight=1)
@@ -367,74 +345,14 @@ def upload_schedule():
         print(f"Selected schedule file: {file_path}")  
 
 # Load and run schedule section
-run_schedule_frame = tk.LabelFrame(auto_frame, text="Load and Run Schedule", bg="lightblue", font=label_font)
-run_schedule_frame.grid(row=0, column=0, padx=20, pady=10, sticky='nsew')
-run_schedule_frame.grid_columnconfigure(0, weight=1)
+upload_button = tk.Button(auto_frame,text="Upload Schedule", command=upload_schedule, width=40,height=1,bg="white",relief="flat",bd=0,font=("Times New Roman",15,"bold"))
+upload_button.grid(row=0, column=0, columnspan=4,pady=10)
 
-upload_button = tk.Button(run_schedule_frame, text="Upload Schedule", command=upload_schedule, **button_style)
-upload_button.grid(row=0, column=0, padx=10, pady=10, sticky='ew')
+uploaded_file_label = tk.Label(auto_frame, text="", bg="lightblue", font=('Times New Roman', 12, 'italic'))
+uploaded_file_label.grid(row=1, column=0, columnspan=4,pady=(0,10))
 
-uploaded_file_label = tk.Label(run_schedule_frame, text="", bg="lightblue", font=('Times New Roman', 12, 'italic'))
-uploaded_file_label.grid(row=1, column=0, padx=10, pady=(0,10), sticky='w')
-
-run_button = tk.Button(run_schedule_frame, text="Run", **button_style)
-run_button.grid(row=2, column=0, padx=50, pady=10, sticky='ew')
-
-# Dispatch section 
-dispatch_frame = tk.LabelFrame(auto_frame, text="", bg="lightblue", font=label_font)
-dispatch_frame.grid(row=0, column=1, padx=20, pady=10, sticky='nsew')
-dispatch_frame.grid_columnconfigure((0, 1), weight=1)
-
-tk.Label(dispatch_frame, text="Select a Train to Dispatch", font=label_font, bg="lightblue").grid(row=0, column=0, sticky='w', padx=5, pady=5)
-auto_train_box = ttk.Combobox(dispatch_frame, values=["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"], font=input_font)
-auto_train_box.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
-
-tk.Label(dispatch_frame, text="Select a Line", font=label_font, bg="lightblue").grid(row=1, column=0, sticky='w', padx=5, pady=5)
-auto_line_box = ttk.Combobox(dispatch_frame, values=["Green"], font=input_font)
-auto_line_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
-
-tk.Label(dispatch_frame, text="Select a Destination Station", font=label_font, bg="lightblue").grid(row=2, column=0, sticky='w', padx=5, pady=5)
-auto_dest_box = ttk.Combobox(dispatch_frame, values=["Pioneer",
-                                                     "Edgebrook",
-                                                     "Whited",
-                                                     "South Bank",
-                                                     "Central",
-                                                     "Inglewood",
-                                                     "Overbrook",
-                                                     "Glenbury",
-                                                     "Dormont",
-                                                     "Mt. Lebanon",
-                                                     "Poplar",
-                                                     "Castle Shannon"], font=input_font)
-auto_dest_box.grid(row=2, column=1, padx=5, pady=5, sticky='ew')
-
-tk.Label(dispatch_frame, text="Enter Arrival Time", font=label_font, bg="lightblue").grid(row=3, column=0, sticky='w', padx=5, pady=5)
-auto_arrival_box = tk.Entry(dispatch_frame, font=input_font)
-auto_arrival_box.grid(row=3, column=1, padx=5, pady=5, sticky='ew')
-
-dispatch_button = tk.Button(dispatch_frame, text="DISPATCH", command=lambda: auto_dispatch(), **button_style)
-dispatch_button.grid(row=4, column=0, columnspan=2, padx=50, pady=10, sticky='ew')
-
-
-def auto_dispatch():
-    train = auto_train_box.get()
-    line = auto_line_box.get()
-    dest = auto_dest_box.get()
-    arrival = auto_arrival_box.get()
-        
-    ############# write to ctc_ui_inputs.json ##############
-    with open('ctc_ui_inputs.json',"r") as f1: 
-        data1 = json.load(f1)
-    
-    data1["Train"] = train
-    data1["Line"] = line
-    data1["Station"] = dest
-    data1["Arrival Time"] = arrival
-
-    with open('ctc_ui_inputs.json',"w") as f1: 
-        json.dump(data1,f1,indent=4)
-
-    update_active_trains_table()
+run_button = tk.Button(auto_frame, text="Run", width=20,height=1,bg="white",relief="flat",bd=0,font=("Times New Roman",15,"bold"))
+run_button.grid(row=2, column=0, columnspan=4,pady=10)
 
 # Tables Below Mode Area 
 bottom_frame = tk.Frame(root)
@@ -448,9 +366,12 @@ def create_table_section(parent, title, columns, data):
     section.grid_rowconfigure(1, weight=1)
     section.grid_columnconfigure(0, weight=1)
 
-    tk.Label(section, text=title, font=('Times New Roman', 15, 'bold')).grid(row=0, column=0, sticky='w')
+    tk.Label(section, text=title, font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w')
 
-    table = ttk.Treeview(section, columns=columns, show='headings')
+    style = ttk.Style()
+    style.configure("Custom.Treeview.Heading",font=('Times New Roman',10,'bold'))
+
+    table = ttk.Treeview(section, columns=columns, show='headings',style="Custom.Treeview")
     for col in columns:
         table.heading(col, text=col)
         table.column(col, anchor='center', width=80)
@@ -465,10 +386,10 @@ def create_table_section(parent, title, columns, data):
 active_trains_frame, active_trains_table = create_table_section(
     bottom_frame,
     "Active Trains",
-    ("Train", "Line", "Block", "State", "Suggested Speed (mph)", "Authority (yards)", "Direction", "Station", "Arrival Time"),
+    ("Train", "Line", "Block", "State", "Speed (mph)", "Authority (yards)", "Current Station", "Destination", "Arrival Time"),
     []
 )
-active_trains_frame.grid(row=0, column=0, sticky='nsew', padx=5)
+active_trains_frame.grid(row=0, column=0, columnspan=3,sticky='nsew', padx=10)
 
 
 def update_active_trains_table():
@@ -493,13 +414,13 @@ def update_active_trains_table():
         active_trains_table.insert("", "end", values=(
             train_name,
             info.get("Line", ""),
-            "",  
+            info.get("Position"),
             info.get("State", ""),
             info.get("Suggested Speed", ""),
             info.get("Authority", ""),
-            info.get("Direction", ""),
+            info.get("Current Station", ""),
             info.get("Station Destination", ""),
-            info.get("Arrival Time", "")
+            info.get("Arrival Time", ""),
         ))
 
     # Repeat every second
@@ -511,7 +432,7 @@ lights_frame,lights_table = create_table_section(
     ("Line", "Block", "Status"),
     [("Red", "A1", "Green"), ("Red", "A2", "Red")]
 )
-lights_frame.grid(row=0, column=1, sticky='nsew', padx=5)
+lights_frame.grid(row=0, column=3, columnspan=1,sticky='nsew', padx=5)
 
 gates_frame,gates_table = create_table_section(
     bottom_frame,
@@ -520,7 +441,7 @@ gates_frame,gates_table = create_table_section(
     [("Red", "A1", "Closed"), 
      ("Red", "A2", "Closed")]
 )
-gates_frame.grid(row=0, column=2, sticky='nsew', padx=5)
+gates_frame.grid(row=0, column=4, columnspan=1,sticky='nsew', padx=5)
 
 
 # Throughput 
@@ -542,7 +463,7 @@ auto_button.config(bg="lightgray")
 active_button = auto_button
 
 # Start event loop
-update_ui()
+#update_ui()
 root.protocol("WM_DELETE_WINDOW", lambda: (observer.stop(), root.destroy()))
 update_active_trains_table()
 root.mainloop()

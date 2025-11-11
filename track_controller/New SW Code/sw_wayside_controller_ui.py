@@ -29,8 +29,10 @@ import sw_vital_check
 class sw_wayside_controller_ui(tk.Tk):
     def __init__(self, controller):
         super().__init__()
-    # Association
         self.controller = controller
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    
 
     # Attributes
         self.toggle_maintenance_mode: tk.BooleanVar = tk.BooleanVar(value=False)
@@ -45,6 +47,8 @@ class sw_wayside_controller_ui(tk.Tk):
         self.blocks_with_switches: list = [13,28,57,63,77,85]
         self.blocks_with_lights: list = [0,3,7,29,58,62,76,86,100,101,150,151]
         self.blocks_with_gates: list = [19,108]
+
+        self.block_labels: dict = {}
 
 
         #epty options for now
@@ -86,11 +90,32 @@ class sw_wayside_controller_ui(tk.Tk):
         self.selected_block_frame = ttk.Frame(self, style="SelectedBlock.TFrame")
         self.selected_block_frame.grid(row=1, column=2, sticky="nsew")
 
+        self.start_plc: str = controller.get_start_plc()
+        self.selected_file_str = tk.StringVar(value="N/A")
+        self.selected_file_str.set(self.start_plc)
+
+        self.train_data_frame: dict = {}
+
         self.build_maintenance_frame()
         self.build_input_frame()
         self.build_all_blocks_frame()
         self.build_map_frame()
         self.build_selected_block_frame()
+
+        self.update_block_labels()
+    
+
+    def on_close(self):
+         # Stop the PLC loop and all background timers
+        if hasattr(self, "controller") and self.controller is not None:
+            self.controller.stop()
+
+        # Destroy the UI window cleanly
+        self.destroy()
+
+        # End Tkinter’s mainloop completely if no other windows remain
+        if not any(isinstance(w, tk.Tk) and w.winfo_exists() for w in tk._default_root.children.values()):
+            self.quit()
 
     
 
@@ -194,7 +219,7 @@ class sw_wayside_controller_ui(tk.Tk):
         )
         self.upload_button.pack(pady=10)
 
-        self.selected_file_str = tk.StringVar(value="N/A")
+        
 
         self.selected_file_label = ttk.Label(self.maintenance_frame, text=f"currently selected file: {self.selected_file_str.get()}", style="display.TLabel", wraplength=200)
         self.selected_file_label.pack(pady=5)
@@ -203,15 +228,46 @@ class sw_wayside_controller_ui(tk.Tk):
         # Define a style for the input frame widgets
         style = ttk.Style()
         style.configure("Input.TLabel", font=("Arial", 16, "bold"), background="white")
-        style.configure("smaller.TLabel", font=("Arial", 12), background="white")
+        style.configure("smaller.TLabel", font=("Arial", 5), background="gray")
 
         # Title label
         title_label = ttk.Label(self.input_frame, text="Active Train Data", style="Input.TLabel")
         title_label.pack(pady=10)
 
-        # train data display (placeholder)
-        io_data_label = ttk.Label(self.input_frame, text="Active train data will be displayed here.", style="smaller.TLabel")
-        io_data_label.pack(pady=10)
+        #sub frame for train data
+        self.train_data_frame = ttk.Frame(self.input_frame)
+        self.train_data_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        #read in cmd train data from controller
+        train_data = self.controller.get_active_trains()
+        if train_data == {}:
+            no_train_label = ttk.Label(self.train_data_frame, text="No active trains", style="smaller.TLabel")
+            no_train_label.pack(pady=10)
+        else:
+            for train in train_data:
+            #if on first wayside
+                if self.selected_file_str.get() == "Green_Line_PLC_XandLup.py":
+                    if train_data[train]["pos"] <= 73 or train_data[train]["pos"] >= 144:
+                        train_label = ttk.Label(self.train_data_frame, text=f"Train {train}:", style="smaller.TLabel")
+                        train_label.grid(row=int(train[-1])-1, column=0, padx=5, pady=5, sticky="w")
+                        speed_label = ttk.Label(self.train_data_frame, text=f"  Commanded Speed: {train_data[train]['cmd speed']} m/s", style="smaller.TLabel")
+                        speed_label.grid(row=int(train[-1])-1, column=1, padx=5, pady=5, sticky="w")
+                        auth_label = ttk.Label(self.train_data_frame, text=f"  Commanded Authority: {train_data[train]['cmd auth']} m", style="smaller.TLabel" )
+                        auth_label.grid(row=int(train[-1])-1, column=2, padx=5, pady=5, sticky="w")
+                        pos_label = ttk.Label(self.train_data_frame, text=f"  Position: {train_data[train]['pos']}", style="smaller.TLabel")
+                        pos_label.grid(row=int(train[-1])-1, column=3, padx=5, pady=5, sticky="w")
+        
+                self.train_data_labels={
+                                self.train_data_labels[train]: {
+                                    "train": train_label,
+                                    "speed": speed_label,
+                                    "auth": auth_label,
+                                    "pos": pos_label
+                                }
+                }
+        self.update_train_data_labels()
+            
+
+        
 
     def build_all_blocks_frame(self):
         #clear frame first
@@ -285,7 +341,27 @@ class sw_wayside_controller_ui(tk.Tk):
                     style="smaller.TLabel"
                 )
                 block_label.grid(row=1, column=1, padx=5, pady=5)
+                #get yard data
+                desired = self.controller.get_block_data(0)
+                occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                occupied_label.grid(row=1, column=2, padx=5, pady=5)
+                switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
+                switch_label.grid(row=1, column=3, padx=5, pady=5)
+                light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                light_label.grid(row=1, column=4, padx=5, pady=5)
+                gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"]}", style="smaller.TLabel")
+                gate_label.grid(row=1, column=5, padx=5, pady=5)
+                failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")
+                failure_label.grid(row=1, column=6, padx=5, pady=5)
 
+
+                self.block_labels[0] = {
+                    "occupied": occupied_label,
+                    "switch": switch_label,
+                    "light": light_label,
+                    "gate": gate_label,
+                    "failure": failure_label
+                }
                 for i in range(80):
 
                     
@@ -312,20 +388,123 @@ class sw_wayside_controller_ui(tk.Tk):
 
                     check_box.grid(row=i+2, column=0, padx=5, pady=5)
                     block_label.grid(row=i + 2, column=1, padx=5, pady=5)
+
+                    desired = self.controller.get_block_data(block_num)
+                    occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                    occupied_label.grid(row=i+2, column=2, padx=5, pady=5)  
+                    switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
+                    switch_label.grid(row=i+2, column=3, padx=5, pady= 5)
+                    light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                    light_label.grid(row=i+2, column=4, padx=5, pady=5)
+                    gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"] }", style="smaller.TLabel")
+                    gate_label.grid(row=i+2, column=5, padx=5, pady=5)
+                    failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")  
+                    failure_label.grid(row=i+2, column=6, padx=5, pady=5)
+
+                    self.block_labels[block_num] = {
+                        "occupied": occupied_label,
+                        "switch": switch_label,
+                        "light": light_label,
+                        "gate": gate_label,
+                        "failure": failure_label
+                    }
                 
                     #block for Enter yard from track
+                check_box = ttk.Checkbutton(self.scrollable_frame,
+                                            variable=self.selected_block,
+                                            onvalue=151,
+                                            offvalue=-1,
+                                            command=lambda idx=151: self.on_block_selected(idx))
+                check_box.grid(row=82, column=0, padx=5, pady=5)
+                block_label = ttk.Label(
+                    self.scrollable_frame,
+                    text="Enter Yard",
+                    style="smaller.TLabel"
+                )
+                block_label.grid(row=82, column=1, padx=5, pady=5)
+
+                desired = self.controller.get_block_data(151)
+                occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                occupied_label.grid(row=82, column=2, padx=5, pady=5)
+                switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
+                switch_label.grid(row=82, column=3, padx=5, pady=5)
+                light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                light_label.grid(row=82, column=4, padx=5, pady=5)
+                gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"]}", style="smaller.TLabel")
+                gate_label.grid(row=82, column=5, padx=5, pady=5)
+                failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")
+                failure_label.grid(row=82, column=6, padx=5, pady=5)
+
+                self.block_labels[151] = {
+                    "occupied": occupied_label,
+                    "switch": switch_label,
+                    "light": light_label,
+                    "gate": gate_label,
+                    "failure": failure_label
+                }
+            
+            elif (os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py"):
+                #build for 77 blocks
+
+                for i in range(77):
+                    block_num = i + 70
+                    section_letter = self.get_section_letter(block_num)
                     check_box = ttk.Checkbutton(self.scrollable_frame,
-                                                variable=self.selected_block,
-                                                onvalue=151,
+                                                variable=self.selected_block, 
+                                                onvalue=i,
                                                 offvalue=-1,
-                                                command=lambda idx=151: self.on_block_selected(idx))
-                    check_box.grid(row=82, column=0, padx=5, pady=5)
+                                                command=lambda idx=i: self.on_block_selected(idx))
+                    check_box.grid(row=i+1, column=0, padx=5, pady=5)
+
                     block_label = ttk.Label(
                         self.scrollable_frame,
-                        text="Enter Yard",
+                        text=f"{section_letter}{block_num}",
                         style="smaller.TLabel"
                     )
-                    block_label.grid(row=82, column=1, padx=5, pady=5)
+                    block_label.grid(row=i + 1, column=1, padx=5, pady=5)
+                    desired = self.controller.get_block_data(block_num)
+                    occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                    occupied_label.grid(row=i+1, column=2, padx=5, pady=5)  
+                    switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")  
+                    switch_label.grid(row=i+1, column=3, padx=5, pady= 5)
+                    light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                    light_label.grid(row=i+1, column=4, padx=5, pady=5)
+                    gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"] }", style="smaller.TLabel")
+                    gate_label.grid(row=i+1, column=5, padx=5, pady=5)
+                    failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")  
+                    failure_label.grid(row=i+1, column=6, padx=5, pady=5)
+
+                    self.block_labels[block_num] = {
+                        "occupied": occupied_label,
+                        "switch": switch_label,
+                        "light": light_label,
+                        "gate": gate_label,
+                        "failure": failure_label
+                    }
+
+    def update_train_data_labels(self):
+        for train, labels in self.train_data_labels.items():
+            data = self.controller.get_active_trains().get(train, {})
+            if data!={}:  # Ensure data exists for the train
+                labels["speed"].config(text=f"  Commanded Speed: {data.get('cmd speed', 'N/A')} m/s")
+                labels["auth"].config(text=f"  Commanded Authority: {data.get('cmd auth', 'N/A')} m")
+                labels["pos"].config(text=f"  Position: {data.get('pos', 'N/A')}")
+            
+        self.after(200, self.update_train_data_labels)  # Update every second
+
+    def update_block_labels(self):
+        for block_id, labels in self.block_labels.items():
+            data = self.controller.get_block_data(block_id)
+            labels["occupied"].config(text=f"{data['occupied']}")
+            labels["switch"].config(text=f"{data['switch_state']}")
+            labels["light"].config(text=f"{data['light_state']}")
+            labels["gate"].config(text=f"{data['gate_state']}")
+            labels["failure"].config(text=f"{data['Failure']}")
+        
+        if self.selected_block != -1:
+            self.build_selected_block_frame()
+
+        self.after(200, self.update_block_labels)  # Update every second
 
     def on_block_selected(self, idx: int):
         # If user clicks the same checkbox again, deselect it
@@ -338,7 +517,7 @@ class sw_wayside_controller_ui(tk.Tk):
             self.selected_block = idx
 
         # Update the right-side info frame
-        self.build_selected_block_frame()
+        #self.build_selected_block_frame()
     
     def build_map_frame(self):
         # Define a style for the map frame widgets
@@ -373,7 +552,7 @@ class sw_wayside_controller_ui(tk.Tk):
         if self.selected_block == -1:
             self.block_info_label = ttk.Label(self.selected_block_frame, text="Selected block information will be displayed here.", style="smaller.TLabel")
             self.block_info_label.pack(pady=10)
-        else:
+        elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLup.py":
             if self.selected_block <= 79:
                 block = self.selected_block + 1 if self.selected_block < 73 else self.selected_block + 71
                 sec = self.get_section_letter(block)
@@ -388,10 +567,12 @@ class sw_wayside_controller_ui(tk.Tk):
             
             id = self.selected_block_data["block_id"]
             occupied = self.selected_block_data["occupied"]
-            switch_state = self.selected_block_data["switch_state"]
-            light_state = self.selected_block_data["light_state"]
-            gate_state = self.selected_block_data["gate_state"]
-            failure = self.selected_block_data["Failure:"]
+            switch_state_enum = self.selected_block_data["switch_state"]
+            light_state_enum = self.selected_block_data["light_state"]
+            gate_state_enum = self.selected_block_data["gate_state"]
+            failure_enum = self.selected_block_data["Failure"]
+
+            switch_state, light_state, gate_state, failure = self.get_all_strings(switch_state_enum, light_state_enum, gate_state_enum, failure_enum,id)
 
             if self.selected_block <=79:
                 id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
@@ -410,6 +591,34 @@ class sw_wayside_controller_ui(tk.Tk):
             gate_label.pack(pady=5)
             failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
             failure_label.pack(pady=5)
+
+        elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py":
+            block = self.selected_block + 70
+            sec = self.get_section_letter(block)
+            self.selected_block_data = self.controller.get_block_data(block)  
+
+            id = block
+            occupied = self.selected_block_data["occupied"]
+            switch_state_enum = self.selected_block_data["switch_state"]
+            light_state_enum = self.selected_block_data["light_state"]
+            gate_state_enum = self.selected_block_data["gate_state"]
+            failure_enum = self.selected_block_data["Failure"]
+
+            switch_state, light_state, gate_state, failure = self.get_all_strings(switch_state_enum, light_state_enum, gate_state_enum, failure_enum,id)    
+
+            id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
+            id_label.pack(pady=5)
+            occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
+            occupied_label.pack(pady=5)
+            switch_label = ttk.Label(self.selected_block_frame, text=f"Switch State: {switch_state}", style="smaller.TLabel")
+            switch_label.pack(pady=5)
+            light_label = ttk.Label(self.selected_block_frame, text=f"Light State: {light_state}", style="smaller.TLabel")
+            light_label.pack(pady=5)
+            gate_label = ttk.Label(self.selected_block_frame, text=f"Gate State: {gate_state}", style="smaller.TLabel")
+            gate_label.pack(pady=5)
+            failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
+            failure_label.pack(pady=5)
+
 
 
                 
@@ -483,13 +692,94 @@ class sw_wayside_controller_ui(tk.Tk):
             return 'Y'  
         else:
             return 'Z'
+    
+    def get_all_strings(self,switch_state_enum, light_state_enum, gate_state_enum, failure_enum,id):
+
+        if id in [13,28,57,63,77,85]:
+            if id == 13 and switch_state_enum == 0:
+                switch_state = "D13->A1"
+            elif id == 13 and switch_state_enum == 1:
+                switch_state = "D13->C12"
+            elif id == 28 and switch_state_enum == 0:
+                switch_state = "F28->G29"
+            elif id == 28 and switch_state_enum == 1:
+                switch_state = "F28->Z150"
+            elif id == 57 and switch_state_enum == 0:
+                switch_state = "I57->Yard"
+            elif id == 57 and switch_state_enum == 1:
+                switch_state = "I57->J58"
+            elif id == 63 and switch_state_enum == 0:
+                switch_state = "K63->J62"
+            elif id == 63 and switch_state_enum == 1:
+                switch_state = "K63-Yard"
+            elif id == 77 and switch_state_enum == 0:
+                switch_state = "N77->M76"
+            elif id == 77 and switch_state_enum == 1:
+                switch_state = "N77->R101"
+            elif id == 85 and switch_state_enum == 0:
+                switch_state = "N85->O86"
+            elif id == 85 and switch_state_enum == 1:
+                switch_state = "N85->Q100"
+        else: 
+            switch_state = "N/A"
+        if id in [0,3,7,29,58,62,76,86,100,101,150,151]:
+            #make sure is a string 
+            
+            
+            if light_state_enum == "00":
+                light_state = "Super Green"
+            elif light_state_enum == "01":
+                light_state = "Green"
+            elif light_state_enum == "10":
+                light_state = "Yellow"
+            elif light_state_enum == "11":
+                light_state = "Red"
+        else:
+            light_state = "N/A"
+        #if id == 0:
+            #light_state = "Green"
+        if id in [19,108]:
+            if gate_state_enum == 0:
+                gate_state = "Down"
+            elif gate_state_enum == 1:
+                gate_state = "Up"
+        else:
+            gate_state = "N/A"
+        if failure_enum == 0:
+            failure = "No Failure"
+        elif failure_enum == 1:
+            failure = "Broken Track"
+        elif failure_enum == 2:
+            failure = "Power Failure"
+        elif failure_enum == 3:
+            failure = "Circuit Failure"
+        
+        return switch_state, light_state, gate_state, failure
+
+
+
+def main():
+    # Create first UI window (still a Tk)
+    vital1 = sw_vital_check.sw_vital_check()
+    controller1 = sw_wayside_controller.sw_wayside_controller(vital1, "Green_Line_PLC_XandLup.py")
+    ui1 = sw_wayside_controller_ui(controller1)
+    ui1.title("Wayside Controller 1")
+    ui1.geometry("1200x800")
+
+    # Create second UI window (another Tk)
+    vital2 = sw_vital_check.sw_vital_check()
+    controller2 = sw_wayside_controller.sw_wayside_controller(vital2, "Green_Line_PLC_XandLdown.py")
+    ui2 = sw_wayside_controller_ui(controller2)
+    ui2.title("Wayside Controller 2")
+    ui2.geometry("1200x800")
+
+    # Bring both windows to front
+    ui1.lift()
+    ui2.lift()
+
+    # Run *one* mainloop (both Tk windows share it)
+    tk.mainloop()
+
 
 if __name__ == "__main__":
-
-
-    vital = sw_vital_check.sw_vital_check()
-    controller = sw_wayside_controller.sw_wayside_controller(vital,"Green_Line_PLC_XandLup.py")
-    ui = sw_wayside_controller_ui(controller)
-    #make it 1200x800
-    ui.geometry("1200x800")
-    ui.mainloop()
+    main()

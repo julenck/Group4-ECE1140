@@ -29,7 +29,23 @@ class HW_Vital_Check:
         return True
 
     def check_file(self, plc_path: str) -> Dict:                                            #placeholder
-        return {"ok": True, "warnings": [], "errors": []}
+        reasons: List[str] = []
+        try:
+
+            with open(plc_source_path, "r", encoding="utf-8") as f:
+                text = f.read()
+
+            if "import os" in text or "subprocess" in text:
+                reasons.append("forbidden import detected")
+
+            if "eval(" in text or "exec(" in text:
+                reasons.append("dynamic code execution detected")
+
+            safe = len(reasons) == 0
+            return {"safe": safe, "reasons": reasons, "actions": {}}
+        
+        except Exception as e:
+            return {"safe": False, "reasons": [f"read error: {e}"], "actions": {}}
 
     def verify_system_safety(               
         self,

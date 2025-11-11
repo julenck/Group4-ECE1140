@@ -1,5 +1,14 @@
 {
-  "safe": true,
-  "reasons": [],
-  "actions": {}
+  "waysides": {
+    "A": {
+      "safe": true,
+      "reasons": [],
+      "actions": {}
+    },
+    "B": {
+      "safe": true,
+      "reasons": [],
+      "actions": {}
+    }
+  }
 }
