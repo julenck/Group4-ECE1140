@@ -341,6 +341,7 @@ class train_controller_ui(tk.Tk):
             ("Commanded Authority", "", "yards"),
             ("Speed Limit", "", "mph"),
             ("Current Speed", "", "mph"),
+            ("Driver Set Speed", "", "mph"),  # Add driver_velocity display
             ("Power Availability", "", "W"),
             ("Cabin Temperature", "", "F°"),
             ("Station Side", "", "Left/Right"),
@@ -380,12 +381,12 @@ class train_controller_ui(tk.Tk):
         engineering_frame.pack(side="right", fill="y", ipadx=6)
 
         ttk.Label(engineering_frame, text="Kp:").grid(row=0, column=0, sticky="w", pady=(2,6))
-        self.kp_var = tk.StringVar(value="0.5")
+        self.kp_var = tk.StringVar(value="0.0")
         self.kp_entry = ttk.Entry(engineering_frame, textvariable=self.kp_var, width=20)
         self.kp_entry.grid(row=0, column=1, pady=(2,6))
 
         ttk.Label(engineering_frame, text="Ki:").grid(row=1, column=0, sticky="w", pady=(2,6))
-        self.ki_var = tk.StringVar(value="0.1")
+        self.ki_var = tk.StringVar(value="0.0")
         self.ki_entry = ttk.Entry(engineering_frame, textvariable=self.ki_var, width=20)
         self.ki_entry.grid(row=1, column=1, pady=(2,6))
 
@@ -449,6 +450,8 @@ class train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", f"{state['speed_limit']:.1f}")
                 elif param == "Current Speed":
                     self.info_treeview.set(iid, "value", f"{state['train_velocity']:.1f}")
+                elif param == "Driver Set Speed":
+                    self.info_treeview.set(iid, "value", f"{state.get('driver_velocity', 0):.1f}")
                 elif param == "Power Availability":
                     self.info_treeview.set(iid, "value", f"{state['power_command']:.1f}")
                 elif param == "Cabin Temperature":

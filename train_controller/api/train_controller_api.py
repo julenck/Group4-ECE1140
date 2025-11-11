@@ -54,8 +54,8 @@ class train_controller_api:
             'announcement': '',         # current announcement
             'announce_pressed': False,  # tracks if announcement button is pressed
             'emergency_brake': False,   # emergency brake state
-            'kp': 1500.0,                 # proportional gain - balanced for quick response without saturation
-            'ki': 50.0,                 # integral gain - eliminates steady-state error
+            'kp': 0.0,                  # proportional gain - default to 0 until set by user
+            'ki': 0.0,                  # integral gain - default to 0 until set by user
             'engineering_panel_locked': False,  # engineering panel state
             
             # Outputs TO Train Model
