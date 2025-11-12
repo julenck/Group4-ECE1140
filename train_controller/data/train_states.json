@@ -1,6 +1,6 @@
 {
-    "train_3": {
-        "train_id": 3,
+    "train_1": {
+        "train_id": 1,
         "commanded_speed": 0.0,
         "commanded_authority": 0.0,
         "speed_limit": 0.0,
@@ -14,7 +14,7 @@
         "next_stop": "Station A",
         "station_side": "Right",
         "train_temperature": 70.0,
-        "set_temperature": 75,
+        "set_temperature": 55,
         "engine_failure": false,
         "signal_failure": false,
         "brake_failure": false,
