@@ -11,7 +11,7 @@ from typing import Dict, Optional
 
 # Global file lock for thread-safe access to train_states.json
 # Using RLock (reentrant lock) to allow same thread to acquire lock multiple times
-_file_lock = threading.RLock()
+_file_lock = threading.Lock()
 
 class train_controller_api:
     """Manages train state persistence and module communication using JSON."""
