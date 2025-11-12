@@ -6,6 +6,7 @@ One UI window per wayside. Mirrors the SW UI shape but stays minimal.
 
 from __future__ import annotations
 from datetime import time
+import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import Optional
