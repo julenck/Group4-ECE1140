@@ -320,6 +320,15 @@ class HW_Wayside_Controller:
         with self._lock:
             self._selected_block = str(block_id)
 
+    @property
+    def occupied_source(self):
+        return self._occupied_source
+
+    @occupied_source.setter
+    def occupied_source(self, value):
+        # accept any iterable of block ids and store as a set of strings
+        self._occupied_source = {str(b) for b in (value or [])}
+
     # --------------- getters used by the UI ----------------
 
     def get_block_ids(self) -> List[str]:
