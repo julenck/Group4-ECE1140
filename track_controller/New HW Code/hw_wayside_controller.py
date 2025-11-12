@@ -31,6 +31,7 @@ class HW_Wayside_Controller:
         self._emergency = False
         self._speed_mph = 0.0
         self._authority_yds = 0
+        self._last_auth_ts: Optional[float] = None  # for local authority decay
         self._occupied: set[str] = set()
         self._closed: set[str] = set()
 
@@ -76,12 +77,36 @@ class HW_Wayside_Controller:
     ):
         with self._lock:
             self._speed_mph = float(speed_mph)
-            self._authority_yds = int(authority_yards)
+            new_auth = int(authority_yards)
+            # Reset decay baseline when external authority changes
+
+            if new_auth != self._authority_yds:
+                self._authority_yds = new_auth
+                self._last_auth_ts = None
+            else:
+                self._authority_yds = new_auth
+
             self._emergency = bool(emergency)
             if occupied_blocks is not None:
                 self._occupied = {str(b) for b in occupied_blocks}
             if closed_blocks is not None:
                 self._closed = {str(b) for b in closed_blocks}
+
+    def tick_authority_decay(self) -> None:
+        """Optionally reduce authority in yards based on current speed (mph)."""
+        now = time.time()
+        with self._lock:
+            if self._last_auth_ts is None:
+                self._last_auth_ts = now
+                return
+            dt = now - self._last_auth_ts
+            self._last_auth_ts = now
+
+            if self._authority_yds > 0 and self._speed_mph > 0 and dt > 0:
+                # mph -> yards/sec = mph * 1760 / 3600
+                yards_per_sec = self._speed_mph * (1760.0 / 3600.0)
+                dec = yards_per_sec * dt
+                self._authority_yds = max(0, int(self._authority_yds - dec))
 
     def apply_track_snapshot(self, snapshot: Dict[str, Any], *, limit_blocks: List[str]) -> None:
         """
