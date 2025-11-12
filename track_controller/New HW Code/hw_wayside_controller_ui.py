@@ -168,6 +168,19 @@ class HW_Wayside_Controller_UI(ttk.Frame):
 
             state = self.controller.get_block_state(self._selected_block)
             self.display.update_details(state)
+            try:
+                train_block = self.controller.get_current_train_block()
+            except Exception:
+                train_block = None
+            status_txt = state.get("status", "OK")
+            if status_txt == "OK" and train_block:
+                self.display.show_status(f"OK — Train @ {train_block}")
+
+            # Keep existing emergency indicator behavior
+            is_emerg = bool(state.get("emergency", getattr(self, "_emergency_active", False)))
+            fault_block = state.get("fault_block") or (self._selected_block if is_emerg else None)
+            self._set_emergency(is_emerg, fault_block)
+
             self._update_lcd_tuple(state)
 
     # -------- emergency indicator helper --------
