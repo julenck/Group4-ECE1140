@@ -28,8 +28,8 @@
         0,
         0,
         0,
-        0,
-        0,
+        1,
+        1,
         0,
         0,
         0,
@@ -649,6 +649,18 @@
         0,
         0
     ],
-    "G-Commanded Authorty": [],
-    "G-Commanded Speed": []
+    "G-Commanded Speed": [
+        0,
+        0,
+        0,
+        0,
+        0
+    ],
+    "G-Commanded Authority": [
+        0,
+        0,
+        0,
+        0,
+        0
+    ]
 }

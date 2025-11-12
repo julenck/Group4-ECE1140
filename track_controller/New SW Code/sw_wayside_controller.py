@@ -33,13 +33,25 @@ class sw_wayside_controller:
         self.track_comm_file: str = "track_to_wayside.json"
         self.block_status: list = []
         self.detected_faults: dict = {}
-        self.input_faults: list = []
+        self.input_faults: list = [0]*152*3
         self.blocks_with_switches: list = [13,28,57,63,77,85]
         self.blocks_with_lights: list = [0,3,7,29,58,62,76,86,100,101,150,151]
         self.blocks_with_gates: list = [19,108]
         self.running: bool = True
         self.file_lock = threading.Lock()
         self.cmd_trains: dict = {}
+        self.idx = 0
+
+
+        self.green_order = [0,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,
+                       85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,85,84,83,82,81,80,79,
+                       78,77,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,
+                       116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,
+                       133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,
+                       150,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,
+                       7,6,5,4,3,2,1,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,
+                       29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,
+                       50,51,52,53,54,55,56,57,151]
 
 
 
@@ -58,7 +70,7 @@ class sw_wayside_controller:
             return
         #call plc function
         if self.active_plc != "":
-            self.load_inputs_track()
+            #self.load_inputs_track()
             
             if self.active_plc == "Green_Line_PLC_XandLup.py":
                 occ1 = self.occupied_blocks[0:73]
@@ -115,17 +127,31 @@ class sw_wayside_controller:
 
         for train in self.active_trains:
             if train not in self.cmd_trains and self.active_trains[train]["Active"]==1:
-                self.cmd_trains[train] = {
+                if self.active_trains[train]["Train Position"] != 0:
+                    self.cmd_trains[train] = {
                     "cmd auth": self.active_trains[train]["Suggested Authority"],
                     "cmd speed": self.active_trains[train]["Suggested Speed"],
-                    "pos": 0
+                    "pos": self.active_trains[train]["Train Position"]
+
                 }
+                    self.pos_start = self.active_trains[train]["Train Position"]
+                else:
+                    self.cmd_trains[train] = {
+                        "cmd auth": self.active_trains[train]["Suggested Authority"],
+                        "cmd speed": self.active_trains[train]["Suggested Speed"],
+                        "pos": 0
+                    }
+                    self.pos_start = 0
+                
+                
 
         ttr = []
         for cmd_train in self.cmd_trains:
             auth = self.cmd_trains[cmd_train]["cmd auth"]
             speed = self.cmd_trains[cmd_train]["cmd speed"]
             pos = self.cmd_trains[cmd_train]["pos"]
+            
+            
             auth = auth - speed
             if auth <= 0:
                 auth = 0
@@ -140,7 +166,13 @@ class sw_wayside_controller:
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
             self.cmd_trains[cmd_train]["cmd speed"] = speed
-            self.cmd_trains[cmd_train]["pos"] = pos + 1
+            sug_auth = self.active_trains[cmd_train]["Suggested Authority"]
+
+
+            if (self.traveled_enough(sug_auth, auth, self.idx)):
+                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos, self.idx)
+                self.idx += 1
+
 
             with self.file_lock:
                 with open(self.ctc_comm_file,'r') as f:
@@ -156,8 +188,34 @@ class sw_wayside_controller:
             threading.Timer(1.0, self.run_trains).start()
 
 
+    def dist_to_EOB(self, idx: int) -> int:
+        #distance to end of block based on index in green order
+        block_dist = [100,200,300,500,700,800,900,1000,1100,1200,1300,1400,1500,1600]
+        return block_dist[idx]
 
+    def traveled_enough(self, sug_auth: int, cmd_auth: int, idx: int) -> bool:
+        if self.pos_start != 0:
+            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start-1))
+        else:
+            traveled = sug_auth - cmd_auth
+        if traveled >= self.dist_to_EOB(idx):
+            return True
+        else:
+            return False
 
+    def get_next_block(self, current_block: int, block_idx: int):
+
+        self.occupied_blocks[current_block] = 0
+        
+
+        
+        
+        if current_block == 151:
+            self.idx = 0
+            return -1
+        else:
+            self.occupied_blocks[self.green_order[block_idx + 1]] = 1
+            return self.green_order[block_idx + 1]
 
 
     def override_light(self, block_id: int, state: int):
@@ -217,9 +275,17 @@ class sw_wayside_controller:
             data["G-gates"] = self.gate_states
 
             if self.cmd_trains != {}:
-                data["G-Trains"] = self.cmd_trains
+                for i in range (5):
+                    try:
+                        train_id = list(self.cmd_trains.keys())[i]
+                        data["G-Commanded Authority"][i] = self.cmd_trains[train_id]["cmd auth"]
+                        data["G-Commanded Speed"][i] = self.cmd_trains[train_id]["cmd speed"]
+                    except IndexError:
+                        data["G-Commanded Authority"][i] = 0
+                        data["G-Commanded Speed"][i] = 0
             else:
-                data["G-Trains"] = {}
+                data["G-Commanded Authority"] = [0]*5
+                data["G-Commanded Speed"] = [0]*5
 
             
 
