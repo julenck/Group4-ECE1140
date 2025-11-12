@@ -257,7 +257,7 @@ class train_controller:
 
 class train_controller_ui(tk.Tk):
 
-    def __init__(self, train_id=1, server_url=None):
+    def __init__(self, train_id=1, server_url=None, timeout=5.0):
         """Initialize the hardware driver interface.
         
         Args:
@@ -265,6 +265,7 @@ class train_controller_ui(tk.Tk):
             server_url: If provided, uses REST API client to connect to remote server.
                        If None, uses local file-based API (default).
                        Example: "http://192.168.1.100:5000"
+            timeout: Network timeout in seconds for remote API (default: 5.0).
         """
         super().__init__()
 
@@ -275,8 +276,8 @@ class train_controller_ui(tk.Tk):
         if server_url:
             # Remote mode - use client API
             from api.train_controller_api_client import train_controller_api_client
-            self.api = train_controller_api_client(train_id=train_id, server_url=server_url)
-            print(f"[HW UI] Using REMOTE API: {server_url}")
+            self.api = train_controller_api_client(train_id=train_id, server_url=server_url, timeout=timeout)
+            print(f"[HW UI] Using REMOTE API: {server_url} (timeout: {timeout}s)")
         else:
             # Local mode - use file-based API
             from api.train_controller_api import train_controller_api
@@ -684,6 +685,8 @@ if __name__ == "__main__":
                        help="Train ID to control (default: 1)")
     parser.add_argument("--server", type=str, default=None,
                        help="Server URL for remote API (e.g., http://192.168.1.100:5000). If not provided, uses local file-based API.")
+    parser.add_argument("--timeout", type=float, default=5.0,
+                       help="Network timeout in seconds for remote API (default: 5.0)")
     args = parser.parse_args()
     
     print("=" * 70)
@@ -693,11 +696,12 @@ if __name__ == "__main__":
     if args.server:
         print(f"  Mode: REMOTE (Raspberry Pi)")
         print(f"  Server: {args.server}")
+        print(f"  Timeout: {args.timeout}s")
     else:
         print(f"  Mode: LOCAL (file-based)")
     print("=" * 70)
     print()
     
     # Create and run app
-    app = train_controller_ui(train_id=args.train_id, server_url=args.server)
+    app = train_controller_ui(train_id=args.train_id, server_url=args.server, timeout=args.timeout)
     app.mainloop()

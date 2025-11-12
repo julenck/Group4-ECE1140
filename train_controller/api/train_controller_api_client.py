@@ -13,16 +13,24 @@ from typing import Dict, Optional
 class train_controller_api_client:
     """Client API that communicates with REST server."""
     
-    def __init__(self, train_id: int, server_url: str = "http://192.168.1.100:5000"):
+    def __init__(self, train_id: int, server_url: str = "http://192.168.1.100:5000", 
+                 timeout: float = 5.0, max_retries: int = 3):
         """Initialize API client.
         
         Args:
             train_id: The train ID this client manages.
             server_url: URL of the REST API server (e.g., "http://192.168.1.100:5000")
+            timeout: Request timeout in seconds (default: 5.0)
+            max_retries: Maximum number of retries for failed requests (default: 3)
         """
         self.train_id = train_id
         self.server_url = server_url.rstrip('/')
         self.state_endpoint = f"{self.server_url}/api/train/{train_id}/state"
+        self.timeout = timeout
+        self.max_retries = max_retries
+        
+        # Cache for state when server is unreachable
+        self._cached_state = None
         
         # Default state (fallback if server unreachable)
         self.default_state = {
@@ -62,10 +70,11 @@ class train_controller_api_client:
     def _test_connection(self):
         """Test connection to server."""
         try:
-            health = requests.get(f"{self.server_url}/api/health", timeout=2)
+            health = requests.get(f"{self.server_url}/api/health", timeout=self.timeout)
             if health.status_code == 200:
                 print(f"[API Client] ✓ Connected to server: {self.server_url}")
                 print(f"[API Client] ✓ Managing Train {self.train_id}")
+                print(f"[API Client] ✓ Timeout: {self.timeout}s, Max retries: {self.max_retries}")
             else:
                 print(f"[API Client] ⚠ Server responded with status {health.status_code}")
         except requests.exceptions.RequestException as e:
@@ -77,22 +86,36 @@ class train_controller_api_client:
         """Get current train state from server.
         
         Returns:
-            dict: Current train state. Returns default state if server unreachable.
+            dict: Current train state. Returns cached/default state if server unreachable.
         """
-        try:
-            response = requests.get(self.state_endpoint, timeout=1)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 404:
-                # Train doesn't exist yet, return defaults
-                print(f"[API Client] Train {self.train_id} not found on server, using defaults")
-                return self.default_state.copy()
-            else:
-                print(f"[API Client] Server error {response.status_code}, using local cache")
-                return self.default_state.copy()
-        except requests.exceptions.RequestException as e:
-            print(f"[API Client] Request failed: {e}, using local cache")
-            return self.default_state.copy()
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.get(self.state_endpoint, timeout=self.timeout)
+                if response.status_code == 200:
+                    state = response.json()
+                    self._cached_state = state  # Update cache
+                    return state
+                elif response.status_code == 404:
+                    # Train doesn't exist yet, return defaults
+                    if attempt == 0:  # Only print once
+                        print(f"[API Client] Train {self.train_id} not found on server, using defaults")
+                    return self.default_state.copy()
+                else:
+                    if attempt == self.max_retries - 1:
+                        print(f"[API Client] Server error {response.status_code}, using cache")
+                    
+            except requests.exceptions.Timeout:
+                if attempt == self.max_retries - 1:
+                    print(f"[API Client] Request timed out after {self.timeout}s (attempt {attempt + 1}/{self.max_retries})")
+                    
+            except requests.exceptions.RequestException as e:
+                if attempt == self.max_retries - 1:
+                    print(f"[API Client] Request failed: {e}")
+        
+        # All retries failed - use cached state or default
+        if self._cached_state is not None:
+            return self._cached_state.copy()
+        return self.default_state.copy()
     
     def update_state(self, state_dict: dict) -> None:
         """Update train state on server.
@@ -100,12 +123,28 @@ class train_controller_api_client:
         Args:
             state_dict: Dictionary of state values to update.
         """
-        try:
-            response = requests.post(self.state_endpoint, json=state_dict, timeout=1)
-            if response.status_code != 200:
-                print(f"[API Client] Update failed with status {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            print(f"[API Client] Update request failed: {e}")
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.post(self.state_endpoint, json=state_dict, timeout=self.timeout)
+                if response.status_code == 200:
+                    # Update local cache with successful write
+                    if self._cached_state is not None:
+                        self._cached_state.update(state_dict)
+                    return  # Success
+                elif attempt == self.max_retries - 1:
+                    print(f"[API Client] Update failed with status {response.status_code}")
+                    
+            except requests.exceptions.Timeout:
+                if attempt == self.max_retries - 1:
+                    print(f"[API Client] Update timed out after {self.timeout}s (attempt {attempt + 1}/{self.max_retries})")
+                    
+            except requests.exceptions.RequestException as e:
+                if attempt == self.max_retries - 1:
+                    print(f"[API Client] Update request failed: {e}")
+        
+        # Update local cache even if server update failed
+        if self._cached_state is not None:
+            self._cached_state.update(state_dict)
     
     def save_state(self, state: dict) -> None:
         """Save complete train state to server.
@@ -120,9 +159,10 @@ class train_controller_api_client:
         """Reset train state to defaults on server."""
         try:
             reset_endpoint = f"{self.server_url}/api/train/{self.train_id}/reset"
-            response = requests.post(reset_endpoint, timeout=1)
+            response = requests.post(reset_endpoint, timeout=self.timeout)
             if response.status_code == 200:
                 print(f"[API Client] Train {self.train_id} state reset")
+                self._cached_state = None  # Clear cache
             else:
                 print(f"[API Client] Reset failed with status {response.status_code}")
         except requests.exceptions.RequestException as e:
