@@ -31,7 +31,7 @@
         "commanded_speed": 40.0,
         "commanded_authority": 0.0,
         "speed_limit": 30.0,
-        "train_velocity": 25.159084200000002,
+        "train_velocity": 30.0,
         "next_stop": "Fifth Street",
         "station_side": "Right",
         "train_temperature": 70.0,
