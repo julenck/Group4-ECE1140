@@ -230,18 +230,28 @@ class TrainManager:
             except json.JSONDecodeError:
                 all_states = {}
         
-        # Create state key for this train
         train_key = f"train_{train_id}"
-        
-        # Default state for new train
+
+        # NEW: seed from Track Model so train_states matches train_data
+        track = self._safe_read_json(self.track_model_file)
+        block = track.get("block", {})
+        beacon = track.get("beacon", {})
+
+        commanded_speed = float(block.get("commanded_speed", 60.0))
+        commanded_authority = float(block.get("commanded_authority", 1000.0))
+        speed_limit = float(beacon.get("speed_limit", 60.0))
+        next_stop = beacon.get("next_stop", "Station A")
+        station_side = beacon.get("station_side", "Right")
+
+        # Default state for new train (matches track inputs)
         all_states[train_key] = {
             "train_id": train_id,
-            "commanded_speed": 60.0,
-            "commanded_authority": 1000.0,
-            "speed_limit": 60.0,
+            "commanded_speed": commanded_speed,
+            "commanded_authority": commanded_authority,
+            "speed_limit": speed_limit,
             "train_velocity": 0.0,
-            "next_stop": "Station A",
-            "station_side": "Right",
+            "next_stop": next_stop,
+            "station_side": station_side,
             "train_temperature": 68.0,
             "engine_failure": False,
             "signal_failure": False,
@@ -300,23 +310,29 @@ class TrainManager:
             except Exception:
                 return default
 
-        cmd_speeds = block.get("commanded speed", []) or []
-        cmd_auths = block.get("commanded authority", []) or []
-        boarding = train_sec.get("passengers_boarding_", []) or []
+        # NEW: support scalar values and underscore keys from track JSON
+        def pick_val(val, idx, default=0.0):
+            if isinstance(val, list):
+                return pick(val, idx, default)
+            return val if val is not None else default
 
+        cmd_speed = float(pick_val(block.get("commanded_speed", 0.0), index, 0.0))
+        cmd_auth = float(pick_val(block.get("commanded_authority", 0.0), index, 0.0))
+        speed_lim = float(beacon.get("speed_limit", 30.0))
         inputs = {
-            "commanded speed": float(pick(cmd_speeds, index, 0.0)),
-            "commanded authority": float(pick(cmd_auths, index, 0.0)),
-            "speed limit": float(beacon.get("speed limit", 30.0)),
-            "current station": beacon.get("current station", "Unknown"),
-            "next station": beacon.get("next station", "Unknown"),
-            "side_door": beacon.get("side_door", "Right"),
-            "passengers_boarding": int(pick(boarding, index, 0)),
+            "commanded speed": cmd_speed,
+            "commanded authority": cmd_auth,
+            "speed limit": speed_lim,
+            "current station": beacon.get("current_station", "Unknown"),
+            "next station": beacon.get("next_stop", "Unknown"),
+            "side_door": beacon.get("station_side", "Right"),
+            "passengers_boarding": int(pick(train_sec.get("passengers_boarding_", []) or [], index, 0)),
             # default controller-related flags
             "engine_failure": False,
             "signal_failure": False,
             "brake_failure": False,
-            "emergency_brake": False
+            "emergency_brake": False,
+            "passengers_onboard": 0
         }
 
         # Ensure root has specs if missing (do not overwrite existing)
@@ -335,7 +351,6 @@ class TrainManager:
             }
 
         train_key = f"train_{train_id}"
-        # Initialize a per-train entry alongside the original root sections
         train_data[train_key] = {
             "inputs": inputs,
             "outputs": {
