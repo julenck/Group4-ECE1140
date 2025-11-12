@@ -24,8 +24,17 @@ class HW_Display(ttk.Frame):
         # left: block picker
         left = ttk.Frame(self)
         ttk.Label(left, text="Blocks").pack(anchor="w")
-        self.block_list = tk.Listbox(left, height=12, exportselection=False)
-        self.block_list.pack(fill="both", expand=True)
+
+        list_frame = ttk.Frame(left)
+        list_frame.pack(fill="both", expand=True)
+
+        self.block_list = tk.Listbox(list_frame, height=12, exportselection=False)
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.block_list.yview)
+        self.block_list.configure(yscrollcommand=vsb.set)
+
+        self.block_list.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
         left.pack(side="left", fill="y", padx=(0, 8))
 
         # right: details
@@ -51,6 +60,13 @@ class HW_Display(ttk.Frame):
         row("Authority (yd)", "authority")
         row("Occupied", "occupied")
         row("Switch", "switch")
+
+        change_wrap = ttk.Frame(grid)
+        ttk.Label(change_wrap, text="Change Switch:").pack(side="left", padx=(0, 6))
+        ttk.Button(change_wrap, text="Left", state="disabled").pack(side="left", padx=2)
+        ttk.Button(change_wrap, text="Right", state="disabled").pack(side="left", padx=2)
+        change_wrap.pack(anchor="w", pady=(2, 6))
+
         row("Light", "light")
         row("Gate", "gate")
         ttk.Separator(grid, orient="horizontal").pack(fill="x", pady=6)
@@ -111,15 +127,6 @@ class HW_Display(ttk.Frame):
         safe = report.get("safe", True)
         reasons = ", ".join(report.get("reasons", []))
         self.show_status(("SAFE" if safe else "NOT SAFE") + (f" — {reasons}" if reasons else ""))
-
-    def set_map_image(self, path: str) -> None:
-        # Optional: older code calls this. We don't render a map in this simple UI.
-        # Provide a no-op so callers don't crash.
-        try:
-            # if Pillow is available we could load it here; keep no-op for now
-            return
-        except Exception:
-            return
 
     def bind_on_select(self, cb: Callable[[str], None]):
         self._on_select = cb
