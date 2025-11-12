@@ -39,23 +39,27 @@ class TrainPair:
         controller: train_controller instance for control logic.
         model_ui: TrainModelUI instance (UI window for train model).
         controller_ui: train_controller_ui instance (UI window for train controller).
+        is_remote_controller: True if controller runs on Raspberry Pi.
     """
     
-    def __init__(self, train_id: int, model, controller, model_ui=None, controller_ui=None):
+    def __init__(self, train_id: int, model, controller=None, model_ui=None, 
+                 controller_ui=None, is_remote_controller: bool = False):
         """Initialize a train pair.
         
         Args:
             train_id: Unique identifier for this train.
             model: TrainModel instance.
-            controller: train_controller instance.
+            controller: train_controller instance (None if remote).
             model_ui: TrainModelUI instance (optional).
-            controller_ui: train_controller_ui instance (optional).
+            controller_ui: train_controller_ui instance (None if remote).
+            is_remote_controller: True if controller runs on Raspberry Pi.
         """
         self.train_id = train_id
         self.model = model
         self.controller = controller
         self.model_ui = model_ui
         self.controller_ui = controller_ui
+        self.is_remote_controller = is_remote_controller
 
 
 class TrainManager:
@@ -97,7 +101,8 @@ class TrainManager:
             with open(self.state_file, 'w') as f:
                 json.dump({}, f, indent=4)
     
-    def add_train(self, train_specs: dict = None, create_uis: bool = True, use_hardware: bool = False) -> int:
+    def add_train(self, train_specs: dict = None, create_uis: bool = True, 
+                  use_hardware: bool = False, is_remote: bool = False) -> int:
         """Add a new train (TrainModel + train_controller pair with UIs).
         
         Creates a new TrainModel and train_controller instance, assigns a unique ID,
@@ -109,6 +114,7 @@ class TrainManager:
                         If None, uses default specifications.
             create_uis: If True, creates UI windows for this train (default: True).
             use_hardware: If True, uses hardware controller UI instead of software (default: False).
+            is_remote: If True, controller runs on Raspberry Pi (not locally).
         
         Returns:
             The train_id of the newly created train.
@@ -131,7 +137,10 @@ class TrainManager:
         # Import appropriate controller based on hardware flag
         if use_hardware:
             from ui.train_controller_hw_ui import train_controller, train_controller_ui
-            print(f"Using HARDWARE controller for train {self.next_train_id}")
+            if is_remote:
+                print(f"Using HARDWARE controller for train {self.next_train_id} (REMOTE - Raspberry Pi)")
+            else:
+                print(f"Using HARDWARE controller for train {self.next_train_id} (LOCAL)")
         else:
             from ui.train_controller_sw_ui import train_controller, train_controller_ui
             print(f"Using SOFTWARE controller for train {self.next_train_id}")
@@ -158,18 +167,27 @@ class TrainManager:
         # Create TrainModel instance
         model = TrainModel(train_specs)
         
-        # NOTE: For hardware controller, the API and controller are created inside train_controller_ui
-        # For software controller, we create them here
-        if not use_hardware:
-            # Create train_controller_api instance for this train
-            api = train_controller_api(train_id=train_id)
-            
-            # Create train_controller instance
-            controller = train_controller(api)
-        else:
-            # Hardware controller creates its own API and controller internally
+        # Controller and API creation depends on hardware/remote flags
+        controller = None
+        api = None
+        
+        if is_remote:
+            # Remote hardware controller on Raspberry Pi
+            # Controller will connect via REST API client
+            print(f"[TrainManager] Train {train_id} controller is REMOTE (Raspberry Pi)")
+            print(f"[TrainManager] Start hardware UI on Raspberry Pi with:")
+            print(f"  python train_controller_hw_ui.py --train-id {train_id} --server http://<server-ip>:5000")
+            # Controller and API remain None - they run on RPi
+        elif use_hardware:
+            # Local hardware controller (same machine with GPIO)
+            # API and controller will be created by UI
+            print(f"[TrainManager] Train {train_id} using LOCAL hardware controller")
             api = None
             controller = None
+        else:
+            # Software controller - create API and controller here
+            api = train_controller_api(train_id=train_id)
+            controller = train_controller(api)
         
         # Create UI instances if requested
         model_ui = None
@@ -183,20 +201,24 @@ class TrainManager:
             y_offset = 50 + (train_id - 1) * 60
             model_ui.geometry(f"1450x900+{x_offset}+{y_offset}")
             
-            # Create Train Controller UI with train_id
-            controller_ui = train_controller_ui(train_id=train_id)
-            # Position controller UI to the right of model UI
-            controller_ui.geometry(f"600x800+{x_offset + 1460}+{y_offset}")
+            # Create Train Controller UI if not remote
+            if not is_remote:
+                controller_ui = train_controller_ui(train_id=train_id)
+                # Position controller UI to the right of model UI
+                controller_ui.geometry(f"600x800+{x_offset + 1460}+{y_offset}")
+                
+                # For hardware controller, get the controller and API references from the UI
+                if use_hardware:
+                    controller = controller_ui.controller
+                    api = controller_ui.api
+            else:
+                # Remote controller - UI will run on Raspberry Pi
+                controller_ui = None
             
-            # For hardware controller, get the controller and API references from the UI
-            if use_hardware:
-                controller = controller_ui.controller
-                api = controller_ui.api
-            
-            print(f"Train {train_id} UIs created (Model and Controller windows)")
+            print(f"Train {train_id} UIs created (Model: Yes, Controller: {'Remote' if is_remote else 'Yes'})")
         
         # Create TrainPair
-        train_pair = TrainPair(train_id, model, controller, model_ui, controller_ui)
+        train_pair = TrainPair(train_id, model, controller, model_ui, controller_ui, is_remote_controller=is_remote)
         
         # Store in dictionary
         self.trains[train_id] = train_pair
@@ -517,25 +539,35 @@ class TrainManagerUI(tk.Tk):
         
         self.controller_type_var = tk.StringVar(value="software")
         
-        hw_radio = tk.Radiobutton(
-            type_frame,
-            text="🔧 Hardware (Raspberry Pi)",
-            variable=self.controller_type_var,
-            value="hardware",
-            font=("Arial", 10),
-            cursor="hand2"
-        )
-        hw_radio.pack(anchor="w", padx=10, pady=5)
-        
         sw_radio = tk.Radiobutton(
             type_frame,
-            text="💻 Software (UI Only)",
+            text="� Software (UI Only)",
             variable=self.controller_type_var,
             value="software",
             font=("Arial", 10),
             cursor="hand2"
         )
         sw_radio.pack(anchor="w", padx=10, pady=5)
+        
+        hw_local_radio = tk.Radiobutton(
+            type_frame,
+            text="🔧 Hardware (Local - this machine)",
+            variable=self.controller_type_var,
+            value="hardware_local",
+            font=("Arial", 10),
+            cursor="hand2"
+        )
+        hw_local_radio.pack(anchor="w", padx=10, pady=5)
+        
+        hw_remote_radio = tk.Radiobutton(
+            type_frame,
+            text="� Hardware (Remote - Raspberry Pi)",
+            variable=self.controller_type_var,
+            value="hardware_remote",
+            font=("Arial", 10),
+            cursor="hand2"
+        )
+        hw_remote_radio.pack(anchor="w", padx=10, pady=5)
         
         # Add Train button (prominent green)
         self.add_button = tk.Button(
@@ -599,14 +631,53 @@ class TrainManagerUI(tk.Tk):
         """Add a new train with UIs."""
         try:
             # Get selected controller type from radio buttons
-            use_hardware = (self.controller_type_var.get() == "hardware")
+            controller_type = self.controller_type_var.get()
             
-            train_id = self.manager.add_train(create_uis=True, use_hardware=use_hardware)
-            self.update_train_list()
-            
-            controller_type = "HARDWARE" if use_hardware else "SOFTWARE"
-            self.update_status(f"Train {train_id} added with {controller_type} controller")
-            print(f"Train {train_id} created with {controller_type} controller and UI windows")
+            if controller_type == "software":
+                train_id = self.manager.add_train(create_uis=True, use_hardware=False, is_remote=False)
+                self.update_train_list()
+                self.update_status(f"Train {train_id} added with SOFTWARE controller")
+                print(f"Train {train_id} created with SOFTWARE controller")
+                
+            elif controller_type == "hardware_local":
+                train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=False)
+                self.update_train_list()
+                self.update_status(f"Train {train_id} added with LOCAL HARDWARE controller")
+                print(f"Train {train_id} created with LOCAL HARDWARE controller")
+                
+            elif controller_type == "hardware_remote":
+                train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True)
+                self.update_train_list()
+                self.update_status(f"Train {train_id} added - START CONTROLLER ON RASPBERRY PI")
+                print(f"Train {train_id} created - REMOTE hardware controller")
+                
+                # Show instructions popup
+                import socket
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    server_ip = s.getsockname()[0]
+                    s.close()
+                except:
+                    server_ip = "localhost"
+                
+                msg = f"""Train {train_id} Model created on this server!
+
+Hardware Controller must run on Raspberry Pi.
+
+═══════════════════════════════════════
+On Raspberry Pi, run:
+
+cd train_controller/ui
+python train_controller_hw_ui.py --train-id {train_id} --server http://{server_ip}:5000
+
+═══════════════════════════════════════
+
+The hardware controller will connect to this server
+and control Train {train_id}."""
+                
+                tk.messagebox.showinfo(f"Train {train_id} - Remote Hardware Setup", msg)
+                
         except Exception as e:
             self.update_status(f"Error adding train: {str(e)}")
             print(f"Error adding train: {e}")
@@ -677,10 +748,20 @@ class TrainManagerUI(tk.Tk):
             self.train_listbox.config(fg="black")
             for train_id in train_ids:
                 train = self.manager.get_train(train_id)
-                ui_status = "✓ UIs" if train.model_ui and train.controller_ui else "⚠ No UIs"
                 
-                # Determine controller type by checking which UI class is used
-                controller_type = "HW" if hasattr(train.controller_ui, 'gpio_leds') else "SW"
+                # Determine controller type
+                if train.is_remote_controller:
+                    controller_type = "HW-Remote"
+                    ui_status = "⚠️ Start on RPi"
+                elif hasattr(train.controller_ui, 'gpio_leds'):
+                    controller_type = "HW-Local"
+                    ui_status = "✓ UIs"
+                else:
+                    controller_type = "SW"
+                    ui_status = "✓ UIs"
+                
+                if not train.model_ui and not train.controller_ui:
+                    ui_status = "⚠ No UIs"
                 
                 self.train_listbox.insert(tk.END, f"Train {train_id} [{controller_type}] - {ui_status}")
         
