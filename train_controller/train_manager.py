@@ -178,16 +178,12 @@ class TrainManager:
             print(f"[TrainManager] Start hardware UI on Raspberry Pi with:")
             print(f"  python train_controller_hw_ui.py --train-id {train_id} --server http://<server-ip>:5000")
             # Controller and API remain None - they run on RPi
-        elif use_hardware:
-            # Local hardware controller (same machine with GPIO)
+        else:
+            # Local controller (software or hardware)
             # API and controller will be created by UI
-            print(f"[TrainManager] Train {train_id} using LOCAL hardware controller")
+            print(f"[TrainManager] Train {train_id} controller will be created by UI")
             api = None
             controller = None
-        else:
-            # Software controller - create API and controller here
-            api = train_controller_api(train_id=train_id)
-            controller = train_controller(api)
         
         # Create UI instances if requested
         model_ui = None
@@ -200,17 +196,23 @@ class TrainManager:
             x_offset = 50 + (train_id - 1) * 60
             y_offset = 50 + (train_id - 1) * 60
             model_ui.geometry(f"1450x900+{x_offset}+{y_offset}")
+            # Ensure the window is visible
+            model_ui.deiconify()
+            model_ui.lift()
             
             # Create Train Controller UI if not remote
             if not is_remote:
                 controller_ui = train_controller_ui(train_id=train_id)
                 # Position controller UI to the right of model UI
                 controller_ui.geometry(f"600x800+{x_offset + 1460}+{y_offset}")
+                # Ensure the window is visible and brought to front
+                controller_ui.deiconify()
+                controller_ui.lift()
+                controller_ui.focus_force()
                 
-                # For hardware controller, get the controller and API references from the UI
-                if use_hardware:
-                    controller = controller_ui.controller
-                    api = controller_ui.api
+                # Get the controller and API references from the UI (both software and hardware)
+                controller = controller_ui.controller
+                api = controller_ui.api
             else:
                 # Remote controller - UI will run on Raspberry Pi
                 controller_ui = None
@@ -410,6 +412,10 @@ class TrainManager:
             if state is None:
                 continue
             
+            # Skip if controller is None (remote controller or managed by own UI)
+            if train_pair.controller is None:
+                continue
+            
             # Update controller from state (beacon, commanded speed/authority)
             train_pair.controller.update_from_train_model()
             
@@ -549,16 +555,6 @@ class TrainManagerUI(tk.Tk):
         )
         sw_radio.pack(anchor="w", padx=10, pady=5)
         
-        hw_local_radio = tk.Radiobutton(
-            type_frame,
-            text="🔧 Hardware (Local - this machine)",
-            variable=self.controller_type_var,
-            value="hardware_local",
-            font=("Arial", 10),
-            cursor="hand2"
-        )
-        hw_local_radio.pack(anchor="w", padx=10, pady=5)
-        
         hw_remote_radio = tk.Radiobutton(
             type_frame,
             text="� Hardware (Remote - Raspberry Pi)",
@@ -638,12 +634,6 @@ class TrainManagerUI(tk.Tk):
                 self.update_train_list()
                 self.update_status(f"Train {train_id} added with SOFTWARE controller")
                 print(f"Train {train_id} created with SOFTWARE controller")
-                
-            elif controller_type == "hardware_local":
-                train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=False)
-                self.update_train_list()
-                self.update_status(f"Train {train_id} added with LOCAL HARDWARE controller")
-                print(f"Train {train_id} created with LOCAL HARDWARE controller")
                 
             elif controller_type == "hardware_remote":
                 train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True)
@@ -753,9 +743,6 @@ and control Train {train_id}."""
                 if train.is_remote_controller:
                     controller_type = "HW-Remote"
                     ui_status = "⚠️ Start on RPi"
-                elif hasattr(train.controller_ui, 'gpio_leds'):
-                    controller_type = "HW-Local"
-                    ui_status = "✓ UIs"
                 else:
                     controller_type = "SW"
                     ui_status = "✓ UIs"
