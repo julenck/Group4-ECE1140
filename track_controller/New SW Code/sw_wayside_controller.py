@@ -219,7 +219,7 @@ class sw_wayside_controller:
             traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start-1))
         else:
             traveled = sug_auth - cmd_auth
-        if traveled >= self.dist_to_EOB(idx):
+        if traveled > self.dist_to_EOB(idx):
             return True
         else:
             return False
