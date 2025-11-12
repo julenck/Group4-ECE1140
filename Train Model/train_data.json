@@ -40,5 +40,65 @@
         "passengers_onboard": 0,
         "passengers_boarding": 14,
         "passengers_disembarking": 0
+    },
+    "train_1": {
+        "inputs": {
+            "commanded speed": 40.0,
+            "commanded authority": 5.0,
+            "speed limit": 30.0,
+            "current station": "Penn Station",
+            "next station": "Park Street",
+            "side_door": "Right",
+            "passengers_boarding": 14,
+            "engine_failure": false,
+            "signal_failure": false,
+            "brake_failure": false,
+            "emergency_brake": false
+        },
+        "outputs": {
+            "velocity_mph": 0.0,
+            "acceleration_ftps2": 0,
+            "position_yds": 0.0,
+            "authority_yds": 1000.0,
+            "station_name": "Station A",
+            "next_station": "Station A",
+            "left_door_open": false,
+            "right_door_open": false,
+            "temperature_F": 69.7500000000004,
+            "door_side": "Right",
+            "passengers_onboard": 0,
+            "passengers_boarding": 14,
+            "passengers_disembarking": 0
+        }
+    },
+    "train_2": {
+        "inputs": {
+            "commanded speed": 67.0,
+            "commanded authority": 10.0,
+            "speed limit": 30.0,
+            "current station": "Penn Station",
+            "next station": "Park Street",
+            "side_door": "Right",
+            "passengers_boarding": 25,
+            "engine_failure": false,
+            "signal_failure": false,
+            "brake_failure": false,
+            "emergency_brake": false
+        },
+        "outputs": {
+            "velocity_mph": 0.0,
+            "acceleration_ftps2": 0,
+            "position_yds": 0.0,
+            "authority_yds": 1000.0,
+            "station_name": "Station A",
+            "next_station": "Station A",
+            "left_door_open": false,
+            "right_door_open": false,
+            "temperature_F": 69.70000000000039,
+            "door_side": "Right",
+            "passengers_onboard": 0,
+            "passengers_boarding": 25,
+            "passengers_disembarking": 0
+        }
     }
 }

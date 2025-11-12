@@ -86,6 +86,10 @@ class TrainManager:
             self.state_file = os.path.join(data_dir, "train_states.json")
         else:
             self.state_file = state_file
+
+        # Extra paths for train_data.json and track model inputs
+        self.train_data_file = os.path.join(train_model_dir, "train_data.json")
+        self.track_model_file = os.path.join(parent_dir, "Track_Model", "track_model_Train_Model.json")
         
         # Ensure state file exists
         self._initialize_state_file()
@@ -203,6 +207,12 @@ class TrainManager:
         
         # Initialize state in JSON file
         self._initialize_train_state(train_id)
+
+        # NEW: Initialize Train Model/train_data.json entry using track model data (index = train_id - 1)
+        try:
+            self._initialize_train_data_entry(train_id, index=train_id - 1)
+        except Exception as e:
+            print(f"Warning: failed to initialize train_data.json for train {train_id}: {e}")
         
         print(f"Train {train_id} created successfully")
         return train_id
@@ -258,6 +268,125 @@ class TrainManager:
         # Write back to file
         with open(self.state_file, 'w') as f:
             json.dump(all_states, f, indent=4)
+
+    # --- NEW: helpers to sync train_data.json with track model inputs ---
+    def _safe_read_json(self, path: str) -> dict:
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+        except json.JSONDecodeError:
+            return {}
+
+    def _safe_write_json(self, path: str, data: dict):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(data, f, indent=4)
+
+    def _initialize_train_data_entry(self, train_id: int, index: int):
+        """Create/initialize Train Model/train_data.json section for this train_id using track model data."""
+        # Read source data
+        track = self._safe_read_json(self.track_model_file)
+        train_data = self._safe_read_json(self.train_data_file)
+
+        block = track.get("block", {})
+        beacon = track.get("beacon", {})
+        train_sec = track.get("train", {})
+
+        def pick(lst, idx, default=0):
+            try:
+                return lst[idx]
+            except Exception:
+                return default
+
+        cmd_speeds = block.get("commanded speed", []) or []
+        cmd_auths = block.get("commanded authority", []) or []
+        boarding = train_sec.get("passengers_boarding_", []) or []
+
+        inputs = {
+            "commanded speed": float(pick(cmd_speeds, index, 0.0)),
+            "commanded authority": float(pick(cmd_auths, index, 0.0)),
+            "speed limit": float(beacon.get("speed limit", 30.0)),
+            "current station": beacon.get("current station", "Unknown"),
+            "next station": beacon.get("next station", "Unknown"),
+            "side_door": beacon.get("side_door", "Right"),
+            "passengers_boarding": int(pick(boarding, index, 0)),
+            # default controller-related flags
+            "engine_failure": False,
+            "signal_failure": False,
+            "brake_failure": False,
+            "emergency_brake": False
+        }
+
+        # Ensure root has specs if missing (do not overwrite existing)
+        if "specs" not in train_data:
+            train_data["specs"] = {
+                "length_ft": 66.0,
+                "width_ft": 10.0,
+                "height_ft": 11.5,
+                "mass_lbs": 90100,
+                "max_power_hp": 161,
+                "max_accel_ftps2": 1.64,
+                "service_brake_ftps2": -3.94,
+                "emergency_brake_ftps2": -8.86,
+                "capacity": 222,
+                "crew_count": 2
+            }
+
+        train_key = f"train_{train_id}"
+        # Initialize a per-train entry alongside the original root sections
+        train_data[train_key] = {
+            "inputs": inputs,
+            "outputs": {
+                "velocity_mph": 0.0,
+                "acceleration_ftps2": 0.0,
+                "position_yds": 0.0,
+                "authority_yds": float(inputs["commanded authority"]),
+                "station_name": inputs["current station"],
+                "next_station": inputs["next station"],
+                "left_door_open": False,
+                "right_door_open": False,
+                "temperature_F": 68.0,
+                "door_side": inputs["side_door"],
+                "passengers_onboard": 0,
+                "passengers_boarding": inputs["passengers_boarding"],
+                "passengers_disembarking": 0
+            }
+        }
+
+        self._safe_write_json(self.train_data_file, train_data)
+
+    def _update_train_data_outputs(self, train_id: int, outputs: dict, state: dict):
+        """Update the per-train outputs in Train Model/train_data.json with latest model values."""
+        train_data = self._safe_read_json(self.train_data_file)
+        train_key = f"train_{train_id}"
+        if train_key not in train_data:
+            # If missing, initialize with index = train_id-1
+            self._initialize_train_data_entry(train_id, max(0, train_id - 1))
+            train_data = self._safe_read_json(self.train_data_file)
+
+        entry = train_data.get(train_key, {})
+        entry_outputs = entry.get("outputs", {})
+
+        # Map outputs we have
+        entry_outputs.update({
+            "velocity_mph": outputs.get("velocity_mph", 0.0),
+            "acceleration_ftps2": outputs.get("acceleration_ftps2", 0.0),
+            "position_yds": outputs.get("position_yds", 0.0),
+            "authority_yds": outputs.get("authority_yds", 0.0),
+            "station_name": outputs.get("station_name", entry_outputs.get("station_name", "Unknown")),
+            "next_station": outputs.get("next_station", entry_outputs.get("next_station", "Unknown")),
+            "left_door_open": outputs.get("left_door_open", False),
+            "right_door_open": outputs.get("right_door_open", False),
+            "temperature_F": outputs.get("temperature_F", entry_outputs.get("temperature_F", 68.0)),
+            "door_side": state.get("station_side", entry_outputs.get("door_side", "Right")),
+            # keep boarding/passengers counts if you manage elsewhere
+        })
+
+        entry["outputs"] = entry_outputs
+        train_data[train_key] = entry
+        self._safe_write_json(self.train_data_file, train_data)
     
     def remove_train(self, train_id: int) -> bool:
         """Remove a train from the manager.
@@ -416,6 +545,12 @@ class TrainManager:
                 "train_temperature": outputs['temperature_F'],
                 "power_command": power
             })
+
+            # NEW: Mirror outputs into Train Model/train_data.json under train_{id}
+            try:
+                self._update_train_data_outputs(train_id, outputs, state)
+            except Exception as e:
+                print(f"Warning: failed to update train_data.json for train {train_id}: {e}")
 
 
 class TrainManagerUI(tk.Tk):
