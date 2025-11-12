@@ -5,7 +5,14 @@ Fails soft on non-Pi so dev laptops can run without hardware.
 
 from __future__ import annotations
 
+import os
 import time
+import logging
+
+LOG = logging.getLogger("lcd_i2c")
+
+# Allow tuning init/write delays via env for stubborn hardware
+_LCD_DELAY = float(os.getenv("LCD_INIT_DELAY", "0.01"))
 try:
     from smbus2 import SMBus
 except Exception:  # not on a Pi or smbus2 not installed
@@ -20,7 +27,14 @@ class I2CLcd:
         if SMBus:
             try:
                 self.bus = SMBus(bus)
-                self._init()
+                # Try a robust init sequence; catch failures and fail soft
+                try:
+                    self._init()
+                    LOG.info("I2C LCD initialized at 0x%02x on bus %s", addr, bus)
+                except Exception as e:
+                    LOG.warning("LCD init failed: %s", e)
+                    # if init failed, mark as not present to avoid later errors
+                    self.bus = None
             except Exception:
                 self.bus = None  # fail soft
 
@@ -33,9 +47,8 @@ class I2CLcd:
         packet = (data & 0xF0) | rs | self.backlight
         self.bus.write_byte(self.addr, packet | en)
         self.bus.write_byte(self.addr, packet)
-        # small pauses are usually not necessary at Python speed, but some
-        # PCF8574 backpacks are slow — a tiny delay prevents garbled output.
-        time.sleep(0.001)
+        # small pause to avoid garbled output on slow backpacks
+        time.sleep(max(0.001, _LCD_DELAY))
 
     def _send(self, value: int, rs: int):
         self._write4(value, rs)
@@ -49,19 +62,22 @@ class I2CLcd:
 
     def _init(self):
         # init sequence for 4-bit mode
-        self._write4(0x30, rs=0)
-        time.sleep(0.005)
-        self._write4(0x30, rs=0)
-        time.sleep(0.005)
-        self._write4(0x20, rs=0)  # 4-bit
-        time.sleep(0.005)
+        # Common robust sequence: send 0x03/0x03/0x02 then function set
+        # (many HD44780 guides use 0x33/0x32 but we use nibble writes here)
+        self._write4(0x03 << 4, rs=0)
+        time.sleep(_LCD_DELAY * 5)
+        self._write4(0x03 << 4, rs=0)
+        time.sleep(_LCD_DELAY * 5)
+        self._write4(0x02 << 4, rs=0)  # set 4-bit mode
+        time.sleep(_LCD_DELAY * 2)
         self._command(0x28)       # 2 lines, 5x8 font
-        time.sleep(0.002)
+        time.sleep(_LCD_DELAY)
         self._command(0x0C)       # display on, cursor off
-        time.sleep(0.002)
+        time.sleep(_LCD_DELAY)
         self._command(0x06)       # entry mode set
-        time.sleep(0.002)
+        time.sleep(_LCD_DELAY)
         self.clear()
+        time.sleep(_LCD_DELAY)
 
     # ---------------- Friendly API ----------------
 
