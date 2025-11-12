@@ -24,6 +24,16 @@ TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")     # trac
 POLL_MS = 500
 ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mph) between CTC updates
 
+# ---------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------
+# (You can override these with env vars if you set up a shared folder)
+IN_FILE    = os.environ.get("WAYSIDE_IN",    "system_feed.json")          # from CTC to Track Controller
+OUT_FILE   = os.environ.get("WAYSIDE_OUT",   "wayside_status.json")       # back to CTC (optional status)
+TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")     # track model snapshot & commands
+POLL_MS = 500
+ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mph) between CTC updates
+
 # ------------------------------------------------------------------------------------
 # JSON I/O
 # ------------------------------------------------------------------------------------
