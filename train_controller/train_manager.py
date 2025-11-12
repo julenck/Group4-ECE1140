@@ -249,8 +249,8 @@ class TrainManager:
             "announcement": "",
             "announce_pressed": False,
             "emergency_brake": False,
-            "kp": 1500.0,
-            "ki": 50.0,
+            "kp": 0,
+            "ki": 0,
             "engineering_panel_locked": False,
             "power_command": 0.0
         }
