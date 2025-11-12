@@ -57,6 +57,35 @@ def _write_ctc_json(data: dict) -> None:
     except Exception as e:
         print(f"[WARN] JSON write failed: {e}")
 
+def _safe_read_track_json() -> dict:
+    """Read the track snapshot file defensively."""
+    if not os.path.exists(TRACK_FILE):
+        return {}
+    try:
+        with open(TRACK_FILE, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception as e:
+        print(f"[WARN] Track file read failed: {e}")
+        return {}
+
+def _atomic_merge_write_track_json(patch: dict) -> None:
+    """
+    Read-modify-write TRACK_FILE and atomically replace it.
+    We only update/insert keys present in 'patch' and preserve everything else.
+    """
+    try:
+        base = _safe_read_track_json()
+        base.update(patch or {})
+        d = os.path.dirname(TRACK_FILE) or "."
+        with tempfile.NamedTemporaryFile("w", delete=False, dir=d, encoding="utf-8") as tmp:
+            json.dump(base, tmp, indent=2)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_path = tmp.name
+        os.replace(tmp_path, TRACK_FILE)
+    except Exception as e:
+        print(f"[WARN] Track file write failed: {e}")
+
 def _make_vital_in(raw: dict) -> dict:
     """Adapt feed into vital-input shape used by controller."""
     return {
@@ -111,14 +140,26 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
     raw = _read_ctc_json()
     vital_in = _make_vital_in(raw)
 
+    track_snapshot = _safe_read_track_json()
+
     merged_status = {"waysides": {}}
 
     for controller, ui, blocks in zip(controllers, uis, blocks_by_ws):
+
         controller.apply_vital_inputs(blocks, vital_in)
+
+        controller.apply_track_snapshot(track_snapshot, limit_blocks=blocks)
+
         status = controller.assess_safety(blocks, vital_in)
         # identify this controller in output
         ws_id = getattr(controller, "wayside_id", "X")
         merged_status["waysides"][ws_id] = status
+
+        n_total = _discover_block_count()
+        cmd = controller.build_commanded_arrays(n_total)
+        # Merge only keys we set; preserve everything else in TRACK_FILE
+        _atomic_merge_write_track_json(cmd)
+
         ui._push_to_display()
 
     _write_ctc_json(merged_status)
