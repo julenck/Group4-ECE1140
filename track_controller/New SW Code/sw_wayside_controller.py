@@ -113,7 +113,7 @@ class sw_wayside_controller:
                 self.light_states[18]=signals[6]
                 self.light_states[19]=signals[7]
                 self.gate_states[1] = crossing[0]
-            self.load_track_outputs()
+            #self.load_track_outputs()
             
             if self.running:
                 threading.Timer(0.2, self.run_plc).start()
@@ -134,7 +134,7 @@ class sw_wayside_controller:
                     "pos": self.active_trains[train]["Train Position"]
 
                 }
-                    self.pos_start = self.active_trains[train]["Train Position"]
+                    self.pos_start = self.active_trains[train]["Train Position"] 
                 else:
                     self.cmd_trains[train] = {
                         "cmd auth": self.active_trains[train]["Suggested Authority"],
@@ -216,7 +216,7 @@ class sw_wayside_controller:
 
     def traveled_enough(self, sug_auth: int, cmd_auth: int, idx: int) -> bool:
         if self.pos_start != 0:
-            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start-1))
+            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start))
         else:
             traveled = sug_auth - cmd_auth
         if traveled > self.dist_to_EOB(idx):
