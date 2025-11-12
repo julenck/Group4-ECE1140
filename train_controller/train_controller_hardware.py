@@ -121,6 +121,28 @@ class train_controller_hardware:
                 else:
                     curr = bool(self.api.get_state().get("manual_mode", False))
                     self.api.update_state({"manual_mode": not curr})
+            elif api_key == "announcement":
+                # Generate announcement text when button pressed
+                state = self.api.get_state()
+                curr_pressed = bool(state.get('announce_pressed', False))
+                new_pressed = not curr_pressed
+                
+                if new_pressed:
+                    # Generate announcement based on station info
+                    next_stop = state.get('next_stop', 'Unknown Station')
+                    station_side = state.get('station_side', 'right').lower()
+                    announcement_text = f"Now approaching {next_stop}. Doors will open on the {station_side}."
+                    self.api.update_state({
+                        'announce_pressed': True,
+                        'announcement': announcement_text
+                    })
+                    print(f"Announcement: {announcement_text}")
+                else:
+                    # Clear announcement
+                    self.api.update_state({
+                        'announce_pressed': False,
+                        'announcement': ''
+                    })
             else:
                 # non-vital toggles: update API directly
                 curr = bool(self.api.get_state().get(api_key, False))
