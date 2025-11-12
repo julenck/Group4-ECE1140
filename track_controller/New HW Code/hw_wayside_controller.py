@@ -237,33 +237,32 @@ class HW_Wayside_Controller:
     # ---------------- Train progress (SW parity) -----------------
 
     def _init_train_position(self) -> None:
-        """Pick an initial block for the simulated train."""
-        candidate: Optional[int] = None
 
-        # Prefer an occupied block within our partition
-        for b in self.block_ids:
-            if b in self._occ_track or b in self._occ_ctc:
-                candidate = int(b)
-                break
+        occ_in_partition = []
+        part = set(self.block_ids)
+        for b in self._occ_track:
+            if b in part:
+                occ_in_partition.append(int(b))
+        for b in self._occ_ctc:
+            if b in part:
+                occ_in_partition.append(int(b))
 
-        # Fallback to the first block of our partition encountered in green_order
-        if candidate is None:
-            limit_set = set(self.block_ids)
-            for bb in self.green_order:
-                if str(bb) in limit_set:
-                    candidate = bb
-                    break
-
-        if candidate is None:
+        # If nothing is occupied, do NOT assume a train exists
+        if not occ_in_partition:
             return
 
+        # Choose the first occupied block along the direction in green_order
         try:
+            # Sort occupied candidates by their index in green_order and take the earliest
+            occ_in_partition.sort(key=lambda bb: self.green_order.index(bb))
+            candidate = occ_in_partition[0]
             idx = self.green_order.index(candidate)
         except ValueError:
-            return
+            return  # safety: if any block isn't in green_order
 
         self._train_idx = idx
         self._train_block = str(candidate)
+        # Load distance to end-of-block
         self._remaining_m = float(self.block_eob_m[idx]) if idx < len(self.block_eob_m) else None
         if self._auth_start_m is None:
             self._auth_start_m = self._authority_yds * _YARD_TO_M
