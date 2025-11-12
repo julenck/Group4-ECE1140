@@ -26,7 +26,7 @@ route_info = {
 
     # inlcudes length of next station block but not current station block
     # 1000 meters to glenbury because assuming 100 meters from yard to start of K 
-    "Meters to next": [1000,600,2686.6,600,715,952,540,450,450,1859,1050,850,700,800,1200,1150,400,396,450,100,0]
+    "Meters to next": [500,600,2686.6,600,715,952,540,450,450,1859,1050,850,700,800,1200,1150,400,396,450,100,0]
 }
 
 route_lookup_via_station = {}

@@ -14,10 +14,15 @@ from hw_wayside_controller import HW_Wayside_Controller
 from hw_display import HW_Display
 from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 
-IN_FILE = "system_feed.json"         # from CTC to Track Controller
-OUT_FILE = "wayside_status.json"     # back to CTC
-TRACK_FILE = "track_to_wayside.json" # used to discover real block count (G-Occupancy)
+# ---------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------
+# (You can override these with env vars if you set up a shared folder)
+IN_FILE    = os.environ.get("WAYSIDE_IN",    "system_feed.json")          # from CTC to Track Controller
+OUT_FILE   = os.environ.get("WAYSIDE_OUT",   "wayside_status.json")       # back to CTC (optional status)
+TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")     # track model snapshot & commands
 POLL_MS = 500
+ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mph) between CTC updates
 
 # ---------------------------------------------------------------------
 # Config
@@ -163,11 +168,14 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
             controller.tick_authority_decay()
 
         controller.apply_track_snapshot(track_snapshot, limit_blocks=blocks)
+        controller.tick_train_progress()
 
         status = controller.assess_safety(blocks, vital_in)
         # identify this controller in output
         ws_id = getattr(controller, "wayside_id", "X")
         merged_status["waysides"][ws_id] = status
+
+        ui._push_to_display()
 
         n_total = _discover_block_count()
         cmd = controller.build_commanded_arrays(n_total)
