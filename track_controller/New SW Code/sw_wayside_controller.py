@@ -134,7 +134,7 @@ class sw_wayside_controller:
                     "pos": self.active_trains[train]["Train Position"]
 
                 }
-                    self.pos_start = self.active_trains[train]["Train Position"] 
+                    self.pos_start = self.idx
                 else:
                     self.cmd_trains[train] = {
                         "cmd auth": self.active_trains[train]["Suggested Authority"],
@@ -153,6 +153,7 @@ class sw_wayside_controller:
             
             
             auth = auth - speed
+            
             if auth <= 0:
                 auth = 0
                 with self.file_lock:
@@ -169,8 +170,8 @@ class sw_wayside_controller:
             sug_auth = self.active_trains[cmd_train]["Suggested Authority"]
 
 
-            if (self.traveled_enough(sug_auth, auth, self.idx)):
-                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos, self.idx)
+            if (self.traveled_enough(sug_auth, auth)):
+                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos)
                 self.idx += 1
 
 
@@ -213,17 +214,18 @@ class sw_wayside_controller:
 
         return block_dist[idx]
 
-    def traveled_enough(self, sug_auth: int, cmd_auth: int, idx: int) -> bool:
+    def traveled_enough(self, sug_auth: int, cmd_auth: int) -> bool:
         if self.pos_start != 0:
-            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start))
+            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.pos_start)
+            
         else:
             traveled = sug_auth - cmd_auth
-        if traveled > self.dist_to_EOB(idx):
+        if traveled > self.dist_to_EOB(self.idx):
             return True
         else:
             return False
 
-    def get_next_block(self, current_block: int, block_idx: int):
+    def get_next_block(self, current_block: int):
 
         self.occupied_blocks[current_block] = 0
         
@@ -234,8 +236,8 @@ class sw_wayside_controller:
             self.idx = 0
             return -1
         else:
-            self.occupied_blocks[self.green_order[block_idx + 1]] = 1
-            return self.green_order[block_idx + 1]
+            self.occupied_blocks[self.green_order[self.idx + 1]] = 1
+            return self.green_order[self.idx + 1]
 
 
     def override_light(self, block_id: int, state: int):
