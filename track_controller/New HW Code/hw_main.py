@@ -8,6 +8,7 @@ os.environ["TK_SILENCE_DEPRECATION"] = "1"
 import tkinter as tk
 from typing import List, Dict
 import json
+import tempfile
 
 from hw_wayside_controller import HW_Wayside_Controller
 from hw_display import HW_Display
