@@ -27,7 +27,6 @@
     "engineering_panel_locked": false,
     "power_command": 0.0,
     "train_1": {
-        "train_id": 1,
         "commanded_speed": 60.0,
         "commanded_authority": 1000.0,
         "speed_limit": 60.0,
@@ -39,12 +38,12 @@
         "signal_failure": false,
         "brake_failure": false,
         "manual_mode": false,
-        "driver_velocity": 0.0,
+        "driver_velocity": 40.0,
         "service_brake": false,
         "right_door": false,
         "left_door": false,
-        "interior_lights": true,
-        "exterior_lights": true,
+        "interior_lights": false,
+        "exterior_lights": false,
         "set_temperature": 70.0,
         "temperature_up": false,
         "temperature_down": false,
@@ -54,7 +53,8 @@
         "kp": 0,
         "ki": 0,
         "engineering_panel_locked": false,
-        "power_command": 0.0
+        "power_command": 0,
+        "train_id": 1
     },
     "train_2": {
         "train_id": 2,
