@@ -6,7 +6,6 @@ One UI window per wayside. Mirrors the SW UI shape but stays minimal.
 
 from __future__ import annotations
 from datetime import time
-import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import Optional
@@ -216,19 +215,26 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             self._update_lcd_for(block)
 
     def _update_lcd_for(self, block_id: str | None):
-        # Use a process-wide shared LCD helper so both waysides can write
-        # separate rows: Wayside A -> row 0, Wayside B -> row 1.
+
         global _SHARED_LCD
+
         try:
             if _SHARED_LCD is None:
+
                 from lcd_i2c_wayside_hw import I2CLcd
                 _SHARED_LCD = I2CLcd(bus=1, addr=0x27)
+            
+                time.sleep(0.15)
+
                 try:
-                    # clear once on first init to avoid leftover gibberish
                     if _SHARED_LCD.present():
-                        _SHARED_LCD.clear()
+
+                        _SHARED_LCD.clear()  
+                        time.sleep(0.02)    
+                    else:
+                        return  
                 except Exception:
-                    pass
+                    return
         except Exception:
             _SHARED_LCD = None
 
@@ -239,8 +245,6 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         spd = int(float(st.get("speed_mph", 0)))
         auth = int(st.get("authority_yards", 0))
 
-        # Only Wayside B should write to the physical LCD. Everything about
-        # Wayside A is ignored per the user's request.
         try:
             wid = getattr(self.controller, "wayside_id", "").upper()
         except Exception:
@@ -249,15 +253,22 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         if wid != "B":
             return
 
-        # Format two lines for Wayside B:
-        # Line 0: "Blk:XXX Spd:YYY"  (fits within 16 chars)
-        # Line 1: "Auth: ZZZZ yd"     (fits within 16 chars)
-        blk = str(block_id)[:6] if block_id else "-"
+        def _sanitize(s: str) -> str:
+            return "".join(ch if 32 <= ord(ch) <= 126 else " " for ch in s)
+
+        blk = _sanitize(str(block_id))[:6] if block_id else "-"
         line0 = f"Blk:{blk:<6} Spd:{spd:3d}"[:16]
         line1 = f"Auth:{auth:5d} yd"[:16]
+
         try:
             _SHARED_LCD.write_line(0, line0)
             _SHARED_LCD.write_line(1, line1)
         except Exception:
-            # fail soft — don't let LCD issues crash the UI
-            pass
+        # --- ADDED: one-shot reinit on bus hiccup, then give up silently
+            try:
+                _SHARED_LCD.clear()
+                time.sleep(0.02)
+                _SHARED_LCD.write_line(0, line0)
+                _SHARED_LCD.write_line(1, line1)
+            except Exception:
+                pass
