@@ -23,6 +23,16 @@ TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")     # trac
 POLL_MS = 500
 ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mph) between CTC updates
 
+# ---------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------
+# (You can override these with env vars if you set up a shared folder)
+IN_FILE    = os.environ.get("WAYSIDE_IN",    "system_feed.json")          # from CTC to Track Controller
+OUT_FILE   = os.environ.get("WAYSIDE_OUT",   "wayside_status.json")       # back to CTC (optional status)
+TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")     # track model snapshot & commands
+POLL_MS = 500
+ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mph) between CTC updates
+
 # ------------------------------------------------------------------------------------
 # JSON I/O
 # ------------------------------------------------------------------------------------
@@ -88,6 +98,35 @@ def _read_ctc_json() -> dict:
         "occupied_blocks": [],      # occupancy comes from TRACK_FILE, not this file
         "closed_blocks": closed,
     }
+
+def _safe_read_track_json() -> dict:
+    """Read the track snapshot file defensively."""
+    if not os.path.exists(TRACK_FILE):
+        return {}
+    try:
+        with open(TRACK_FILE, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception as e:
+        print(f"[WARN] Track file read failed: {e}")
+        return {}
+
+def _atomic_merge_write_track_json(patch: dict) -> None:
+    """
+    Read-modify-write TRACK_FILE and atomically replace it.
+    We only update/insert keys present in 'patch' and preserve everything else.
+    """
+    try:
+        base = _safe_read_track_json()
+        base.update(patch or {})
+        d = os.path.dirname(TRACK_FILE) or "."
+        with tempfile.NamedTemporaryFile("w", delete=False, dir=d, encoding="utf-8") as tmp:
+            json.dump(base, tmp, indent=2)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_path = tmp.name
+        os.replace(tmp_path, TRACK_FILE)
+    except Exception as e:
+        print(f"[WARN] Track file write failed: {e}")
 
 def _safe_read_track_json() -> dict:
     """Read the track snapshot file defensively."""
@@ -191,6 +230,8 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
 
     track_snapshot = _safe_read_track_json()
 
+    merged_status = {"waysides": {}}
+
     for controller, ui, blocks in zip(controllers, uis, blocks_by_ws):
 
         controller.apply_vital_inputs(blocks, vital_in)
@@ -199,10 +240,16 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
             controller.tick_authority_decay()
 
         controller.apply_track_snapshot(track_snapshot, limit_blocks=blocks)
-        controller.tick_train_progress()
 
-        # PLC run uses the last occupancy snapshot to compute commanded states
-        controller.run_plc()
+        status = controller.assess_safety(blocks, vital_in)
+        # identify this controller in output
+        ws_id = getattr(controller, "wayside_id", "X")
+        merged_status["waysides"][ws_id] = status
+
+        n_total = _discover_block_count()
+        cmd = controller.build_commanded_arrays(n_total)
+        # Merge only keys we set; preserve everything else in TRACK_FILE
+        _atomic_merge_write_track_json(cmd)
 
         ui._push_to_display()
 
