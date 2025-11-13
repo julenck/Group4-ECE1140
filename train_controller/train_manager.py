@@ -261,11 +261,11 @@ class TrainManager:
         block = track.get("block", {})
         beacon = track.get("beacon", {})
 
-        commanded_speed = float(block.get("commanded_speed", 60.0))
-        commanded_authority = float(block.get("commanded_authority", 1000.0))
-        speed_limit = float(beacon.get("speed_limit", 60.0))
-        next_stop = beacon.get("next_stop", "Station A")
-        station_side = beacon.get("station_side", "Right")
+        commanded_speed = float(block.get("commanded_speed", 0.0))
+        commanded_authority = float(block.get("commanded_authority", 0.0))
+        speed_limit = float(beacon.get("speed_limit", 0.0))
+        next_stop = beacon.get("next_stop", "")
+        station_side = beacon.get("station_side", "")
 
         # Default state for new train (matches track inputs)
         all_states[train_key] = {
@@ -276,18 +276,21 @@ class TrainManager:
             "train_velocity": 0.0,
             "next_stop": next_stop,
             "station_side": station_side,
-            "train_temperature": 68.0,
-            "engine_failure": False,
-            "signal_failure": False,
-            "brake_failure": False,
+            "train_temperature": 0.0,
+            "train_model_engine_failure": False,
+            "train_model_signal_failure": False,
+            "train_model_brake_failure": False,
+            "train_controller_engine_failure": False,
+            "train_controller_signal_failure": False,
+            "train_controller_brake_failure": False,
             "manual_mode": False,
             "driver_velocity": 0.0,
             "service_brake": False,
             "right_door": False,
             "left_door": False,
-            "interior_lights": True,
-            "exterior_lights": True,
-            "set_temperature": 70.0,
+            "interior_lights": False,
+            "exterior_lights": False,
+            "set_temperature": 0.0,
             "temperature_up": False,
             "temperature_down": False,
             "announcement": "",
@@ -342,19 +345,19 @@ class TrainManager:
 
         cmd_speed = float(pick_val(block.get("commanded_speed", 0.0), index, 0.0))
         cmd_auth = float(pick_val(block.get("commanded_authority", 0.0), index, 0.0))
-        speed_lim = float(beacon.get("speed_limit", 30.0))
+        speed_lim = float(beacon.get("speed_limit", 0.0))
         inputs = {
             "commanded speed": cmd_speed,
             "commanded authority": cmd_auth,
             "speed limit": speed_lim,
-            "current station": beacon.get("current_station", "Unknown"),
-            "next station": beacon.get("next_stop", "Unknown"),
-            "side_door": beacon.get("station_side", "Right"),
+            "current station": beacon.get("current_station", ""),
+            "next station": beacon.get("next_stop", ""),
+            "side_door": beacon.get("station_side", ""),
             "passengers_boarding": int(pick(train_sec.get("passengers_boarding_", []) or [], index, 0)),
-            # default controller-related flags
-            "engine_failure": False,
-            "signal_failure": False,
-            "brake_failure": False,
+            # Train Model failure flags
+            "train_model_engine_failure": False,
+            "train_model_signal_failure": False,
+            "train_model_brake_failure": False,
             "emergency_brake": False,
             "passengers_onboard": 0
         }
@@ -386,7 +389,7 @@ class TrainManager:
                 "next_station": inputs["next station"],
                 "left_door_open": False,
                 "right_door_open": False,
-                "temperature_F": 68.0,
+                "temperature_F": 0.0,
                 "door_side": inputs["side_door"],
                 "passengers_onboard": 0,
                 "passengers_boarding": inputs["passengers_boarding"],
@@ -570,14 +573,14 @@ class TrainManager:
             outputs = train_pair.model.update(
                 commanded_speed=state.get("commanded_speed", 0),
                 commanded_authority=state.get("commanded_authority", 0),
-                speed_limit=state.get("speed_limit", 30),
-                current_station=state.get("next_stop", "Unknown"),
-                next_station=state.get("next_stop", "Unknown"),
-                side_door=state.get("station_side", "Right"),
+                speed_limit=state.get("speed_limit", 0),
+                current_station=state.get("next_stop", ""),
+                next_station=state.get("next_stop", ""),
+                side_door=state.get("station_side", ""),
                 power_command=power,
                 emergency_brake=state.get("emergency_brake", False),
                 service_brake=state.get("service_brake", False),
-                set_temperature=state.get("set_temperature", 70.0),
+                set_temperature=state.get("set_temperature", 0.0),
                 left_door=state.get("left_door", False),
                 right_door=state.get("right_door", False)
             )
