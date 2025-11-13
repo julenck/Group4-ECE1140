@@ -23,15 +23,6 @@ TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")           
 POLL_MS = 500
 ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed 
 
-# ---------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------
-# (You can override these with env vars if you set up a shared folder)
-IN_FILE    = os.environ.get("WAYSIDE_IN",    "system_feed.json")          # from CTC to Track Controller
-OUT_FILE   = os.environ.get("WAYSIDE_OUT",   "wayside_status.json")       # back to CTC (optional status)
-TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")     # track model snapshot & commands
-POLL_MS = 500
-ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mph) between CTC updates
 
 # ------------------------------------------------------------------------------------
 # JSON I/O
@@ -39,6 +30,13 @@ ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mp
 
 def _read_ctc_json() -> dict:
 
+    """
+    Safely read incoming CTC feed from ctc_track_controller.json and adapt it
+    into the flat shape our HW controller expects:
+      - speed_mph / authority_yards : taken from the first Active train
+      - occupied_blocks             : all Active train positions
+      - closed_blocks               : from Block Closure
+    """
     defaults = {
         "speed_mph": 0.0,
         "authority_yards": 0,
@@ -51,61 +49,61 @@ def _read_ctc_json() -> dict:
         return defaults
 
     try:
-
         with open(IN_FILE, "r", encoding="utf-8") as f:
             raw = json.load(f) or {}
-
     except Exception as e:
-
         print(f"[WARN] JSON read failed: {e}")
         return defaults
 
-    trains = raw.get("Trains")
+    trains = raw.get("Trains", {}) or {}
 
-    if not isinstance(trains, dict) or not trains:
+    occupied: list[int] = []
+    speed = 0.0
+    auth = 0
 
-        # No trains → just return zeros / defaults
-        return defaults
-
-    chosen = None
-
-    # Prefer an active train
-    for _, tdata in trains.items():
-
+    for tid, tinfo in trains.items():
+        # Active flag: may be int, str, or empty
+        active_val = tinfo.get("Active", 0)
         try:
-            if int(tdata.get("Active", 0)) == 1:
-                chosen = tdata
-                break
+            active = int(active_val) == 1
+        except (TypeError, ValueError):
+            active = False
 
-        except Exception:
+        if not active:
             continue
 
-    # If nothing is active, fall back to Train 1 if present
-    if chosen is None:
-        chosen = trains.get("Train 1")
-
-    if chosen is None:
-        speed = 0.0
-        auth = 0
-    else:
+        # Train position -> an occupied block
+        pos_val = tinfo.get("Train Position", "")
         try:
-            speed = float(chosen.get("Suggested Speed", 0.0))
-        except Exception:
-            speed = 0.0
-        try:
-            auth = int(chosen.get("Suggested Authority", 0))
-        except Exception:
-            auth = 0
+            pos_int = int(pos_val)
+        except (TypeError, ValueError):
+            pos_int = None
 
-    closed = list(raw.get("Block Closure", []))
+        if pos_int is not None:
+            occupied.append(pos_int)
 
-    return {
-        "speed_mph": speed,
-        "authority_yards": auth,
-        "emergency": False,         
-        "occupied_blocks": [],      # occupancy comes from TRACK_FILE, not this file
-        "closed_blocks": closed,
-    }
+        # Take speed/auth from the *first* active train
+        if speed == 0.0 and auth == 0:
+            s_val = tinfo.get("Suggested Speed", 0) or 0
+            # Handle your typo "Suggestd Authority" as well
+            a_val = (tinfo.get("Suggested Authority")
+                     or tinfo.get("Suggestd Authority")
+                     or 0)
+            try:
+                speed = float(s_val)
+            except (TypeError, ValueError):
+                speed = 0.0
+            try:
+                auth = int(a_val)
+            except (TypeError, ValueError):
+                auth = 0
+
+    defaults["speed_mph"] = speed
+    defaults["authority_yards"] = auth
+    defaults["occupied_blocks"] = occupied
+    defaults["closed_blocks"] = list(raw.get("Block Closure", []))
+
+    return defaults
 
 def _safe_read_track_json() -> dict:
     
