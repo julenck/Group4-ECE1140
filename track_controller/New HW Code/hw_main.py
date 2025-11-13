@@ -278,7 +278,7 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
 
     for controller in controllers:
 
-        occ = controller.build_occupancy_array(n_total)
+        occ = controller.build_commanded_arrays(n_total)
         combined_occ = [max(a, b) for a, b in zip(combined_occ, occ)]
     _write_ctc_occupancy(combined_occ)
 
