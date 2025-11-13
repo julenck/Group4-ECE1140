@@ -60,6 +60,7 @@ class HW_Wayside_Controller:
         self._emergency = False
         self._speed_mph = 0.0
         self._authority_yds = 0
+        self._ctc_authority_yds: int = 0
         self._last_auth_ts: Optional[float] = None  # for local authority decay
         self._closed: set[str] = set()
 
@@ -169,14 +170,20 @@ class HW_Wayside_Controller:
         with self._lock:
             self._speed_mph = float(speed_mph)
 
-            new_auth = int(authority_yards)
-            # Reset decay baseline when external authority changes
-            if new_auth != self._authority_yds:
+            # --- CHANGED: treat CTC authority separately from our decayed authority ---
+            try:
+                new_auth = int(authority_yards)
+            except (TypeError, ValueError):
+                new_auth = 0
+
+            if new_auth != self._ctc_authority_yds:
+                # CTC actually changed the command -> reset our local authority to match
+                self._ctc_authority_yds = new_auth
                 self._authority_yds = new_auth
                 self._last_auth_ts = None
                 self._auth_start_m = self._authority_yds * _YARD_TO_M
             else:
-                self._authority_yds = new_auth
+                # CTC is still sending the same value -> KEEP our decayed authority
                 if self._auth_start_m is None:
                     self._auth_start_m = self._authority_yds * _YARD_TO_M
 
