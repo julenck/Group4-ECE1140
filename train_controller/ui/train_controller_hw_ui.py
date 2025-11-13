@@ -8,6 +8,7 @@ from tkinter import ttk
 import os
 import sys
 import time
+import argparse
 
 try:
     from gpiozero import LED, Button # type: ignore
@@ -25,8 +26,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-#import API
-from api.train_controller_api import train_controller_api
+# API imports will be done conditionally based on server_url parameter
 #import hardware
 from train_controller_hardware import train_controller_hardware
 
@@ -257,12 +257,38 @@ class train_controller:
 
 class train_controller_ui(tk.Tk):
 
-    def __init__(self):
+    def __init__(self, train_id=1, server_url=None, timeout=5.0):
+        """Initialize the hardware driver interface.
+        
+        Args:
+            train_id: Train ID for multi-train support. Defaults to 1.
+            server_url: If provided, uses REST API client to connect to remote server.
+                       If None, uses local file-based API (default).
+                       Example: "http://192.168.1.100:5000"
+            timeout: Network timeout in seconds for remote API (default: 5.0).
+        """
         super().__init__()
 
+        self.train_id = train_id
+        self.server_url = server_url
+        
+        # Initialize API based on server_url parameter
+        if server_url:
+            # Remote mode - use client API
+            from api.train_controller_api_client import train_controller_api_client
+            self.api = train_controller_api_client(train_id=train_id, server_url=server_url, timeout=timeout)
+            print(f"[HW UI] Using REMOTE API: {server_url} (timeout: {timeout}s)")
+        else:
+            # Local mode - use file-based API
+            from api.train_controller_api import train_controller_api
+            self.api = train_controller_api(train_id=train_id)
+            print(f"[HW UI] Using LOCAL API (file-based)")
 
         #set window title and size
-        self.title("Train Controller - Hardware Driver Interface")
+        title = f"Train {train_id} - Hardware Controller" if train_id else "Train Controller - Hardware Driver Interface"
+        if server_url:
+            title += " [REMOTE]"
+        self.title(title)
         self.geometry("1200x700")
         self.minsize(900, 600)
 
@@ -276,9 +302,6 @@ class train_controller_ui(tk.Tk):
         style.configure("TLabelframe.Label", font=heading_font)
         style.configure("Treeview.Heading", font=tree_heading_font)
         style.configure("Treeview", font=tree_default_font, rowheight=28)
-
-        # Initialize API
-        self.api = train_controller_api()
 
         # Defining button colors
         self.active_color = "#ff4444"
@@ -334,10 +357,12 @@ class train_controller_ui(tk.Tk):
             ("Commanded Authority", "", "yards"),
             ("Speed Limit", "", "mph"),
             ("Current Speed", "", "mph"),
+            ("Driver Set Speed", "", "mph"),  # Add driver_velocity display
             ("Power Availability", "", "W"),
             ("Cabin Temperature", "", "F°"),
             ("Station Side", "", "Left/Right"),
             ("Next Station", "", "Station"),
+            ("Announcement", "", ""),  # Add announcement row
             ("Failure(s)", "", "Type(s)"),
             ("Mode", "", "")
         ]
@@ -360,8 +385,9 @@ class train_controller_ui(tk.Tk):
         for idx, status in enumerate(statuses):
             r = idx // 3
             c = idx % 3
+            # Create read-only display buttons (no command - hardware controlled)
             b = tk.Button(button_frame, text=status, width=22, height=3, 
-                           bg="#f0f0f0", command=lambda s=status: self.toggle_status(s))
+                           bg="#f0f0f0", state="disabled", relief="raised")
             b.grid(row=r, column=c, padx=10, pady=8, sticky="nsew")
             button_frame.grid_columnconfigure(c, weight=1)
             self.status_buttons[status] = {"button": b, "active": False}
@@ -371,12 +397,12 @@ class train_controller_ui(tk.Tk):
         engineering_frame.pack(side="right", fill="y", ipadx=6)
 
         ttk.Label(engineering_frame, text="Kp:").grid(row=0, column=0, sticky="w", pady=(2,6))
-        self.kp_var = tk.StringVar(value="0.5")
+        self.kp_var = tk.StringVar(value="0.0")
         self.kp_entry = ttk.Entry(engineering_frame, textvariable=self.kp_var, width=20)
         self.kp_entry.grid(row=0, column=1, pady=(2,6))
 
         ttk.Label(engineering_frame, text="Ki:").grid(row=1, column=0, sticky="w", pady=(2,6))
-        self.ki_var = tk.StringVar(value="0.1")
+        self.ki_var = tk.StringVar(value="0.0")
         self.ki_entry = ttk.Entry(engineering_frame, textvariable=self.ki_var, width=20)
         self.ki_entry.grid(row=1, column=1, pady=(2,6))
 
@@ -440,6 +466,8 @@ class train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", f"{state['speed_limit']:.1f}")
                 elif param == "Current Speed":
                     self.info_treeview.set(iid, "value", f"{state['train_velocity']:.1f}")
+                elif param == "Driver Set Speed":
+                    self.info_treeview.set(iid, "value", f"{state.get('driver_velocity', 0):.1f}")
                 elif param == "Power Availability":
                     self.info_treeview.set(iid, "value", f"{state['power_command']:.1f}")
                 elif param == "Cabin Temperature":
@@ -448,6 +476,11 @@ class train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", state.get('station_side', ''))
                 elif param == "Next Station":
                     self.info_treeview.set(iid, "value", state.get('next_stop', ''))
+                elif param == "Announcement":
+                    # Display the announcement text
+                    announcement = state.get('announcement', '')
+                    display_text = announcement if announcement else "None"
+                    self.info_treeview.set(iid, "value", display_text)
                 elif param == "Mode":
                     self.info_treeview.set(iid, "value", state.get('mode', ''))
                 elif param == "Failure(s)":
@@ -491,7 +524,7 @@ class train_controller_ui(tk.Tk):
             "Interior Lights": bool(state.get('interior_lights', False)),
             "Left Door": bool(state.get('left_door', False)),
             "Right Door": bool(state.get('right_door', False)),
-            "Announcement": bool(state.get('announcement', '')),
+            "Announcement": bool(state.get('announce_pressed', False)),  # Show if announcement active
             "Service Brake": bool(state.get('service_brake', False)),
             "Emergency Brake": bool(state.get('emergency_brake', False)),
             "Mode": not bool(state.get('manual_mode', False))  # True if automatic mode
@@ -502,10 +535,11 @@ class train_controller_ui(tk.Tk):
                 continue
             entry["active"] = val
             btn = entry["button"]
+            # Update colors even though button is disabled
             if val:
-                btn.config(bg=self.active_color, fg="white")
+                btn.config(bg=self.active_color, fg="white", disabledforeground="white")
             else:
-                btn.config(bg=self.inactive_color, fg="black")
+                btn.config(bg=self.inactive_color, fg="black", disabledforeground="black")
             # If gpiozero LEDs are present, mirror status to physical LED
             try:
                 if GPIOZERO_AVAILABLE:
@@ -519,23 +553,6 @@ class train_controller_ui(tk.Tk):
                             led.off()
             except Exception as e:
                 print(f"LED update error for {name}: {e}")
-
-    def toggle_status(self, name):
-        """Toggle API flag for a UI status button and refresh indicators."""
-        try:
-            # Mode uses controller.toggle_mode()
-            if name == "Mode":
-                self.controller.toggle_mode()
-            else:
-                key = name.lower().replace(' ', '_')
-                curr = bool(self.api.get_state().get(key, False))
-                self.api.update_state({key: not curr})
-
-            # Immediately refresh UI + hardware LEDs
-            state = self.api.get_state()
-            self.update_status_indicators(state)
-        except Exception as e:
-            print(f"toggle_status error for {name}: {e}")
 
     def lock_engineering_values(self):
         """Lock Kp and Ki values."""
@@ -662,5 +679,29 @@ class commanded_speed_authority:
         self.commanded_authority = 'commanded_authority'
 
 if __name__ == "__main__":
-    app = train_controller_ui()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Train Controller Hardware UI")
+    parser.add_argument("--train-id", type=int, default=1, 
+                       help="Train ID to control (default: 1)")
+    parser.add_argument("--server", type=str, default=None,
+                       help="Server URL for remote API (e.g., http://192.168.1.100:5000). If not provided, uses local file-based API.")
+    parser.add_argument("--timeout", type=float, default=5.0,
+                       help="Network timeout in seconds for remote API (default: 5.0)")
+    args = parser.parse_args()
+    
+    print("=" * 70)
+    print("  HARDWARE TRAIN CONTROLLER UI")
+    print("=" * 70)
+    print(f"  Train ID: {args.train_id}")
+    if args.server:
+        print(f"  Mode: REMOTE (Raspberry Pi)")
+        print(f"  Server: {args.server}")
+        print(f"  Timeout: {args.timeout}s")
+    else:
+        print(f"  Mode: LOCAL (file-based)")
+    print("=" * 70)
+    print()
+    
+    # Create and run app
+    app = train_controller_ui(train_id=args.train_id, server_url=args.server, timeout=args.timeout)
     app.mainloop()

@@ -6,7 +6,12 @@ for communication between Train Controller and Train Model modules.
 
 import json
 import os
+import threading
 from typing import Dict, Optional
+
+# Global file lock for thread-safe access to train_states.json
+# Using RLock (reentrant lock) to allow same thread to acquire lock multiple times
+_file_lock = threading.Lock()
 
 class train_controller_api:
     """Manages train state persistence and module communication using JSON."""
@@ -54,8 +59,8 @@ class train_controller_api:
             'announcement': '',         # current announcement
             'announce_pressed': False,  # tracks if announcement button is pressed
             'emergency_brake': False,   # emergency brake state
-            'kp': 1500.0,                 # proportional gain - balanced for quick response without saturation
-            'ki': 50.0,                 # integral gain - eliminates steady-state error
+            'kp': 0.0,                  # proportional gain - default to 0 until set by user
+            'ki': 0.0,                  # integral gain - default to 0 until set by user
             'engineering_panel_locked': False,  # engineering panel state
             
             # Outputs TO Train Model
@@ -115,33 +120,34 @@ class train_controller_api:
         Returns:
             dict: Current state of the train. Returns default state if there are any issues.
         """
-        try:
-            if os.path.exists(self.state_file):
-                with open(self.state_file, 'r') as f:
-                    try:
-                        all_states = json.load(f)
-                        
-                        # If train_id is specified, read from train_X section
-                        if self.train_id is not None:
-                            train_key = f"train_{self.train_id}"
-                            if train_key in all_states:
-                                return all_states[train_key]
+        with _file_lock:
+            try:
+                if os.path.exists(self.state_file):
+                    with open(self.state_file, 'r') as f:
+                        try:
+                            all_states = json.load(f)
+                            
+                            # If train_id is specified, read from train_X section
+                            if self.train_id is not None:
+                                train_key = f"train_{self.train_id}"
+                                if train_key in all_states:
+                                    return all_states[train_key]
+                                else:
+                                    # Return default state if train section doesn't exist
+                                    default = self.train_states.copy()
+                                    default['train_id'] = self.train_id
+                                    return default
                             else:
-                                # Return default state if train section doesn't exist
-                                default = self.train_states.copy()
-                                default['train_id'] = self.train_id
-                                return default
-                        else:
-                            # Legacy mode: read from root level
-                            return all_states
-                    except json.JSONDecodeError as e:
-                        print(f"Error reading state file: {e}")
-                        # Reset to default state if file is corrupted
-                        self.save_state(self.train_states)
-            return self.train_states.copy()
-        except Exception as e:
-            print(f"Error accessing state file: {e}")
-            return self.train_states.copy()
+                                # Legacy mode: read from root level
+                                return all_states
+                        except json.JSONDecodeError as e:
+                            print(f"Error reading state file: {e}")
+                            # Reset to default state if file is corrupted
+                            self.save_state(self.train_states)
+                return self.train_states.copy()
+            except Exception as e:
+                print(f"Error accessing state file: {e}")
+                return self.train_states.copy()
 
     def save_state(self, state: dict) -> None:
         """Save train state to file.
@@ -152,49 +158,50 @@ class train_controller_api:
         The method ensures all required fields are present in the state
         by merging with default values for any missing fields.
         """
-        try:
-            # Ensure all default fields are present
-            complete_state = self.train_states.copy()
-            complete_state.update(state)
-            if self.train_id is not None:
-                complete_state['train_id'] = self.train_id
-            
-            # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
-            
-            if self.train_id is not None:
-                # Multi-train mode: update specific train's section at ROOT level only
-                if os.path.exists(self.state_file):
-                    with open(self.state_file, 'r') as f:
-                        all_states = json.load(f)
+        with _file_lock:
+            try:
+                # Ensure all default fields are present
+                complete_state = self.train_states.copy()
+                complete_state.update(state)
+                if self.train_id is not None:
+                    complete_state['train_id'] = self.train_id
+                
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+                
+                if self.train_id is not None:
+                    # Multi-train mode: update specific train's section at ROOT level only
+                    if os.path.exists(self.state_file):
+                        with open(self.state_file, 'r') as f:
+                            all_states = json.load(f)
+                    else:
+                        all_states = {}
+                    
+                    # IMPORTANT: Only update at root level, never nested
+                    # Remove any nested train_X keys from complete_state to prevent nesting
+                    clean_state = {}
+                    for key, value in complete_state.items():
+                        # Skip nested train_X sections and only keep actual state data
+                        if not (key.startswith('train_') and isinstance(value, dict)):
+                            clean_state[key] = value
+                        elif key == f"train_{self.train_id}":  # Keep train_id field
+                            clean_state['train_id'] = self.train_id
+                    
+                    train_key = f"train_{self.train_id}"
+                    all_states[train_key] = clean_state
+                    
+                    with open(self.state_file, 'w') as f:
+                        json.dump(all_states, f, indent=4)
                 else:
-                    all_states = {}
-                
-                # IMPORTANT: Only update at root level, never nested
-                # Remove any nested train_X keys from complete_state to prevent nesting
-                clean_state = {}
-                for key, value in complete_state.items():
-                    # Skip nested train_X sections and only keep actual state data
-                    if not (key.startswith('train_') and isinstance(value, dict)):
-                        clean_state[key] = value
-                    elif key == f"train_{self.train_id}":  # Keep train_id field
-                        clean_state['train_id'] = self.train_id
-                
-                train_key = f"train_{self.train_id}"
-                all_states[train_key] = clean_state
-                
-                with open(self.state_file, 'w') as f:
-                    json.dump(all_states, f, indent=4)
-            else:
-                # Legacy mode: save to root level
-                with open(self.state_file, 'w') as f:
-                    json.dump(complete_state, f, indent=4)
+                    # Legacy mode: save to root level
+                    with open(self.state_file, 'w') as f:
+                        json.dump(complete_state, f, indent=4)
 
-        except Exception as e:
-            print(f"Error saving state: {e}")
-            # If all else fails, try direct write
-            with open(self.state_file, 'w') as f:
-                json.dump(self.train_states.copy(), f, indent=4)
+            except Exception as e:
+                print(f"Error saving state: {e}")
+                # If all else fails, try direct write
+                with open(self.state_file, 'w') as f:
+                    json.dump(self.train_states.copy(), f, indent=4)
 
     def reset_state(self) -> None:
         """Reset train state to default values."""
@@ -230,9 +237,15 @@ class train_controller_api:
             print("[TrainControllerAPI] No valid data read from Train Model.")
             return
 
-        # === Map relevant keys from train_data.json ===
-        inputs = data.get("inputs", {})
-        outputs = data.get("outputs", {})
+        # NEW: pick per-train section if train_id is set
+        if self.train_id is not None:
+            section_key = f"train_{self.train_id}"
+            section = data.get(section_key, {})
+            inputs = section.get("inputs", {})
+            outputs = section.get("outputs", {})
+        else:
+            inputs = data.get("inputs", {})
+            outputs = data.get("outputs", {})
 
         mapped_data = {
             'commanded_speed': inputs.get('commanded speed', 0.0),
@@ -244,6 +257,8 @@ class train_controller_api:
             'signal_failure': inputs.get('signal_failure', False),
             'brake_failure': inputs.get('brake_failure', False),
             'manual_mode': inputs.get('manual_mode', False),
+            'next_stop': inputs.get('next station', ''),
+            'station_side': inputs.get('side_door', '')
         }
 
         # Update controller state
