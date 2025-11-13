@@ -8,6 +8,7 @@ from tkinter import ttk
 import os
 import sys
 import time
+import argparse
 
 try:
     from gpiozero import LED, Button # type: ignore
@@ -25,8 +26,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-#import API
-from api.train_controller_api import train_controller_api
+# API imports will be done conditionally based on server_url parameter
 #import hardware
 from train_controller_hardware import train_controller_hardware
 
@@ -257,21 +257,37 @@ class train_controller:
 
 class train_controller_ui(tk.Tk):
 
-    def __init__(self, train_id=1):
+    def __init__(self, train_id=1, server_url=None, timeout=5.0):
         """Initialize the hardware driver interface.
         
         Args:
             train_id: Train ID for multi-train support. Defaults to 1.
+            server_url: If provided, uses REST API client to connect to remote server.
+                       If None, uses local file-based API (default).
+                       Example: "http://192.168.1.100:5000"
+            timeout: Network timeout in seconds for remote API (default: 5.0).
         """
         super().__init__()
 
         self.train_id = train_id
+        self.server_url = server_url
         
-        # Initialize API with train_id (like SW UI does)
-        self.api = train_controller_api(train_id=train_id)
+        # Initialize API based on server_url parameter
+        if server_url:
+            # Remote mode - use client API
+            from api.train_controller_api_client import train_controller_api_client
+            self.api = train_controller_api_client(train_id=train_id, server_url=server_url, timeout=timeout)
+            print(f"[HW UI] Using REMOTE API: {server_url} (timeout: {timeout}s)")
+        else:
+            # Local mode - use file-based API
+            from api.train_controller_api import train_controller_api
+            self.api = train_controller_api(train_id=train_id)
+            print(f"[HW UI] Using LOCAL API (file-based)")
 
         #set window title and size
         title = f"Train {train_id} - Hardware Controller" if train_id else "Train Controller - Hardware Driver Interface"
+        if server_url:
+            title += " [REMOTE]"
         self.title(title)
         self.geometry("1200x700")
         self.minsize(900, 600)
@@ -663,5 +679,29 @@ class commanded_speed_authority:
         self.commanded_authority = 'commanded_authority'
 
 if __name__ == "__main__":
-    app = train_controller_ui()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Train Controller Hardware UI")
+    parser.add_argument("--train-id", type=int, default=1, 
+                       help="Train ID to control (default: 1)")
+    parser.add_argument("--server", type=str, default=None,
+                       help="Server URL for remote API (e.g., http://192.168.1.100:5000). If not provided, uses local file-based API.")
+    parser.add_argument("--timeout", type=float, default=5.0,
+                       help="Network timeout in seconds for remote API (default: 5.0)")
+    args = parser.parse_args()
+    
+    print("=" * 70)
+    print("  HARDWARE TRAIN CONTROLLER UI")
+    print("=" * 70)
+    print(f"  Train ID: {args.train_id}")
+    if args.server:
+        print(f"  Mode: REMOTE (Raspberry Pi)")
+        print(f"  Server: {args.server}")
+        print(f"  Timeout: {args.timeout}s")
+    else:
+        print(f"  Mode: LOCAL (file-based)")
+    print("=" * 70)
+    print()
+    
+    # Create and run app
+    app = train_controller_ui(train_id=args.train_id, server_url=args.server, timeout=args.timeout)
     app.mainloop()
