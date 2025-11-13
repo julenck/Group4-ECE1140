@@ -586,6 +586,9 @@ class train_controller_ui(tk.Tk):
             # except Exception as e:
             #     print(f"Power command calculation error: {e}")
 
+            # Reload state one final time before display to ensure all updates are reflected
+            state = self.api.get_state()
+
             # Update important parameters in the treeview
             children = self.info_treeview.get_children()
             for iid in children:
