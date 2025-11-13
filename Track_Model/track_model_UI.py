@@ -440,13 +440,15 @@ class TrackModelUI(tk.Tk):
                 switch_blocks = []
                 gate_blocks = []
                 for b in self.static_data:
+                    # Skip blocks with N/A block numbers
+                    if b.get("Block Number") == "N/A":
+                        continue
+
                     block_id = f"{b['Section']}{int(float(b['Block Number']))}"
                     if b.get("Branching", "N/A") != "N/A":
                         switch_blocks.append((block_id, b["Branching"]))
                     if b.get("Crossing", "No") == "Yes":
                         gate_blocks.append(block_id)
-                    print(f"[DEBUG] switch_blocks: {switch_blocks}")
-                    print(f"[DEBUG] gate_blocks: {gate_blocks}")
 
                 # Map switches to blocks
                 switch_positions = {}
@@ -469,27 +471,8 @@ class TrackModelUI(tk.Tk):
                     occupancy,
                     failures,
                 )
-
-                # Map switches to blocks
-                switch_positions = {}
-                for i, (block_id, branching) in enumerate(switch_blocks):
-                    if i < len(switches):
-                        branches = [s.strip() for s in branching.split(",")]
-                        switch_positions[block_id] = branches[switches[i]]
-
-                # Map gates to blocks
-                gate_statuses = {}
-                for i, block_id in enumerate(gate_blocks):
-                    if i < len(gates):
-                        gate_statuses[block_id] = "Open" if gates[i] == 0 else "Closed"
-
-                self.block_manager.write_inputs(
-                    selected_line,
-                    switch_positions,
-                    gate_statuses,
-                    lights,
-                    occupancy,
-                    failures,
+                print(
+                    f"[JSON WRITE] Data written for line '{selected_line} and {switch_positions} and {gate_statuses} and {lights} and {occupancy} and {failures}'"
                 )
 
         except Exception as e:
