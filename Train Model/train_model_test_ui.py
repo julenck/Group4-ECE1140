@@ -366,13 +366,13 @@ class TrainModelTestUI(tk.Tk):
         # If in remote mode, also send to server
         if self.server_url:
             try:
-                # Send inputs to server so hardware controller receives them
+                # Send ONLY inputs to server
+                # train_velocity and train_temperature come from train_data.json via server sync thread
+                # Do NOT send outputs here to avoid race condition with sync thread
                 server_updates = {
                     "commanded_speed": inp["commanded_speed"],
                     "commanded_authority": inp["commanded_authority"],
                     "speed_limit": inp["speed_limit"],
-                    "train_velocity": out["velocity_mph"],
-                    "train_temperature": out["temperature_F"],
                     "current_station": inp["current_station"],
                     "next_stop": inp["next_station"],
                     "station_side": inp["side_door"],
