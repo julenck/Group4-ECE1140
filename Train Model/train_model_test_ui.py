@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
 import json, os, random
+import requests
+import sys
 
 TRAIN_DATA_FILE = "train_data.json"
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
@@ -87,9 +89,14 @@ class TrainModel:
         }
 
 class TrainModelTestUI(tk.Tk):
-    def __init__(self):
+    def __init__(self, train_id=1, server_url=None):
         super().__init__()
-        self.title("Train Model Test UI (Full Feature)")
+        self.train_id = train_id
+        self.server_url = server_url  # None = local mode, URL = remote mode
+        title = f"Train {train_id} Model Test UI"
+        if server_url:
+            title += " (Remote Mode)"
+        self.title(title)
         self.geometry("1100x700")
         self.specs = self.load_specs()
         self.model = TrainModel(self.specs)
@@ -356,6 +363,33 @@ class TrainModelTestUI(tk.Tk):
             except:
                 pass
         
+        # If in remote mode, also send to server
+        if self.server_url:
+            try:
+                # Send inputs to server so hardware controller receives them
+                server_updates = {
+                    "commanded_speed": inp["commanded_speed"],
+                    "commanded_authority": inp["commanded_authority"],
+                    "speed_limit": inp["speed_limit"],
+                    "train_velocity": out["velocity_mph"],
+                    "train_temperature": out["temperature_F"],
+                    "current_station": inp["current_station"],
+                    "next_stop": inp["next_station"],
+                    "station_side": inp["side_door"],
+                    "train_model_engine_failure": inp["engine_failure"],
+                    "train_model_signal_failure": inp["signal_failure"],
+                    "train_model_brake_failure": inp["brake_failure"]
+                }
+                response = requests.post(
+                    f"{self.server_url}/api/train/{self.train_id}/state",
+                    json=server_updates,
+                    timeout=1.0
+                )
+                if response.status_code != 200:
+                    print(f"[Test UI] Server update returned {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"[Test UI] Error sending to server: {e}")
+        
         track_out = {"passengers_disembarking": passengers_out}
         try:
             with open(TRACK_OUTPUT_FILE, "w") as f:
@@ -417,5 +451,14 @@ class TrainModelTestUI(tk.Tk):
         self.after(int(self.model.dt * 1000), self.update_loop)
 
 if __name__ == "__main__":
-    app = TrainModelTestUI()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Train Model Test UI")
+    parser.add_argument("--train-id", type=int, default=1,
+                        help="Train ID for multi-train mode (default: 1)")
+    parser.add_argument("--server", type=str, default=None,
+                        help="Server URL for remote mode (e.g., http://192.168.1.100:5000)")
+    args = parser.parse_args()
+    
+    app = TrainModelTestUI(train_id=args.train_id, server_url=args.server)
     app.mainloop()
