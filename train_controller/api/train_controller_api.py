@@ -237,9 +237,15 @@ class train_controller_api:
             print("[TrainControllerAPI] No valid data read from Train Model.")
             return
 
-        # === Map relevant keys from train_data.json ===
-        inputs = data.get("inputs", {})
-        outputs = data.get("outputs", {})
+        # NEW: pick per-train section if train_id is set
+        if self.train_id is not None:
+            section_key = f"train_{self.train_id}"
+            section = data.get(section_key, {})
+            inputs = section.get("inputs", {})
+            outputs = section.get("outputs", {})
+        else:
+            inputs = data.get("inputs", {})
+            outputs = data.get("outputs", {})
 
         mapped_data = {
             'commanded_speed': inputs.get('commanded speed', 0.0),
@@ -251,6 +257,8 @@ class train_controller_api:
             'signal_failure': inputs.get('signal_failure', False),
             'brake_failure': inputs.get('brake_failure', False),
             'manual_mode': inputs.get('manual_mode', False),
+            'next_stop': inputs.get('next station', ''),
+            'station_side': inputs.get('side_door', '')
         }
 
         # Update controller state
