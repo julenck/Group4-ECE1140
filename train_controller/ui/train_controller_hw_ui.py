@@ -535,9 +535,10 @@ class train_controller_ui(tk.Tk):
                 self.api.update_state({'emergency_brake': True})
                 state = self.api.get_state()
 
-            # Read ADC (potentiometer inputs) and update driver_velocity, temperature, service_brake
+            # Read ADC (potentiometer inputs) ONLY in manual mode
+            # In automatic mode, the controller sets these values automatically
             hw = getattr(self.controller, 'hardware', None)
-            if hw and hw.i2c_devices.get('adc', False):
+            if manual_mode and hw and hw.i2c_devices.get('adc', False):
                 try:
                     hw.read_current_adc()
                 except Exception as e:
