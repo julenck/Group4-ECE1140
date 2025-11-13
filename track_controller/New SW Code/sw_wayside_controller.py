@@ -156,13 +156,8 @@ class sw_wayside_controller:
             
             if auth <= 0:
                 auth = 0
-                with self.file_lock:
-                    with open(self.ctc_comm_file, 'r') as f:
-                        data = json.load(f)
-                    data["Trains"][cmd_train]["Active"] = 0
-                    with open(self.ctc_comm_file, 'w') as f:
-                        json.dump(data, f, indent=4)
-
+                # Don't set Active to 0 here - let CTC manage the Active state
+                # Only remove from cmd_trains to stop processing
                 ttr.append(cmd_train)
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
