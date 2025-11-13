@@ -9,59 +9,45 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional, Tuple
 import threading
 import time
-from unittest import signals
 
-# Optional import of your PLCs (left dynamic to avoid import errors if absent)
+# Optional import of your PLC (left dynamic to avoid import errors if absent)
 try:
     import Green_Line_PLC_XandLup as plc_module  # noqa: F401
 except Exception:
     plc_module = None
 
-# ------------------- Mappings for track model enums  -----------------------
-_BLOCKS_WITH_SWITCHES = [13, 28, 57, 63, 77, 85]   
-_BLOCKS_WITH_LIGHTS   = [0, 3, 7, 29, 58, 62, 76,
-                         86, 100, 101, 150, 151]    
-_BLOCKS_WITH_GATES    = [19, 108]                   
+# --- Mappings for track model enums -> human-readable strings -----------------------
+_LIGHT_NAMES = {0: "RED", 1: "YELLOW", 2: "GREEN", 3: "SUPERGREEN"}
+_SWITCH_NAMES = {0: "Left", 1: "Right"}  # placeholder until final mapping
+_GATE_NAMES = {0: "DOWN", 1: "UP"}
 
-_SWITCH_NAMES     = {0: "Left", 1: "Right"}                                # CHANGED
-_GATE_NAMES       = {0: "DOWN", 1: "UP"}                                   # CHANGED
+_YARD_TO_M = 0.9144  # convert yards -> meters for SW-style distance math
 
-def _decode_light_bits(b0: int, b1: int) -> str:
-   
-    code = f"{int(b0)}{int(b1)}"
+# Blocks with hardware elements (same as SW)
+_BLOCKS_WITH_SWITCHES = [13, 28, 57, 63, 77, 85]
+_BLOCKS_WITH_LIGHTS   = [0, 3, 7, 29, 58, 62, 76, 86, 100, 101, 150, 151]
+_BLOCKS_WITH_GATES    = [19, 108]
 
-    if   code == "00":
-        return "SUPERGREEN"
-    elif code == "01":
-        return "GREEN"
-    elif code == "10":
-        return "YELLOW"
-    elif code == "11":
-        return "RED"
-    return code
 
-def _encode_light_bits(name: str) -> tuple[int, int]:
+def _encode_light_bits(name: str | None) -> Tuple[int, int]:
     """
-    Convert a light name back to its 2-bit representation:
-
-      SUPERGREEN -> (0, 0)
-      GREEN      -> (0, 1)
-      YELLOW     -> (1, 0)
-      RED        -> (1, 1)
+    Map human-friendly light name -> two-bit PLC code.
+      00: SUPERGREEN
+      01: GREEN
+      10: YELLOW
+      11: RED
     """
-    n = (name or "").upper()
-    if n == "SUPERGREEN":
-        return (0, 0)
-    if n == "GREEN":
-        return (0, 1)
-    if n == "YELLOW":
-        return (1, 0)
-    if n == "RED":
-        return (1, 1)
-    # fallback: treat unknown as red for safety
-    return (1, 1)
-
-_YARD_TO_M = 0.9144
+    if not name:
+        return 0, 0
+    name = str(name).upper()
+    if name == "SUPERGREEN":
+        return 0, 0
+    if name == "GREEN":
+        return 0, 1
+    if name == "YELLOW":
+        return 1, 0
+    # default / RED
+    return 1, 1
 
 
 class HW_Wayside_Controller:
@@ -75,31 +61,29 @@ class HW_Wayside_Controller:
         self._speed_mph = 0.0
         self._authority_yds = 0
         self._last_auth_ts: Optional[float] = None  # for local authority decay
-        self._occupied: set[str] = set()
         self._closed: set[str] = set()
 
-        # outputs (dummy placeholders to mirror a real wayside)
-        self._switch_state: Dict[str, str] = {}
-        self._light_state: Dict[str, str] = {}
-        self._gate_state: Dict[str, str] = {}
+        # Occupancy sources and the merged view used everywhere
+        self._occ_ctc: set[str] = set()    # from CTC (if provided)
+        self._occ_track: set[str] = set()  # from Track snapshot arrays
+        self._occupied: set[str] = set()   # MERGED VIEW (this is the only one used by UI)
 
-        self._failures: Dict[str, Tuple[bool, bool, bool]] = {}
-
-        self._last_occ_array: Optional[List[int]] = None
-
-        # Outputs/state for UI (strings)
+        # Outputs/state for UI (strings coming from track model / PLC)
         self._switch_state: Dict[str, str] = {}  # "Left"/"Right"
         self._light_state: Dict[str, str] = {}   # "RED"/...
         self._gate_state: Dict[str, str] = {}    # "UP"/"DOWN"
 
-        self._cmd_switch_state: Dict[str, str] = {}  # NEW
-        self._cmd_light_state: Dict[str, str] = {}   # NEW
-        self._cmd_gate_state: Dict[str, str] = {}    # NEW
+        # Commanded (PLC) states that override track states when present
+        self._cmd_switch_state: Dict[str, str] = {}
+        self._cmd_light_state: Dict[str, str] = {}
+        self._cmd_gate_state: Dict[str, str] = {}
 
         # Failures: tuple of three booleans per block (f1, f2, f3)
         self._failures: Dict[str, Tuple[bool, bool, bool]] = {}
 
-        # Train tracking (SW parity)
+        # ------------------------------------------------------------------
+        # ADDED: Train tracking (SW-style green_order + distance table)
+        # ------------------------------------------------------------------
         self.green_order: List[int] = [
             0,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,
             85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,85,84,83,82,81,80,79,
@@ -145,7 +129,7 @@ class HW_Wayside_Controller:
         self._plc_name = None
         self._selected_block: Optional[str] = None
 
-        # background loop (optional)
+        # background loop (optional; not used by hw_main.poll loop)
         self._running = False
         self._thread: Optional[threading.Thread] = None
 
@@ -164,6 +148,7 @@ class HW_Wayside_Controller:
         if self._running:
             return
         self._running = True
+
         def loop():
             while self._running:
                 time.sleep(period_s)
@@ -178,19 +163,22 @@ class HW_Wayside_Controller:
     def update_from_feed(
         self,
         *, speed_mph: float, authority_yards: int, emergency: bool,
-        occupied_blocks: List[str] | None = None,
-        closed_blocks: List[str] | None = None,
+        occupied_blocks: List[int] | List[str] | None = None,
+        closed_blocks: List[int] | List[str] | None = None,
     ):
         with self._lock:
             self._speed_mph = float(speed_mph)
+
             new_auth = int(authority_yards)
             # Reset decay baseline when external authority changes
-
             if new_auth != self._authority_yds:
                 self._authority_yds = new_auth
                 self._last_auth_ts = None
+                self._auth_start_m = self._authority_yds * _YARD_TO_M
             else:
                 self._authority_yds = new_auth
+                if self._auth_start_m is None:
+                    self._auth_start_m = self._authority_yds * _YARD_TO_M
 
             self._emergency = bool(emergency)
 
@@ -198,6 +186,13 @@ class HW_Wayside_Controller:
                 self._occ_ctc = {str(b) for b in occupied_blocks}
             if closed_blocks is not None:
                 self._closed = {str(b) for b in closed_blocks}
+
+            if self._train_idx is None:
+                self._init_train_position()
+
+            self._recompute_occupied()
+
+    # ---------------- local authority countdown -----------------
 
     def tick_authority_decay(self) -> None:
         """Optionally reduce authority in yards based on current speed (mph)."""
@@ -214,6 +209,8 @@ class HW_Wayside_Controller:
                 yards_per_sec = self._speed_mph * (1760.0 / 3600.0)
                 dec = yards_per_sec * dt
                 self._authority_yds = max(0, int(self._authority_yds - dec))
+
+    # ------------- apply track-model snapshot arrays ------------
 
     def apply_track_snapshot(self, snapshot: Dict[str, Any], *, limit_blocks: List[str]) -> None:
         """
@@ -232,126 +229,147 @@ class HW_Wayside_Controller:
         limit_set = set(str(b) for b in (limit_blocks or []))
 
         with self._lock:
-            # Occupancy
+            # Occupancy from track model
             if isinstance(occ, list):
-                self._occupied = {str(i) for i, v in enumerate(occ) if v and str(i) in limit_set}
+                self._occ_track = {str(i) for i, v in enumerate(occ) if v and str(i) in limit_set}
 
             # Switches (0/1 -> Left/Right)
             if isinstance(sw, list):
                 for i, v in enumerate(sw):
                     bid = str(i)
                     if bid in limit_set:
-                        name = _SWITCH_NAMES.get(int(v), str(v))
-                        self._switch_state[bid] = name
+                        self._switch_state[bid] = _SWITCH_NAMES.get(int(v), str(v))
 
-            # Lights (0..3 -> enum names)
+            # Lights (PLC-like two-bit per block; we still map them to names)
             if isinstance(lt, list):
-                for i, v in enumerate(lt):
-                    bid = str(i)
-                    if bid in limit_set:
-                        val = int(sw[idx])
-                        self._switch_state[bid] = _SWITCH_NAMES.get(val, str(val))
-
-            # -------- Lights (24 entries = 12 × 2 bits) --------
-            if isinstance(lt, list) and len(lt) == 2 * len(_BLOCKS_WITH_LIGHTS):
+                # lt is 24 entries (12 lights × 2 bits)
                 for idx, block in enumerate(_BLOCKS_WITH_LIGHTS):
-                    bid = str(block)
-                    if bid not in limit_set:
-                        continue
-                    try:
-                        b0 = int(lt[2 * idx])
-                        b1 = int(lt[2 * idx + 1])
-                    except (IndexError, ValueError):
-                        continue
-
-                    #   00 -> SUPERGREEN, 01 -> GREEN, 10 -> YELLOW, 11 -> RED
-                    name = _decode_light_bits(b0, b1)
-                    self._light_state[bid] = name
-
-            # -------- Gates (2 entries) --------
-            if isinstance(gt, list) and len(gt) == len(_BLOCKS_WITH_GATES):
-                for idx, block in enumerate(_BLOCKS_WITH_GATES):
+                    if idx * 2 + 1 >= len(lt):
+                        break
+                    b0 = int(lt[2 * idx])
+                    b1 = int(lt[2 * idx + 1])
+                    code = f"{b0}{b1}"
+                    if code == "00":
+                        name = "SUPERGREEN"
+                    elif code == "01":
+                        name = "GREEN"
+                    elif code == "10":
+                        name = "YELLOW"
+                    else:
+                        name = "RED"
                     bid = str(block)
                     if bid in limit_set:
-                        name = _GATE_NAMES.get(int(v), str(v))
-                        self._gate_state[bid] = name
+                        self._light_state[bid] = name
+
+            # Gates (0/1 -> DOWN/UP)
+            if isinstance(gt, list):
+                for i, v in enumerate(gt):
+                    if i >= len(_BLOCKS_WITH_GATES):
+                        break
+                    bid = str(_BLOCKS_WITH_GATES[i])
+                    if bid in limit_set:
+                        self._gate_state[bid] = _GATE_NAMES.get(int(v), str(v))
 
             # Failures (flat array of len = 3*blocks)
             if isinstance(fl, list) and len(fl) >= 3:
-                for i in range(0, len(fl) // 3):
+                count = len(fl) // 3
+                for i in range(count):
                     bid = str(i)
                     if bid in limit_set:
-                        f1 = bool(fl[3*i + 0])
-                        f2 = bool(fl[3*i + 1])
-                        f3 = bool(fl[3*i + 2])
+                        f1 = bool(fl[3*i + 0]); f2 = bool(fl[3*i + 1]); f3 = bool(fl[3*i + 2])
                         self._failures[bid] = (f1, f2, f3)
 
-    # --------------- PLC operations (no-ops by default) ----------------
+            if self._train_idx is None:
+                self._init_train_position()
+
+            self._recompute_occupied()
+
+    # ---------------- Train progress (SW parity) -----------------
+
+    def _init_train_position(self) -> None:
+        """
+        Choose an initial train position based on occupied blocks in this wayside,
+        projected onto the global green_order sequence.
+        """
+        occ_in_partition: List[int] = []
+        part = set(self.block_ids)
+
+        for b in self._occ_track:
+            if b in part:
+                occ_in_partition.append(int(b))
+        for b in self._occ_ctc:
+            if b in part:
+                occ_in_partition.append(int(b))
+
+        # If nothing is occupied, do NOT assume a train exists
+        if not occ_in_partition:
+            return
+
+        try:
+            # Sort occupied candidates by their index in green_order and take the earliest
+            occ_in_partition.sort(key=lambda bb: self.green_order.index(bb))
+            candidate = occ_in_partition[0]
+            idx = self.green_order.index(candidate)
+        except ValueError:
+            return  # safety: if any block isn't in green_order
+
+        self._train_idx = idx
+        self._train_block = str(candidate)
+        # Load distance to end-of-block
+        self._remaining_m = float(self.block_eob_m[idx]) if idx < len(self.block_eob_m) else None
+        if self._auth_start_m is None:
+            self._auth_start_m = self._authority_yds * _YARD_TO_M
+
+    def tick_train_progress(self) -> None:
+        """Advance the simulated train along green_order using (start_auth - current_auth) in meters."""
+        with self._lock:
+            if self._train_idx is None:
+                self._init_train_position()
+                if self._train_idx is None:
+                    return
+
+            if self._auth_start_m is None:
+                self._auth_start_m = self._authority_yds * _YARD_TO_M
+                return
+
+            current_m = self._authority_yds * _YARD_TO_M
+            traveled_m = max(0.0, self._auth_start_m - current_m)
+
+            if self._remaining_m is None:
+                if self._train_idx < len(self.block_eob_m):
+                    self._remaining_m = float(self.block_eob_m[self._train_idx])
+                else:
+                    return
+
+            moved = False
+            while traveled_m >= self._remaining_m - 1e-6:
+                traveled_m -= self._remaining_m
+                if self._train_idx + 1 >= len(self.green_order):
+                    self._remaining_m = None
+                    break
+                self._train_idx += 1
+                next_block = self.green_order[self._train_idx]
+                self._train_block = str(next_block)
+                self._remaining_m = float(self.block_eob_m[self._train_idx]) if self._train_idx < len(self.block_eob_m) else None
+                moved = True
+
+            if moved:
+                # Reset baseline so future travel is measured from current authority
+                self._auth_start_m = current_m + traveled_m
+
+            # Recompute occupancy so UI reflects the current train block
+            self._recompute_occupied()
+
+    # ---------------------- PLC operations ----------------------
 
     def load_plc(self, path: str) -> bool:
+        # For now we just remember the path; vital checks can vet it later
         self._plc_loaded = True
         self._plc_name = path
         return True
 
     def change_plc(self, enable: bool, *_args, **_kwargs):
         self._plc_loaded = bool(enable)
-
-    def run_plc(self) -> None:
-        if plc_module is None or not hasattr(plc_module, "process_states_green_xlup"):
-            return
-
-        with self._lock:
-            occ = list(self._last_occ_array) if isinstance(self._last_occ_array, list) else None
-
-        if not occ or len(occ) < 151:
-            return
-
-        try:
-            # Match the SW controller's occupancy slicing for X&L up:
-            #   occ1 = occupied[0:73]
-            #   occ2 = occupied[144:151]
-            occ1 = occ[0:73]
-            occ2 = occ[144:151]
-            plc_occ = occ1 + occ2
-
-            switches, signals, crossing = plc_module.process_states_green_xlup(plc_occ)
-        except Exception:
-            return
-
-        with self._lock:
-            # reset last commanded states
-            self._cmd_switch_state.clear()
-            self._cmd_light_state.clear()
-            self._cmd_gate_state.clear()
-
-            # Map PLC switches: 4 entries -> first 4 switch blocks.
-            for idx, val in enumerate(switches):
-                if idx >= len(_BLOCKS_WITH_SWITCHES):
-                    break
-                bid = str(_BLOCKS_WITH_SWITCHES[idx])
-                self._cmd_switch_state[bid] = _SWITCH_NAMES.get(int(val), str(val))
-
-            # Map PLC signals: 16 bits -> 8 lights (first 8 light blocks).
-            for block_idx in range(min(len(_BLOCKS_WITH_LIGHTS), len(signals) // 2)):
-                bid = str(_BLOCKS_WITH_LIGHTS[block_idx])
-                try:
-                    b0 = int(signals[2 * block_idx])
-                    b1 = int(signals[2 * block_idx + 1])
-                except (IndexError, ValueError):
-                    continue
-
-                # CHANGED: same 00/01/10/11 mapping via helper
-                name = _decode_light_bits(b0, b1)
-                self._cmd_light_state[bid] = name
-
-                # Map PLC crossing -> first gate block
-                if crossing and _BLOCKS_WITH_GATES:
-                    bid = str(_BLOCKS_WITH_GATES[0])
-                    try:
-                        val = int(crossing[0])
-                    except Exception:
-                        val = 0
-                    self._cmd_gate_state[bid] = _GATE_NAMES.get(val, str(val))
 
     # ------------------------- UI hooks -------------------------
 
@@ -369,24 +387,13 @@ class HW_Wayside_Controller:
         return list(self.block_ids)
 
     def get_block_state(self, block_id: str) -> Dict[str, Any]:
-
         b = str(block_id)
-
         with self._lock:
             occupied_here = (b in self._occupied)
-
-            # per-block speed/auth
-            if b == self._train_block and b in self.block_ids:
-                spd = self._speed_mph
-                auth = self._authority_yds
-            else:
-                spd = 0.0
-                auth = 0
-
             state = {
                 "block_id": b,
-                "speed_mph": spd,
-                "authority_yards": auth,
+                "speed_mph": self._speed_mph if b in self.block_ids else 0.0,
+                "authority_yards": self._authority_yds if b in self.block_ids else 0,
                 "occupied": occupied_here,
                 "switch": self._switch_state.get(b, "-"),
                 "light": self._light_state.get(b, "-"),
@@ -400,7 +407,6 @@ class HW_Wayside_Controller:
                     state["fault_block"] = b
                     state["emergency"] = True
             return state
-
 
     # --------- Compatibility wrappers for older HW API ----------
 
@@ -447,8 +453,19 @@ class HW_Wayside_Controller:
             "occupied": st.get("occupied"),
             "closed": (block_id in self._closed),
         }
-    
+
+    # ---------------- build commanded arrays to write back ---------------
+
     def build_commanded_arrays(self, n_total_blocks: int) -> Dict[str, List[int]]:
+        """
+        Produce arrays in the same shape/codes as your SW track_to_wayside.json:
+          - G-switches: 6 entries, 0/1
+          - G-gates:    2 entries, 0/1
+          - G-lights:   24 entries (12 lights × 2 bits), each entry 0/1
+        Plus:
+          - G-Commanded Speed: length n_total_blocks, mph per block
+          - G-Commanded Authority: length n_total_blocks, yards per block
+        """
         inv_switch = {"Left": 0, "Right": 1}
         inv_gate   = {"DOWN": 0, "UP": 1}
 
@@ -457,7 +474,7 @@ class HW_Wayside_Controller:
         gates    = [0] * len(_BLOCKS_WITH_GATES)         # 2 entries
         lights   = [0] * (2 * len(_BLOCKS_WITH_LIGHTS))  # 12 lights × 2 bits = 24
 
-        # NEW: per-block speed/authority arrays (same as before)
+        # per-block speed/authority arrays
         cmd_speed = [0] * int(n_total_blocks)
         cmd_auth  = [0] * int(n_total_blocks)
 
@@ -486,7 +503,7 @@ class HW_Wayside_Controller:
                 lights[2 * idx]     = b0
                 lights[2 * idx + 1] = b1
 
-            # -------- Per-block speed/authority (unchanged semantics) ----
+            # -------- Per-block speed/authority --------
             if self._train_block is not None:
                 try:
                     i = int(self._train_block)
@@ -497,29 +514,25 @@ class HW_Wayside_Controller:
                     cmd_auth[i]  = int(self._authority_yds)
 
         return {
-            # SW-style I/O arrays (same shape/codes as your track_to_wayside.json)
             "G-switches": switches,
             "G-lights": lights,
             "G-gates": gates,
-
-            # Extra info the HW wayside exports for UI / downstream logic
             "G-Commanded Speed": cmd_speed,
             "G-Commanded Authority": cmd_auth,
         }
 
-        # ---------------- build occupancy array for CTC ----------------------  # NEW
+    # ---------------- build occupancy array for CTC ----------------------
+
     def build_occupancy_array(self, n_total_blocks: int) -> List[int]:
         """
         Return a 0/1 occupancy array of length n_total_blocks, where 1 means
         this block is occupied according to this controller's merged view.
-
-        This is used by hw_main.py to combine occupancy from all waysides and
+        Used by hw_main.py to combine occupancy from all waysides and
         write a single array back to CTC, just like the SW module.
         """
         arr = [0] * int(n_total_blocks)
 
         with self._lock:
-            # self._occupied is a set of block IDs as strings
             for b in self._occupied:
                 try:
                     i = int(b)
