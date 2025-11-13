@@ -17,7 +17,6 @@ except Exception:
     plc_module = None
 
 # --- Mappings for track model enums -> human-readable strings -----------------------
-_LIGHT_NAMES = {0: "RED", 1: "YELLOW", 2: "GREEN", 3: "SUPERGREEN"}
 _SWITCH_NAMES = {0: "Left", 1: "Right"}  # placeholder until final mapping
 _GATE_NAMES = {0: "DOWN", 1: "UP"}
 
@@ -62,6 +61,8 @@ class HW_Wayside_Controller:
         self._authority_yds = 0
         self._ctc_authority_yds: int = 0
         self._last_auth_ts: Optional[float] = None  # for local authority decay
+        self._last_auth_m: Optional[float] = None  
+        self._dist_in_block_m: float = 0.0
         self._closed: set[str] = set()
 
         # Occupancy sources and the merged view used everywhere
@@ -182,6 +183,10 @@ class HW_Wayside_Controller:
                 self._authority_yds = new_auth
                 self._last_auth_ts = None
                 self._auth_start_m = self._authority_yds * _YARD_TO_M
+
+                self._last_auth_m = self._authority_yds * _YARD_TO_M
+                self._dist_in_block_m = 0.0
+
             else:
                 # CTC is still sending the same value -> KEEP our decayed authority
                 if self._auth_start_m is None:
@@ -327,45 +332,76 @@ class HW_Wayside_Controller:
         if self._auth_start_m is None:
             self._auth_start_m = self._authority_yds * _YARD_TO_M
 
+        self._last_auth_m = self._authority_yds * _YARD_TO_M
+        self._dist_in_block_m = 0.0
+
     def tick_train_progress(self) -> None:
         """Advance the simulated train along green_order using (start_auth - current_auth) in meters."""
         with self._lock:
+            # Ensure we have a starting position
             if self._train_idx is None:
                 self._init_train_position()
                 if self._train_idx is None:
                     return
 
-            if self._auth_start_m is None:
-                self._auth_start_m = self._authority_yds * _YARD_TO_M
+            # Current authority in meters
+            current_m = self._authority_yds * _YARD_TO_M
+
+            # First tick: just establish baseline, don't move yet
+            if self._last_auth_m is None:
+                self._last_auth_m = current_m
                 return
 
-            current_m = self._authority_yds * _YARD_TO_M
-            traveled_m = max(0.0, self._auth_start_m - current_m)
+            # Distance implied by authority drop since last tick
+            delta_m = max(0.0, self._last_auth_m - current_m)
+            self._last_auth_m = current_m
 
-            if self._remaining_m is None:
-                if self._train_idx < len(self.block_eob_m):
-                    self._remaining_m = float(self.block_eob_m[self._train_idx])
-                else:
-                    return
+            if delta_m <= 0.0:
+                return  # authority not decreasing -> no forward motion
+
+            # Helper: get the length of the current block in meters
+            def block_len_for(idx: int) -> float:
+                if idx <= 0:
+                    return float(self.block_eob_m[0])
+                if idx < len(self.block_eob_m):
+                    return float(self.block_eob_m[idx] - self.block_eob_m[idx - 1])
+                return 0.0
+
+            # Add this tick's distance to our progress inside the current block
+            self._dist_in_block_m += delta_m
 
             moved = False
-            while traveled_m >= self._remaining_m - 1e-6:
-                traveled_m -= self._remaining_m
-                if self._train_idx + 1 >= len(self.green_order):
-                    self._remaining_m = None
+            # Step forward as long as we've "used up" this block
+            while True:
+                if self._train_idx is None or self._train_idx >= len(self.green_order):
                     break
+
+                cur_block_len = block_len_for(self._train_idx)
+                if cur_block_len <= 0.0:
+                    break
+
+                if self._dist_in_block_m + 1e-6 < cur_block_len:
+                    # Haven't finished the current block yet
+                    break
+
+                # Consume one block length and advance
+                self._dist_in_block_m -= cur_block_len
+
+                if self._train_idx + 1 >= len(self.green_order):
+                    # Reached end of path
+                    self._train_idx = len(self.green_order) - 1
+                    self._train_block = str(self.green_order[self._train_idx])
+                    self._dist_in_block_m = 0.0
+                    moved = True
+                    break
+
                 self._train_idx += 1
-                next_block = self.green_order[self._train_idx]
-                self._train_block = str(next_block)
-                self._remaining_m = float(self.block_eob_m[self._train_idx]) if self._train_idx < len(self.block_eob_m) else None
+                self._train_block = str(self.green_order[self._train_idx])
                 moved = True
 
-            if moved:
-                # Reset baseline so future travel is measured from current authority
-                self._auth_start_m = current_m + traveled_m
-
             # Recompute occupancy so UI reflects the current train block
-            self._recompute_occupied()
+            if moved:
+                self._recompute_occupied()
 
     # ---------------------- PLC operations ----------------------
 
