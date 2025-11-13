@@ -506,3 +506,26 @@ class HW_Wayside_Controller:
             "G-Commanded Speed": cmd_speed,
             "G-Commanded Authority": cmd_auth,
         }
+
+        # ---------------- build occupancy array for CTC ----------------------  # NEW
+    def build_occupancy_array(self, n_total_blocks: int) -> List[int]:
+        """
+        Return a 0/1 occupancy array of length n_total_blocks, where 1 means
+        this block is occupied according to this controller's merged view.
+
+        This is used by hw_main.py to combine occupancy from all waysides and
+        write a single array back to CTC, just like the SW module.
+        """
+        arr = [0] * int(n_total_blocks)
+
+        with self._lock:
+            # self._occupied is a set of block IDs as strings
+            for b in self._occupied:
+                try:
+                    i = int(b)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= i < int(n_total_blocks):
+                    arr[i] = 1
+
+        return arr
