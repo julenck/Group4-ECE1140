@@ -404,6 +404,7 @@ class train_controller_ui(tk.Tk):
             ("Driver Set Speed", "", "mph"),  # Add driver_velocity display
             ("Power Availability", "", "W"),
             ("Cabin Temperature", "", "F°"),
+            ("Set Temperature", "", "F°"),  # Add set_temperature display
             ("Station Side", "", "Left/Right"),
             ("Next Station", "", "Station"),
             ("Announcement", "", ""),  # Add announcement row
@@ -587,6 +588,8 @@ class train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", f"{state['power_command']:.1f}")
                 elif param == "Cabin Temperature":
                     self.info_treeview.set(iid, "value", f"{state.get('train_temperature', 0):.1f}")
+                elif param == "Set Temperature":
+                    self.info_treeview.set(iid, "value", f"{state.get('set_temperature', 0):.1f}")
                 elif param == "Station Side":
                     self.info_treeview.set(iid, "value", state.get('station_side', ''))
                 elif param == "Next Station":
@@ -654,22 +657,8 @@ class train_controller_ui(tk.Tk):
             "Mode": manual_mode  # True if manual mode
         }
         
-            # Update engineering panel based on mode (disabled in automatic mode)
-        eng_panel_locked = state.get('engineering_panel_locked', False)
-        if not manual_mode or eng_panel_locked:
-            self.kp_entry.configure(state="disabled")
-            self.ki_entry.configure(state="disabled")
-            self.apply_button.configure(state="disabled")
-        else:
-            # Manual mode and not locked - allow editing
-            self.kp_entry.configure(state="normal")
-            self.ki_entry.configure(state="normal")
-            self.apply_button.configure(state="normal")
-        
-        # Update button enabled states based on mode
-        # In automatic mode, disable all control buttons except Mode and Emergency Brake
-        button_state = 'normal' if manual_mode else 'disabled'
-        
+        # Note: UI buttons are display-only (hardware GPIO buttons control the actual functions)
+        # They stay disabled - only colors change to show state
         for name, val in mapping.items():
             entry = self.status_buttons.get(name)
             if not entry:
@@ -677,22 +666,14 @@ class train_controller_ui(tk.Tk):
             entry["active"] = val
             btn = entry["button"]
             
-            # Update colors
+            # Update colors to show state (buttons remain disabled - display only)
             if val:
                 btn.config(bg=self.active_color, fg="white", disabledforeground="white")
             else:
                 btn.config(bg=self.inactive_color, fg="black", disabledforeground="black")
             
-            # Update button state (enabled/disabled)
-            if name in ["Exterior Lights", "Interior Lights", "Left Door", "Right Door", "Announcement", "Service Brake"]:
-                btn.config(state=button_state)
-            elif name == "Emergency Brake":
-                # Emergency brake: ALWAYS enabled unless already engaged
-                btn.config(state='disabled' if emergency_brake_active else 'normal')
-            elif name == "Mode":
-                # Mode button: ALWAYS enabled
-                btn.config(state='normal')
-                # Update text
+            # Update Mode button text
+            if name == "Mode":
                 mode_text = "Manual" if manual_mode else "Automatic"
                 btn.config(text=mode_text)
             # If gpiozero LEDs are present, mirror status to physical LED
@@ -710,24 +691,27 @@ class train_controller_ui(tk.Tk):
                 print(f"LED update error for {name}: {e}")
 
     def lock_engineering_values(self):
-        """Lock Kp and Ki values."""
+        """Lock Kp and Ki values - called when Apply button is pressed."""
         try:
             kp = float(self.kp_entry.get())
             ki = float(self.ki_entry.get())
             
+            # Update API state with new values
             self.api.update_state({
                 'kp': kp,
                 'ki': ki,
                 'engineering_panel_locked': True
             })
             
-            # Disable inputs
+            # Disable inputs after locking
             self.kp_entry.configure(state="disabled")
             self.ki_entry.configure(state="disabled")
             self.apply_button.configure(state="disabled")
             
+            print(f"[Engineering Panel] Locked - Kp={kp}, Ki={ki}")
+            
         except ValueError:
-            tk.messagebox.showerror("Error", "Kp and Ki must be valid numbers")
+            print("[Engineering Panel] Error: Kp and Ki must be valid numbers")
 
 class vital_train_controls:
     def __init__(self, kp: float = 0.0, ki: float = 0.0, train_velocity: float = 0.0,
