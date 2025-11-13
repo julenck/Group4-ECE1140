@@ -951,6 +951,227 @@ and control Train {train_id}."""
         self.update_timer_active = False
 
 
+class TrainDispatchDialog(tk.Toplevel):
+    """Simple dialog for dispatching a train from CTC.
+    
+    This dialog allows the CTC to select a train type and dispatch it.
+    """
+    
+    def __init__(self, parent=None, train_manager=None):
+        """Initialize the train dispatch dialog.
+        
+        Args:
+            parent: Parent window (can be None for standalone)
+            train_manager: Existing TrainManager instance (creates new if None)
+        """
+        super().__init__(parent)
+        
+        self.title("Dispatch Train - Select Controller Type")
+        self.geometry("450x250")
+        self.resizable(False, False)
+        
+        # Create or use existing train manager
+        if train_manager is None:
+            self.manager = TrainManager()
+        else:
+            self.manager = train_manager
+        
+        self.selected_type = None
+        self.train_id = None
+        
+        # Configure grid
+        self.columnconfigure(0, weight=1)
+        
+        # Header
+        header_frame = tk.Frame(self, bg="#2c3e50", height=60)
+        header_frame.grid(row=0, column=0, sticky="EW")
+        header_frame.columnconfigure(0, weight=1)
+        
+        title = tk.Label(
+            header_frame,
+            text="Dispatch New Train",
+            font=("Arial", 16, "bold"),
+            bg="#2c3e50",
+            fg="white"
+        )
+        title.grid(row=0, column=0, pady=15)
+        
+        # Main content
+        content_frame = tk.Frame(self, bg="white")
+        content_frame.grid(row=1, column=0, sticky="NSEW", padx=20, pady=20)
+        content_frame.columnconfigure(0, weight=1)
+        
+        # Instructions
+        instructions = tk.Label(
+            content_frame,
+            text="Select the type of train controller:",
+            font=("Arial", 11),
+            bg="white"
+        )
+        instructions.grid(row=0, column=0, pady=(0, 15))
+        
+        # Controller type selection
+        self.controller_type_var = tk.StringVar(value="software")
+        
+        radio_frame = tk.Frame(content_frame, bg="white")
+        radio_frame.grid(row=1, column=0, pady=(0, 20))
+        
+        sw_radio = tk.Radiobutton(
+            radio_frame,
+            text="💻 Software Controller (UI Only)",
+            variable=self.controller_type_var,
+            value="software",
+            font=("Arial", 10),
+            bg="white",
+            cursor="hand2"
+        )
+        sw_radio.pack(anchor="w", padx=10, pady=5)
+        
+        hw_remote_radio = tk.Radiobutton(
+            radio_frame,
+            text="🔧 Hardware Controller (Remote - Raspberry Pi)",
+            variable=self.controller_type_var,
+            value="hardware_remote",
+            font=("Arial", 10),
+            bg="white",
+            cursor="hand2"
+        )
+        hw_remote_radio.pack(anchor="w", padx=10, pady=5)
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame, bg="white")
+        button_frame.grid(row=2, column=0)
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        
+        dispatch_btn = tk.Button(
+            button_frame,
+            text="Dispatch Train",
+            font=("Arial", 11, "bold"),
+            bg="#27ae60",
+            fg="white",
+            activebackground="#2ecc71",
+            activeforeground="white",
+            command=self.dispatch_train,
+            width=15,
+            cursor="hand2"
+        )
+        dispatch_btn.grid(row=0, column=0, padx=5)
+        
+        cancel_btn = tk.Button(
+            button_frame,
+            text="Cancel",
+            font=("Arial", 11),
+            bg="#95a5a6",
+            fg="white",
+            activebackground="#7f8c8d",
+            activeforeground="white",
+            command=self.cancel,
+            width=15,
+            cursor="hand2"
+        )
+        cancel_btn.grid(row=0, column=1, padx=5)
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Center the dialog
+        self.center_window()
+    
+    def center_window(self):
+        """Center the dialog on screen."""
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def dispatch_train(self):
+        """Dispatch the selected train type."""
+        controller_type = self.controller_type_var.get()
+        
+        try:
+            if controller_type == "software":
+                self.train_id = self.manager.add_train(create_uis=True, use_hardware=False, is_remote=False)
+                print(f"[CTC Dispatch] Train {self.train_id} dispatched with SOFTWARE controller")
+                
+            elif controller_type == "hardware_remote":
+                self.train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True)
+                print(f"[CTC Dispatch] Train {self.train_id} dispatched - REMOTE hardware controller")
+                
+                # Show instructions popup
+                import socket
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    server_ip = s.getsockname()[0]
+                    s.close()
+                except:
+                    server_ip = "localhost"
+                
+                msg = f"""Train {self.train_id} Model created on this server!
+
+Hardware Controller must run on Raspberry Pi.
+
+═══════════════════════════════════════
+On Raspberry Pi, run:
+
+cd train_controller/ui
+python train_controller_hw_ui.py --train-id {self.train_id} --server http://{server_ip}:5000
+
+═══════════════════════════════════════
+
+The hardware controller will connect to this server
+and control Train {self.train_id}."""
+                
+                import tkinter.messagebox
+                tkinter.messagebox.showinfo(f"Train {self.train_id} - Remote Hardware Setup", msg)
+            
+            self.selected_type = controller_type
+            self.destroy()
+            
+        except Exception as e:
+            import tkinter.messagebox
+            tkinter.messagebox.showerror("Dispatch Error", f"Failed to dispatch train:\n{str(e)}")
+            print(f"Error dispatching train: {e}")
+    
+    def cancel(self):
+        """Cancel the dispatch operation."""
+        self.train_id = None
+        self.selected_type = None
+        self.destroy()
+
+
+def dispatch_train_from_ctc(train_manager=None):
+    """Helper function to dispatch a train from CTC.
+    
+    This function can be called from the CTC UI to show the train dispatch dialog.
+    
+    Args:
+        train_manager: Optional existing TrainManager instance
+        
+    Returns:
+        tuple: (train_id, controller_type) or (None, None) if cancelled
+    """
+    # Create a temporary root window if needed
+    root = None
+    if not tk._default_root:
+        root = tk.Tk()
+        root.withdraw()
+    
+    # Show dispatch dialog
+    dialog = TrainDispatchDialog(train_manager=train_manager)
+    dialog.wait_window()
+    
+    # Clean up temporary root
+    if root:
+        root.destroy()
+    
+    return dialog.train_id, dialog.selected_type
+
+
 # Example usage
 if __name__ == "__main__":
     import tkinter as tk
