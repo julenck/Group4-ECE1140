@@ -1,9 +1,6 @@
 {
     "block": {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 171baff (update commit message for your changes. Lines starting with '#' will be ignored, and an empty message aborts the commit.)
+ 
         "commanded speed": [
             40,
             67,
@@ -18,13 +15,7 @@
             3,
             3
         ]
-<<<<<<< HEAD
-=======
-        "commanded_speed": 40,
-        "commanded_authority": 0
->>>>>>> d02c1bb (git push)
-=======
->>>>>>> 171baff (update commit message for your changes. Lines starting with '#' will be ignored, and an empty message aborts the commit.)
+
     },
     "beacon": {
         "speed limit": 30,
