@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from Track_Visualizer import RailwayDiagram
+from DynamicBlockManager import DynamicBlockManager
 from PIL import Image, ImageTk
 import json
 import pandas as pd
@@ -14,6 +15,7 @@ class TrackModelUI(tk.Tk):
         self.title("Track Model Software Module")
         self.geometry("1700x950")
         self.configure(bg="white")
+        self.block_manager = DynamicBlockManager()
 
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=5)  # Left panel gets more space
@@ -345,6 +347,8 @@ class TrackModelUI(tk.Tk):
             for r in records
             if str(r["Block Number"]).replace(".", "", 1).isdigit()
         ]
+        if self.block_manager and blocks:
+            self.block_manager.initialize_blocks(selected_line, blocks)
         self.block_selector["values"] = blocks
         if blocks:
             self.block_selector.current(0)
@@ -415,135 +419,175 @@ class TrackModelUI(tk.Tk):
                 print(f"Failed to highlight block '{selected_block}': {e}")
 
     def load_data(self):
-        if not os.path.exists("track_model_Track_controller.json"):
-            self.after(500, self.load_data)
-            return
-
+        # WRITE PHASE: Read JSON file and parse it
+        selected_line = self.line_selector.get()
         try:
-            selected_line = self.line_selector.get()
-            selected_block = self.block_selector.get()
-
-            if not selected_line or not selected_block:
-                self.after(500, self.load_data)
-                return
-
             with open("track_model_Track_controller.json", "r") as f:
                 data = json.load(f)
 
-            line_data = data.get(selected_line, {}) -- No longer available
-            block_data = line_data.get(selected_block, {}) -- No longer available
+            if self.block_manager and selected_line:
+                # Determine prefix based on line
+                prefix = selected_line[0]  # "G" for Green, "R" for Red
 
-            block = block_data.get("block", {}) -- Should now get from Block Manager
-            env = block_data.get("environment", {}) -- Should now get from Block Manager
-            failures = block_data.get("failures", {}) -- Should now get from Block Manager
-            station = block_data.get("station", {}) -- Should now get from Block Manager
-            commanded = block_data.get("commanded", {}) -- Should now get from Block Manager
+                # Parse arrays from JSON
+                switches = data.get(f"{prefix}-switches", [])
+                gates = data.get(f"{prefix}-gates", [])
+                lights = data.get(f"{prefix}-lights", [])
+                occupancy = data.get(f"{prefix}-Occupancy", [])
+                failures = data.get(f"{prefix}-Failures", [])
 
-            temp = env.get("temperature", 0) -- Should now get from Block Manager
-            occupancy = block.get("occupancy", "NA") -- Should now get from Block Manager
-            authority = commanded.get("authority", "NA") -- Should now get from Block Manager
-            speed = commanded.get("speed", "NA") -- Should now get from Block Manager
-            light_input = block.get("light", "N/A") -- Should now get from Block Manager
-            gate_input = block.get("gate", "N/A") -- Should now get from Block Manager
+                # Build lists of blocks with switches and gates
+                switch_blocks = []
+                gate_blocks = []
+                for b in self.static_data:
+                    # Skip blocks with N/A block numbers
+                    if b.get("Block Number") == "N/A":
+                        continue
 
-            switch_position = block_data.get("switch_position", "N/A") -- Should now get from Block Manager
-            branching_value = next( -- DO NOT MODIFY RELIES ON STATIC DATA NO MODIFICATIONS TILL CLEAR**
-                (
-                    b["Branching"]
-                    for b in self.static_data
-                    if f"{b['Section']}{int(float(b['Block Number']))}"
-                    == selected_block
-                ),
-                "No",
+                    block_id = f"{b['Section']}{int(float(b['Block Number']))}"
+                    if b.get("Branching", "N/A") != "N/A":
+                        switch_blocks.append((block_id, b["Branching"]))
+                    if b.get("Crossing", "No") == "Yes":
+                        gate_blocks.append(block_id)
+
+                # Map switches to blocks
+                switch_positions = {}
+                for i, (block_id, branching) in enumerate(switch_blocks):
+                    if i < len(switches):
+                        branches = [s.strip() for s in branching.split(",")]
+                        switch_positions[block_id] = branches[switches[i]]
+
+                # Map gates to blocks
+                gate_statuses = {}
+                for i, block_id in enumerate(gate_blocks):
+                    if i < len(gates):
+                        gate_statuses[block_id] = "Open" if gates[i] == 0 else "Closed"
+
+                self.block_manager.write_inputs(
+                    selected_line,
+                    switch_positions,
+                    gate_statuses,
+                    lights,
+                    occupancy,
+                    failures,
+                )
+                print(
+                    f"[JSON WRITE] Data written for line '{selected_line} and {switch_positions} and {gate_statuses} and {lights} and {occupancy} and {failures}'"
+                )
+
+        except Exception as e:
+            print(f"Error reading JSON: {e}")
+
+        # READ PHASE: Get data from storage and update UI
+        selected_block = self.block_selector.get()
+
+        if self.block_manager and selected_block:
+            block_data = self.block_manager.get_block_dynamic_data(
+                selected_line, selected_block
             )
-            if branching_value in ["No", "N/A", "To/From Yard"]:
-                switch_position = "N/A"
-            self.block_labels["Switch Position:"].set(switch_position)
 
-            failures_active = any(failures.values())
-            heating_on = temp < 32
+            if block_data:
+                temp = block_data["temperature"]
+                occupancy = block_data["occupancy"]
+                authority = block_data["commanded_authority"]
+                speed = block_data["commanded_speed"]
+                light_input = block_data["traffic_light"]
+                gate_input = block_data["gate"]
+                failures = block_data["failures"]
+                switch_position = block_data["switch_position"]
 
-            if failures.get("power"):
-                traffic_light = "OFF"
-                crossing_value = next(
+                branching_value = next(
                     (
-                        b["Crossing"]
+                        b["Branching"]
                         for b in self.static_data
                         if f"{b['Section']}{int(float(b['Block Number']))}"
                         == selected_block
                     ),
                     "No",
                 )
-                gate_status = "Closed" if crossing_value == "Yes" else "N/A"
+                if branching_value in ["No", "N/A", "To/From Yard"]:
+                    switch_position = "N/A"
+                self.block_labels["Switch Position:"].set(switch_position)
 
-            if failures.get("circuit"):
-                occupancy = 0
-                displayed_occupancy = "--"
-                if authority > 0:
-                    traffic_light = "Green"
-                    gate_status = "Open"
-                else:
-                    traffic_light = "Red"
-                    gate_status = "Open"
+                failures_active = any(failures.values())
+                heating_on = temp < 32
 
-            if failures.get("broken"):
-                authority = 0
-                speed = 0
-                traffic_light = "Red"
-                crossing_value = next(
-                    (
-                        b["Crossing"]
-                        for b in self.static_data
-                        if f"{b['Section']}{int(float(b['Block Number']))}"
-                        == selected_block
-                    ),
-                    "No",
-                )
-                gate_status = "Closed" if crossing_value == "Yes" else "N/A"
-
-            # elif occupancy:
-            # traffic_light = "Yellow"
-            # gate_status = "Closed"
-
-            else:
                 traffic_light = light_input
                 gate_status = gate_input
 
-            self.block_labels["Direction of Travel:"].set("--") -- 
-            self.block_labels["Traffic Light:"].set(traffic_light)
-            self.block_labels["Gate:"].set(gate_status)
-            self.dynamic_labels["Commanded Speed (mph):"].set(speed)
-            self.dynamic_labels["Commanded Authority (yards):"].set(authority)
-            self.dynamic_labels["Occupancy:"].set("OCCUPIED" if occupancy else "CLEAR")
-
-            self.temperature.set(str(temp))
-            self.heating_status.config(
-                text="ON" if heating_on else "OFF",
-                foreground="green" if heating_on else "red",
-            )
-
-            for key in self.failure_vars:
-                state_key = key.split()[0].lower()
-                self.failure_vars[key].set(failures.get(state_key, False))
-
-            if failures_active:
-                active = []
                 if failures.get("power"):
-                    active.append("Power Failure")
-                if failures.get("circuit"):
-                    active.append("Circuit Failure")
-                if failures.get("broken"):
-                    active.append("Broken Track")
-                failure_text = ", ".join(active)
-                self.warning_label.config(
-                    text=f"Warning: Active Failure - {failure_text}",
-                    foreground="orange",
-                )
-            else:
-                self.warning_label.config(text="All Systems Normal", foreground="green")
+                    traffic_light = "OFF"
+                    crossing_value = next(
+                        (
+                            b["Crossing"]
+                            for b in self.static_data
+                            if f"{b['Section']}{int(float(b['Block Number']))}"
+                            == selected_block
+                        ),
+                        "No",
+                    )
+                    gate_status = "Closed" if crossing_value == "Yes" else "N/A"
 
-        except Exception as e:
-            print(f"Error loading block {selected_line}/{selected_block}: {e}")
+                if failures.get("circuit"):
+                    occupancy = 0
+                    if authority != "N/A" and authority > 0:
+                        traffic_light = "Green"
+                        gate_status = "Open"
+                    else:
+                        traffic_light = "Red"
+                        gate_status = "Open"
+
+                if failures.get("broken"):
+                    authority = 0
+                    speed = 0
+                    traffic_light = "Red"
+                    crossing_value = next(
+                        (
+                            b["Crossing"]
+                            for b in self.static_data
+                            if f"{b['Section']}{int(float(b['Block Number']))}"
+                            == selected_block
+                        ),
+                        "No",
+                    )
+                    gate_status = "Closed" if crossing_value == "Yes" else "N/A"
+
+                self.block_labels["Direction of Travel:"].set("--")
+                self.block_labels["Traffic Light:"].set(traffic_light)
+                self.block_labels["Gate:"].set(gate_status)
+                self.dynamic_labels["Commanded Speed (mph):"].set(speed)
+                self.dynamic_labels["Commanded Authority (yards):"].set(authority)
+                self.dynamic_labels["Occupancy:"].set(
+                    "OCCUPIED" if occupancy else "CLEAR"
+                )
+
+                self.temperature.set(str(temp))
+                self.heating_status.config(
+                    text="ON" if heating_on else "OFF",
+                    foreground="green" if heating_on else "red",
+                )
+
+                for key in self.failure_vars:
+                    state_key = key.split()[0].lower()
+                    self.failure_vars[key].set(failures.get(state_key, False))
+
+                if failures_active:
+                    active = []
+                    if failures.get("power"):
+                        active.append("Power Failure")
+                    if failures.get("circuit"):
+                        active.append("Circuit Failure")
+                    if failures.get("broken"):
+                        active.append("Broken Track")
+                    failure_text = ", ".join(active)
+                    self.warning_label.config(
+                        text=f"Warning: Active Failure - {failure_text}",
+                        foreground="orange",
+                    )
+                else:
+                    self.warning_label.config(
+                        text="All Systems Normal", foreground="green"
+                    )
 
         self.after(500, self.load_data)
 
@@ -564,51 +608,23 @@ class TrackModelUI(tk.Tk):
         self.update_json_temperature()
 
     def update_json_temperature(self):
-        if not os.path.exists("track_model_Track_controller.json"):
-            return
-        try:
-            with open("track_model_Track_controller.json", "r") as f:
-                data = json.load(f)
-            selected_line = self.line_selector.get()
-            selected_block = self.block_selector.get()
-            temp = self.temperature.get()
-
-            data.setdefault(selected_line, {})
-            data[selected_line].setdefault(selected_block, {})
-            data[selected_line][selected_block].setdefault("environment", {})
-            data[selected_line][selected_block]["environment"]["temperature"] = temp
-
-            with open("track_model_Track_controller.json", "w") as f:
-                json.dump(data, f, indent=4)
-        except Exception:
-            print("Error updating temperature in JSON.")
+        selected_line = self.line_selector.get()
+        selected_block = self.block_selector.get()
+        if selected_line and selected_block and self.block_manager:
+            temp = int(self.temperature.get())
+            self.block_manager.update_temperature(selected_line, selected_block, temp)
 
     def update_failures(self):
-        if not os.path.exists("track_model_Track_controller.json"):
-            return
-        try:
-            with open("track_model_Track_controller.json", "r") as f:
-                data = json.load(f)
-            selected_line = self.line_selector.get()
-            selected_block = self.block_selector.get()
-            if selected_line and selected_block:
-
-                data.setdefault(selected_line, {})
-                data[selected_line].setdefault(selected_block, {})
-                data[selected_line][selected_block].setdefault("failures", {})
-                data[selected_line][selected_block]["failures"]["power"] = (
-                    self.failure_vars["Power Failure"].get()
-                )
-                data[selected_line][selected_block]["failures"]["circuit"] = (
-                    self.failure_vars["Circuit Failure"].get()
-                )
-                data[selected_line][selected_block]["failures"]["broken"] = (
-                    self.failure_vars["Broken Track"].get()
-                )
-                with open("track_model_Track_controller.json", "w") as f:
-                    json.dump(data, f, indent=4)
-        except Exception:
-            print("Error updating failures in JSON.")
+        selected_line = self.line_selector.get()
+        selected_block = self.block_selector.get()
+        if selected_line and selected_block and self.block_manager:
+            self.block_manager.update_failures(
+                selected_line,
+                selected_block,
+                power=self.failure_vars["Power Failure"].get(),
+                circuit=self.failure_vars["Circuit Failure"].get(),
+                broken=self.failure_vars["Broken Track"].get(),
+            )
 
     def poll_visualizer_clicks(self):
         """Check for new block clicks every 500 ms."""

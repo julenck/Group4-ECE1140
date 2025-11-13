@@ -34,37 +34,48 @@ class train_controller_api:
         # Default state template
         self.train_states = {
             # Inputs FROM Train Model
-            'commanded_speed': 60.0,      # mph - realistic commanded speed
-            'commanded_authority': 1000.0,   # yards - enough authority to move
-            'speed_limit': 60.0,         # mph - realistic speed limit
-            'train_velocity': 0.0,             # mph - train starts at rest
-            'next_stop': 'Station A',             # station name
-            'station_side': 'Right',     # left/right
-            'train_temperature': 70.0,   # °F - comfortable room temperature
-            'engine_failure': False,
-            'signal_failure': False,
-            'brake_failure': False,
-            'manual_mode': False,       # manual/automatic mode
+            'commanded_speed': 0.0,
+            'commanded_authority': 0.0,
+            'speed_limit': 0.0,
+            'train_velocity': 0.0,
+            'current_station': '',
+            'next_stop': '',
+            'station_side': '',
+            'train_temperature': 0.0,
+            'manual_mode': False,
+            
+            # Train Model Failure Flags (activated by Train Model)
+            'train_model_engine_failure': False,
+            'train_model_signal_failure': False,
+            'train_model_brake_failure': False,
+            
+            # Train Controller Failure Flags (detected and activated by Train Controller)
+            'train_controller_engine_failure': False,
+            'train_controller_signal_failure': False,
+            'train_controller_brake_failure': False,
+            
+            # Signal for Train Controller (set by Train Model when beacon read is blocked)
+            'beacon_read_blocked': False,
             
             # Internal Train Controller State
-            'driver_velocity': 0.0,           # mph - driver's set speed, will be initialized to match commanded_speed
-            'service_brake': False,         # boolean
-            'right_door': False,        # door state
-            'left_door': False,         # door state
-            'interior_lights': True,   # interior lights state - on by default
-            'exterior_lights': True,   # exterior lights state - on by default
-            'set_temperature': 70.0,     # Driver's desired temperature (°F) - will be initialized to match train_temperature
-            'temperature_up': False,    # temperature control
-            'temperature_down': False,   # temperature control
-            'announcement': '',         # current announcement
-            'announce_pressed': False,  # tracks if announcement button is pressed
-            'emergency_brake': False,   # emergency brake state
-            'kp': 0.0,                  # proportional gain - default to 0 until set by user
-            'ki': 0.0,                  # integral gain - default to 0 until set by user
-            'engineering_panel_locked': False,  # engineering panel state
+            'driver_velocity': 0.0,
+            'service_brake': False,
+            'right_door': False,
+            'left_door': False,
+            'interior_lights': False,
+            'exterior_lights': False,
+            'set_temperature': 70.0,  # Default to 70°F for automatic mode
+            'temperature_up': False,
+            'temperature_down': False,
+            'announcement': '',
+            'announce_pressed': False,
+            'emergency_brake': False,
+            'kp': 0.0,
+            'ki': 0.0,
+            'engineering_panel_locked': False,
             
             # Outputs TO Train Model
-            'power_command': 0.0,        # power in Watts
+            'power_command': 0.0,
         }
         
         # Initialize state file if it doesn't exist or is empty/malformed
@@ -252,13 +263,14 @@ class train_controller_api:
             'commanded_authority': inputs.get('commanded authority', 0.0),
             'speed_limit': inputs.get('speed limit', 0.0),
             'train_velocity': outputs.get('velocity_mph', 0.0),
-            'train_temperature': outputs.get('temperature_F', 70.0),
-            'engine_failure': inputs.get('engine_failure', False),
-            'signal_failure': inputs.get('signal_failure', False),
-            'brake_failure': inputs.get('brake_failure', False),
-            'manual_mode': inputs.get('manual_mode', False),
-            'next_stop': inputs.get('next station', ''),
-            'station_side': inputs.get('side_door', '')
+            'train_temperature': outputs.get('temperature_F', 0.0),
+            'train_model_engine_failure': inputs.get('train_model_engine_failure', False),
+            'train_model_signal_failure': inputs.get('train_model_signal_failure', False),
+            'train_model_brake_failure': inputs.get('train_model_brake_failure', False),
+            # NOTE: manual_mode is a controller-only state, not read from train_data.json
+            # NOTE: Do NOT read beacon info (current_station, next_stop, station_side) from train_data.json
+            # The Train Model writes beacon info to train_states.json with proper signal failure handling
+            # Reading from inputs here would bypass the frozen data logic during signal failure
         }
 
         # Update controller state
@@ -278,16 +290,11 @@ class train_controller_api:
         relevant_data = {
             k: v for k, v in data.items() 
             if k in ['commanded_speed', 'commanded_authority', 'speed_limit',
-                    'train_velocity', 'next_stop', 'station_side', 'train_temperature',
-                    'engine_failure', 'signal_failure', 'brake_failure', 'manual_mode']
+                    'train_velocity', 'current_station', 'next_stop', 'station_side', 'train_temperature',
+                    'train_model_engine_failure', 'train_model_signal_failure', 
+                    'train_model_brake_failure', 'manual_mode']
         }
         
-        # If commanded_speed is changing and driver_velocity matches old commanded_speed,
-        # update driver_velocity to match new commanded_speed
-        if ('commanded_speed' in relevant_data and 
-            current_state['driver_velocity'] == current_state['commanded_speed']):
-            relevant_data['driver_velocity'] = relevant_data['commanded_speed']
-            
         # If train_temperature is changing and set_temperature matches old train_temperature,
         # update set_temperature to match new train_temperature
         if ('train_temperature' in relevant_data and 

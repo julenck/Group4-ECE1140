@@ -261,11 +261,11 @@ class TrainManager:
         block = track.get("block", {})
         beacon = track.get("beacon", {})
 
-        commanded_speed = float(block.get("commanded_speed", 60.0))
-        commanded_authority = float(block.get("commanded_authority", 1000.0))
-        speed_limit = float(beacon.get("speed_limit", 60.0))
-        next_stop = beacon.get("next_stop", "Station A")
-        station_side = beacon.get("station_side", "Right")
+        commanded_speed = float(block.get("commanded_speed", 0.0))
+        commanded_authority = float(block.get("commanded_authority", 0.0))
+        speed_limit = float(beacon.get("speed_limit", 0.0))
+        next_stop = beacon.get("next_stop", "")
+        station_side = beacon.get("station_side", "")
 
         # Default state for new train (matches track inputs)
         all_states[train_key] = {
@@ -276,18 +276,21 @@ class TrainManager:
             "train_velocity": 0.0,
             "next_stop": next_stop,
             "station_side": station_side,
-            "train_temperature": 68.0,
-            "engine_failure": False,
-            "signal_failure": False,
-            "brake_failure": False,
+            "train_temperature": 0.0,
+            "train_model_engine_failure": False,
+            "train_model_signal_failure": False,
+            "train_model_brake_failure": False,
+            "train_controller_engine_failure": False,
+            "train_controller_signal_failure": False,
+            "train_controller_brake_failure": False,
             "manual_mode": False,
             "driver_velocity": 0.0,
             "service_brake": False,
             "right_door": False,
             "left_door": False,
-            "interior_lights": True,
-            "exterior_lights": True,
-            "set_temperature": 70.0,
+            "interior_lights": False,
+            "exterior_lights": False,
+            "set_temperature": 0.0,
             "temperature_up": False,
             "temperature_down": False,
             "announcement": "",
@@ -342,19 +345,19 @@ class TrainManager:
 
         cmd_speed = float(pick_val(block.get("commanded_speed", 0.0), index, 0.0))
         cmd_auth = float(pick_val(block.get("commanded_authority", 0.0), index, 0.0))
-        speed_lim = float(beacon.get("speed_limit", 30.0))
+        speed_lim = float(beacon.get("speed_limit", 0.0))
         inputs = {
             "commanded speed": cmd_speed,
             "commanded authority": cmd_auth,
             "speed limit": speed_lim,
-            "current station": beacon.get("current_station", "Unknown"),
-            "next station": beacon.get("next_stop", "Unknown"),
-            "side_door": beacon.get("station_side", "Right"),
+            "current station": beacon.get("current_station", ""),
+            "next station": beacon.get("next_stop", ""),
+            "side_door": beacon.get("station_side", ""),
             "passengers_boarding": int(pick(train_sec.get("passengers_boarding_", []) or [], index, 0)),
-            # default controller-related flags
-            "engine_failure": False,
-            "signal_failure": False,
-            "brake_failure": False,
+            # Train Model failure flags
+            "train_model_engine_failure": False,
+            "train_model_signal_failure": False,
+            "train_model_brake_failure": False,
             "emergency_brake": False,
             "passengers_onboard": 0
         }
@@ -386,7 +389,7 @@ class TrainManager:
                 "next_station": inputs["next station"],
                 "left_door_open": False,
                 "right_door_open": False,
-                "temperature_F": 68.0,
+                "temperature_F": 0.0,
                 "door_side": inputs["side_door"],
                 "passengers_onboard": 0,
                 "passengers_boarding": inputs["passengers_boarding"],
@@ -570,14 +573,14 @@ class TrainManager:
             outputs = train_pair.model.update(
                 commanded_speed=state.get("commanded_speed", 0),
                 commanded_authority=state.get("commanded_authority", 0),
-                speed_limit=state.get("speed_limit", 30),
-                current_station=state.get("next_stop", "Unknown"),
-                next_station=state.get("next_stop", "Unknown"),
-                side_door=state.get("station_side", "Right"),
+                speed_limit=state.get("speed_limit", 0),
+                current_station=state.get("next_stop", ""),
+                next_station=state.get("next_stop", ""),
+                side_door=state.get("station_side", ""),
                 power_command=power,
                 emergency_brake=state.get("emergency_brake", False),
                 service_brake=state.get("service_brake", False),
-                set_temperature=state.get("set_temperature", 70.0),
+                set_temperature=state.get("set_temperature", 0.0),
                 left_door=state.get("left_door", False),
                 right_door=state.get("right_door", False)
             )
@@ -949,6 +952,227 @@ and control Train {train_id}."""
     def stop_simulation(self):
         """Stop the periodic simulation updates."""
         self.update_timer_active = False
+
+
+class TrainDispatchDialog(tk.Toplevel):
+    """Simple dialog for dispatching a train from CTC.
+    
+    This dialog allows the CTC to select a train type and dispatch it.
+    """
+    
+    def __init__(self, parent=None, train_manager=None):
+        """Initialize the train dispatch dialog.
+        
+        Args:
+            parent: Parent window (can be None for standalone)
+            train_manager: Existing TrainManager instance (creates new if None)
+        """
+        super().__init__(parent)
+        
+        self.title("Dispatch Train - Select Controller Type")
+        self.geometry("450x250")
+        self.resizable(False, False)
+        
+        # Create or use existing train manager
+        if train_manager is None:
+            self.manager = TrainManager()
+        else:
+            self.manager = train_manager
+        
+        self.selected_type = None
+        self.train_id = None
+        
+        # Configure grid
+        self.columnconfigure(0, weight=1)
+        
+        # Header
+        header_frame = tk.Frame(self, bg="#2c3e50", height=60)
+        header_frame.grid(row=0, column=0, sticky="EW")
+        header_frame.columnconfigure(0, weight=1)
+        
+        title = tk.Label(
+            header_frame,
+            text="Dispatch New Train",
+            font=("Arial", 16, "bold"),
+            bg="#2c3e50",
+            fg="white"
+        )
+        title.grid(row=0, column=0, pady=15)
+        
+        # Main content
+        content_frame = tk.Frame(self, bg="white")
+        content_frame.grid(row=1, column=0, sticky="NSEW", padx=20, pady=20)
+        content_frame.columnconfigure(0, weight=1)
+        
+        # Instructions
+        instructions = tk.Label(
+            content_frame,
+            text="Select the type of train controller:",
+            font=("Arial", 11),
+            bg="white"
+        )
+        instructions.grid(row=0, column=0, pady=(0, 15))
+        
+        # Controller type selection
+        self.controller_type_var = tk.StringVar(value="software")
+        
+        radio_frame = tk.Frame(content_frame, bg="white")
+        radio_frame.grid(row=1, column=0, pady=(0, 20))
+        
+        sw_radio = tk.Radiobutton(
+            radio_frame,
+            text="💻 Software Controller (UI Only)",
+            variable=self.controller_type_var,
+            value="software",
+            font=("Arial", 10),
+            bg="white",
+            cursor="hand2"
+        )
+        sw_radio.pack(anchor="w", padx=10, pady=5)
+        
+        hw_remote_radio = tk.Radiobutton(
+            radio_frame,
+            text="🔧 Hardware Controller (Remote - Raspberry Pi)",
+            variable=self.controller_type_var,
+            value="hardware_remote",
+            font=("Arial", 10),
+            bg="white",
+            cursor="hand2"
+        )
+        hw_remote_radio.pack(anchor="w", padx=10, pady=5)
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame, bg="white")
+        button_frame.grid(row=2, column=0)
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        
+        dispatch_btn = tk.Button(
+            button_frame,
+            text="Dispatch Train",
+            font=("Arial", 11, "bold"),
+            bg="#27ae60",
+            fg="white",
+            activebackground="#2ecc71",
+            activeforeground="white",
+            command=self.dispatch_train,
+            width=15,
+            cursor="hand2"
+        )
+        dispatch_btn.grid(row=0, column=0, padx=5)
+        
+        cancel_btn = tk.Button(
+            button_frame,
+            text="Cancel",
+            font=("Arial", 11),
+            bg="#95a5a6",
+            fg="white",
+            activebackground="#7f8c8d",
+            activeforeground="white",
+            command=self.cancel,
+            width=15,
+            cursor="hand2"
+        )
+        cancel_btn.grid(row=0, column=1, padx=5)
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Center the dialog
+        self.center_window()
+    
+    def center_window(self):
+        """Center the dialog on screen."""
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def dispatch_train(self):
+        """Dispatch the selected train type."""
+        controller_type = self.controller_type_var.get()
+        
+        try:
+            if controller_type == "software":
+                self.train_id = self.manager.add_train(create_uis=True, use_hardware=False, is_remote=False)
+                print(f"[CTC Dispatch] Train {self.train_id} dispatched with SOFTWARE controller")
+                
+            elif controller_type == "hardware_remote":
+                self.train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True)
+                print(f"[CTC Dispatch] Train {self.train_id} dispatched - REMOTE hardware controller")
+                
+                # Show instructions popup
+                import socket
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    server_ip = s.getsockname()[0]
+                    s.close()
+                except:
+                    server_ip = "localhost"
+                
+                msg = f"""Train {self.train_id} Model created on this server!
+
+Hardware Controller must run on Raspberry Pi.
+
+═══════════════════════════════════════
+On Raspberry Pi, run:
+
+cd train_controller/ui
+python train_controller_hw_ui.py --train-id {self.train_id} --server http://{server_ip}:5000
+
+═══════════════════════════════════════
+
+The hardware controller will connect to this server
+and control Train {self.train_id}."""
+                
+                import tkinter.messagebox
+                tkinter.messagebox.showinfo(f"Train {self.train_id} - Remote Hardware Setup", msg)
+            
+            self.selected_type = controller_type
+            self.destroy()
+            
+        except Exception as e:
+            import tkinter.messagebox
+            tkinter.messagebox.showerror("Dispatch Error", f"Failed to dispatch train:\n{str(e)}")
+            print(f"Error dispatching train: {e}")
+    
+    def cancel(self):
+        """Cancel the dispatch operation."""
+        self.train_id = None
+        self.selected_type = None
+        self.destroy()
+
+
+def dispatch_train_from_ctc(train_manager=None):
+    """Helper function to dispatch a train from CTC.
+    
+    This function can be called from the CTC UI to show the train dispatch dialog.
+    
+    Args:
+        train_manager: Optional existing TrainManager instance
+        
+    Returns:
+        tuple: (train_id, controller_type) or (None, None) if cancelled
+    """
+    # Create a temporary root window if needed
+    root = None
+    if not tk._default_root:
+        root = tk.Tk()
+        root.withdraw()
+    
+    # Show dispatch dialog
+    dialog = TrainDispatchDialog(train_manager=train_manager)
+    dialog.wait_window()
+    
+    # Clean up temporary root
+    if root:
+        root.destroy()
+    
+    return dialog.train_id, dialog.selected_type
 
 
 # Example usage
