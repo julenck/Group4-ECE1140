@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional, Tuple
 import threading
 import time
+from unittest import signals
 
 # Optional import of your PLCs (left dynamic to avoid import errors if absent)
 try:
@@ -22,9 +23,43 @@ _BLOCKS_WITH_LIGHTS   = [0, 3, 7, 29, 58, 62, 76,
                          86, 100, 101, 150, 151]    
 _BLOCKS_WITH_GATES    = [19, 108]                   
 
-_LIGHT_NAMES_ENUM = {0: "RED", 1: "YELLOW", 2: "GREEN", 3: "SUPERGREEN"}  # CHANGED
 _SWITCH_NAMES     = {0: "Left", 1: "Right"}                                # CHANGED
 _GATE_NAMES       = {0: "DOWN", 1: "UP"}                                   # CHANGED
+
+def _decode_light_bits(b0: int, b1: int) -> str:
+   
+    code = f"{int(b0)}{int(b1)}"
+
+    if   code == "00":
+        return "SUPERGREEN"
+    elif code == "01":
+        return "GREEN"
+    elif code == "10":
+        return "YELLOW"
+    elif code == "11":
+        return "RED"
+    return code
+
+def _encode_light_bits(name: str) -> tuple[int, int]:
+    """
+    Convert a light name back to its 2-bit representation:
+
+      SUPERGREEN -> (0, 0)
+      GREEN      -> (0, 1)
+      YELLOW     -> (1, 0)
+      RED        -> (1, 1)
+    """
+    n = (name or "").upper()
+    if n == "SUPERGREEN":
+        return (0, 0)
+    if n == "GREEN":
+        return (0, 1)
+    if n == "YELLOW":
+        return (1, 0)
+    if n == "RED":
+        return (1, 1)
+    # fallback: treat unknown as red for safety
+    return (1, 1)
 
 _YARD_TO_M = 0.9144
 
@@ -234,18 +269,8 @@ class HW_Wayside_Controller:
                     except (IndexError, ValueError):
                         continue
 
-                    code = f"{b0}{b1}"
-                    if   code == "00":
-                        name = "SUPERGREEN"
-                    elif code == "01":
-                        name = "GREEN"
-                    elif code == "10":
-                        name = "YELLOW"
-                    elif code == "11":
-                        name = "RED"
-                    else:
-                        name = code
-
+                    #   00 -> SUPERGREEN, 01 -> GREEN, 10 -> YELLOW, 11 -> RED
+                    name = _decode_light_bits(b0, b1)
                     self._light_state[bid] = name
 
             # -------- Gates (2 entries) --------
@@ -395,28 +420,18 @@ class HW_Wayside_Controller:
                 except (IndexError, ValueError):
                     continue
 
-                code = f"{b0}{b1}"
-                if   code == "00":
-                    name = "SUPERGREEN"
-                elif code == "01":
-                    name = "GREEN"
-                elif code == "10":
-                    name = "YELLOW"
-                elif code == "11":
-                    name = "RED"
-                else:
-                    name = code
-
+                # CHANGED: same 00/01/10/11 mapping via helper
+                name = _decode_light_bits(b0, b1)
                 self._cmd_light_state[bid] = name
 
-            # Map PLC crossing -> first gate block
-            if crossing and _BLOCKS_WITH_GATES:
-                bid = str(_BLOCKS_WITH_GATES[0])
-                try:
-                    val = int(crossing[0])
-                except Exception:
-                    val = 0
-                self._cmd_gate_state[bid] = _GATE_NAMES.get(val, str(val))
+                # Map PLC crossing -> first gate block
+                if crossing and _BLOCKS_WITH_GATES:
+                    bid = str(_BLOCKS_WITH_GATES[0])
+                    try:
+                        val = int(crossing[0])
+                    except Exception:
+                        val = 0
+                    self._cmd_gate_state[bid] = _GATE_NAMES.get(val, str(val))
 
     # ------------------------- UI hooks -------------------------
 
@@ -516,38 +531,44 @@ class HW_Wayside_Controller:
     # ---------------- build commanded arrays to write back ---------------
 
     def build_commanded_arrays(self, n_total_blocks: int) -> Dict[str, List[int]]:
-        """
-        Produce arrays sized to the full Green line length for:
-          - G-Commanded Switches (0/1)
-          - G-Commanded Lights   (0..3)
-          - G-Commanded Gates    (0/1)
-        Defaults to 0 when we have no state for a block.
-        """
         inv_switch = {"Left": 0, "Right": 1}
-        inv_light = {"RED": 0, "YELLOW": 1, "GREEN": 2, "SUPERGREEN": 3}
-        inv_gate = {"DOWN": 0, "UP": 1}
+        inv_gate   = {"DOWN": 0, "UP": 1}
 
-        cmd_switches = [0] * int(n_total_blocks)
-        cmd_lights = [0] * int(n_total_blocks)
-        cmd_gates = [0] * int(n_total_blocks)
+        # SW-style hardware arrays
+        switches = [0] * len(_BLOCKS_WITH_SWITCHES)      # 6 entries
+        gates    = [0] * len(_BLOCKS_WITH_GATES)         # 2 entries
+        lights   = [0] * (2 * len(_BLOCKS_WITH_LIGHTS))  # 12 lights × 2 bits = 24
 
-        cmd_speed    = [0] * int(n_total_blocks)  # NEW
-        cmd_auth     = [0] * int(n_total_blocks)  # NEW
+        # NEW: per-block speed/authority arrays (same as before)
+        cmd_speed = [0] * int(n_total_blocks)
+        cmd_auth  = [0] * int(n_total_blocks)
 
         with self._lock:
-            for b in self.block_ids:
-                i = int(b)
-                s = self._switch_state.get(b)
-                l = self._light_state.get(b)
-                g = self._gate_state.get(b)
-
+            # -------- Switches (6 entries) --------
+            for idx, block in enumerate(_BLOCKS_WITH_SWITCHES):
+                bid = str(block)
+                # Prefer PLC commanded switch if present, else the track state
+                s = self._cmd_switch_state.get(bid, self._switch_state.get(bid))
                 if s in inv_switch:
-                    cmd_switches[i] = inv_switch[s]
-                if l in inv_light:
-                    cmd_lights[i] = inv_light[l]
-                if g in inv_gate:
-                    cmd_gates[i] = inv_gate[g]
+                    switches[idx] = inv_switch[s]
 
+            # -------- Gates (2 entries) --------
+            for idx, block in enumerate(_BLOCKS_WITH_GATES):
+                bid = str(block)
+                g = self._cmd_gate_state.get(bid, self._gate_state.get(bid))
+                if g in inv_gate:
+                    gates[idx] = inv_gate[g]
+
+            # -------- Lights (24 entries = 12 × 2 bits) --------
+            for idx, block in enumerate(_BLOCKS_WITH_LIGHTS):
+                bid = str(block)
+                # Prefer PLC commanded light, fall back to track state
+                name = self._cmd_light_state.get(bid, self._light_state.get(bid))
+                b0, b1 = _encode_light_bits(name)
+                lights[2 * idx]     = b0
+                lights[2 * idx + 1] = b1
+
+            # -------- Per-block speed/authority (unchanged semantics) ----
             if self._train_block is not None:
                 try:
                     i = int(self._train_block)
@@ -558,26 +579,12 @@ class HW_Wayside_Controller:
                     cmd_auth[i]  = int(self._authority_yds)
 
         return {
-            "G-Commanded Switches": cmd_switches,
-            "G-Commanded Lights": cmd_lights,
-            "G-Commanded Gates": cmd_gates,
-            # Intentionally not setting these:
-            # "G-Commanded Authorty": [...]
-            # "G-Commanded Speed": [...]
+            # SW-style I/O arrays (same shape/codes as your track_to_wayside.json)
+            "G-switches": switches,
+            "G-lights": lights,
+            "G-gates": gates,
+
+            # Extra info the HW wayside exports for UI / downstream logic
+            "G-Commanded Speed": cmd_speed,
+            "G-Commanded Authority": cmd_auth,
         }
-    
-    def build_occupancy_array(self, n_total_blocks: int) -> List[int]:
-        """
-        Build a full-length occupancy array (0/1) from the merged view _occupied.
-        This is what we send back to the CTC JSON so it can see occupancy per block.
-        """
-        arr = [0] * int(n_total_blocks)
-        with self._lock:
-            for b in self._occupied:
-                try:
-                    i = int(b)
-                except ValueError:
-                    continue
-                if 0 <= i < int(n_total_blocks):
-                    arr[i] = 1
-        return arr
