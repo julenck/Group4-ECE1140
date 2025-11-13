@@ -17,9 +17,8 @@ from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 # ---------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------
-# (You can override these with env vars if you set up a shared folder)
-IN_FILE    = os.environ.get("WAYSIDE_IN",    "system_feed.json")          # from CTC to Track Controller
-OUT_FILE   = os.environ.get("WAYSIDE_OUT",   "wayside_status.json")       # back to CTC (optional status)
+
+IN_FILE    = os.environ.get("WAYSIDE_IN",    "ctc_track_controller.json")          # from CTC to Track Controller     # back to CTC (optional status)
 TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")     # track model snapshot & commands
 POLL_MS = 500
 ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mph) between CTC updates
@@ -39,7 +38,6 @@ ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed (mp
 # ------------------------------------------------------------------------------------
 
 def _read_ctc_json() -> dict:
-    """Safely read incoming feed with conservative defaults."""
     defaults = {
         "speed_mph": 0.0,
         "authority_yards": 0,
@@ -47,31 +45,88 @@ def _read_ctc_json() -> dict:
         "occupied_blocks": [],
         "closed_blocks": [],
     }
+
     if not os.path.exists(IN_FILE):
         return defaults
+
     try:
-        with open(IN_FILE, "r") as f:
-            data = json.load(f) or {}
-        # coerce & fill
-        data.setdefault("speed_mph", defaults["speed_mph"])
-        data.setdefault("authority_yards", defaults["authority_yards"])
-        data.setdefault("emergency", defaults["emergency"])
-        data.setdefault("occupied_blocks", defaults["occupied_blocks"])
-        data.setdefault("closed_blocks", defaults["closed_blocks"])
-        data["occupied_blocks"] = list(data["occupied_blocks"])
-        data["closed_blocks"] = list(data["closed_blocks"])
-        return data
+        with open(IN_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f) or {}
     except Exception as e:
         print(f"[WARN] JSON read failed: {e}")
         return defaults
 
-def _write_ctc_json(data: dict) -> None:
-    """Safely write outgoing Wayside status (merged)."""
+    trains = raw.get("Trains")
+    if not isinstance(trains, dict) or not trains:
+        # No trains → just return zeros / defaults
+        return defaults
+
+    chosen = None
+
+    # Prefer an active train
+    for _, tdata in trains.items():
+        try:
+            if int(tdata.get("Active", 0)) == 1:
+                chosen = tdata
+                break
+        except Exception:
+            continue
+
+    # If nothing is active, fall back to Train 1 if present
+    if chosen is None:
+        chosen = trains.get("Train 1")
+
+    if chosen is None:
+        speed = 0.0
+        auth = 0
+    else:
+        try:
+            speed = float(chosen.get("Suggested Speed", 0.0))
+        except Exception:
+            speed = 0.0
+        try:
+            auth = int(chosen.get("Suggested Authority", 0))
+        except Exception:
+            auth = 0
+
+    closed = list(raw.get("Block Closure", []))
+
+    return {
+        "speed_mph": speed,
+        "authority_yards": auth,
+        "emergency": False,         # SW file doesn't carry this; easy to add later if needed
+        "occupied_blocks": [],      # occupancy comes from TRACK_FILE, not this file
+        "closed_blocks": closed,
+    }
+
+def _safe_read_track_json() -> dict:
+    """Read the track snapshot file defensively."""
+    if not os.path.exists(TRACK_FILE):
+        return {}
     try:
-        with open(OUT_FILE, "w") as f:
-            json.dump(data, f, indent=2)
+        with open(TRACK_FILE, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
     except Exception as e:
-        print(f"[WARN] JSON write failed: {e}")
+        print(f"[WARN] Track file read failed: {e}")
+        return {}
+
+def _atomic_merge_write_track_json(patch: dict) -> None:
+    """
+    Read-modify-write TRACK_FILE and atomically replace it.
+    We only update/insert keys present in 'patch' and preserve everything else.
+    """
+    try:
+        base = _safe_read_track_json()
+        base.update(patch or {})
+        d = os.path.dirname(TRACK_FILE) or "."
+        with tempfile.NamedTemporaryFile("w", delete=False, dir=d, encoding="utf-8") as tmp:
+            json.dump(base, tmp, indent=2)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_path = tmp.name
+        os.replace(tmp_path, TRACK_FILE)
+    except Exception as e:
+        print(f"[WARN] Track file write failed: {e}")
 
 def _safe_read_track_json() -> dict:
     """Read the track snapshot file defensively."""
@@ -111,6 +166,23 @@ def _make_vital_in(raw: dict) -> dict:
         "occupied_blocks": list(raw.get("occupied_blocks", [])),
         "closed_blocks": list(raw.get("closed_blocks", [])),
     }
+
+def _write_ctc_occupancy(occupancy: List[int]) -> None:
+    """
+    Merge a G-Occupancy array back into the CTC JSON.
+    This mirrors the idea of SW writing occupancy back so the CTC
+    can see which blocks are occupied.
+    """
+    try:
+        base: Dict = {}
+        if os.path.exists(IN_FILE):
+            with open(IN_FILE, "r", encoding="utf-8") as f:
+                base = json.load(f) or {}
+        base["G-Occupancy"] = list(occupancy)
+        with open(IN_FILE, "w", encoding="utf-8") as f:
+            json.dump(base, f, indent=2)
+    except Exception as e:
+        print(f"[WARN] CTC occupancy write failed: {e}")
 
 # ------------------------------------------------------------------------------------
 # Real block discovery & SW-like partitioning
@@ -168,12 +240,16 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
             controller.tick_authority_decay()
 
         controller.apply_track_snapshot(track_snapshot, limit_blocks=blocks)
-        controller.tick_train_progress()
 
         status = controller.assess_safety(blocks, vital_in)
         # identify this controller in output
         ws_id = getattr(controller, "wayside_id", "X")
         merged_status["waysides"][ws_id] = status
+
+        n_total = _discover_block_count()
+        cmd = controller.build_commanded_arrays(n_total)
+        # Merge only keys we set; preserve everything else in TRACK_FILE
+        _atomic_merge_write_track_json(cmd)
 
         ui._push_to_display()
 
@@ -184,8 +260,16 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
 
         ui._push_to_display()
 
-    _write_ctc_json(merged_status)
+    # NEW: combine occupancy from all controllers and write back to CTC JSON
+    n_total = _discover_block_count()
+    combined_occ = [0] * n_total
+    for controller in controllers:
+        occ = controller.build_occupancy_array(n_total)
+        combined_occ = [max(a, b) for a, b in zip(combined_occ, occ)]
+    _write_ctc_occupancy(combined_occ)
+
     root.after(POLL_MS, _poll_json_loop, root, controllers, uis, blocks_by_ws)
+
 
 # ------------------------------------------------------------------------------------
 # Main
@@ -198,10 +282,9 @@ def main() -> None:
 
     root = tk.Tk()
 
-    # Only create Wayside B UI/controller here. Wayside A is handled by
-    # the SW module externally per the user's request.
+    # Only create Wayside B UI/controller here.
     root.title("Wayside B")
-    root.geometry("900x520")
+    root.geometry("9can00x520")
 
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
     ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Wayside B")
@@ -218,7 +301,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
 
 '''

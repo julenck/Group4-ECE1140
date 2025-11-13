@@ -134,7 +134,7 @@ class sw_wayside_controller:
                     "pos": self.active_trains[train]["Train Position"]
 
                 }
-                    self.pos_start = self.idx
+                    self.pos_start = self.active_trains[train]["Train Position"] 
                 else:
                     self.cmd_trains[train] = {
                         "cmd auth": self.active_trains[train]["Suggested Authority"],
@@ -170,8 +170,8 @@ class sw_wayside_controller:
             sug_auth = self.active_trains[cmd_train]["Suggested Authority"]
 
 
-            if (self.traveled_enough(sug_auth, auth)):
-                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos)
+            if (self.traveled_enough(sug_auth, auth, self.idx)):
+                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos, self.idx)
                 self.idx += 1
 
 
@@ -214,18 +214,17 @@ class sw_wayside_controller:
 
         return block_dist[idx]
 
-    def traveled_enough(self, sug_auth: int, cmd_auth: int) -> bool:
+    def traveled_enough(self, sug_auth: int, cmd_auth: int, idx: int) -> bool:
         if self.pos_start != 0:
-            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.pos_start)
-            
+            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start))
         else:
             traveled = sug_auth - cmd_auth
-        if traveled > self.dist_to_EOB(self.idx):
+        if traveled > self.dist_to_EOB(idx):
             return True
         else:
             return False
 
-    def get_next_block(self, current_block: int):
+    def get_next_block(self, current_block: int, block_idx: int):
 
         self.occupied_blocks[current_block] = 0
         
@@ -236,8 +235,8 @@ class sw_wayside_controller:
             self.idx = 0
             return -1
         else:
-            self.occupied_blocks[self.green_order[self.idx + 1]] = 1
-            return self.green_order[self.idx + 1]
+            self.occupied_blocks[self.green_order[block_idx + 1]] = 1
+            return self.green_order[block_idx + 1]
 
 
     def override_light(self, block_id: int, state: int):
@@ -280,7 +279,7 @@ class sw_wayside_controller:
         with self.file_lock:
             with open(self.track_comm_file, 'r') as f:
                 data = json.load(f)
-                self.occupied_blocks = data.get("G-Occupancy", [0]*152)
+                #self.occupied_blocks = data.get("G-Occupancy", [0]*152)
                 self.input_faults = data.get("G-Failures", [0]*152*3)
         
      
@@ -295,6 +294,8 @@ class sw_wayside_controller:
             data["G-switches"] = self.switch_states
             data["G-lights"] = self.light_states
             data["G-gates"] = self.gate_states
+
+            data["G-Occupancy"] = self.occupied_blocks
 
             if self.cmd_trains != {}:
                 for i in range (5):
