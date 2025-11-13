@@ -641,9 +641,16 @@ class TrainModelUI(tk.Tk):
         )
         write_ctc_output(disembarking)
 
+        # Calculate remaining authority: commanded_authority - position
+        commanded_authority = merged_inputs.get("commanded authority", 0.0)
+        remaining_authority = max(0.0, commanded_authority - outputs["position_yds"])
+        
+        # Update td_inputs with remaining authority so SW controller receives it
+        td_inputs["commanded authority"] = remaining_authority
+
         # Write train_data.json (echo inputs + outputs) into per-train section
         self.write_train_data(specs_for_write, merged_inputs, td_inputs)
-
+        
         # Update controller state (for UI/telemetry) - write outputs to train_states.json
         # Use frozen beacon data if signal failure blocked a read
         if signal_failure_active and self._last_beacon_inputs:
@@ -651,6 +658,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
+                "commanded_authority": remaining_authority,  # Send remaining authority
                 "current_station": self._last_beacon_inputs.get("current station", ""),
                 "next_stop": self._last_beacon_inputs.get("next station", ""),
                 "station_side": self._last_beacon_inputs.get("side_door", ""),
@@ -661,6 +669,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
+                "commanded_authority": remaining_authority,  # Send remaining authority
                 "current_station": merged_inputs.get("current station", ""),
                 "next_stop": merged_inputs.get("next station", ""),
                 "station_side": merged_inputs.get("side_door", ""),
