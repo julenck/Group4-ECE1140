@@ -10,8 +10,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
 import os
-from threading import Lock
+from threading import Lock, Thread
 from datetime import datetime
+import time
 
 app = Flask(__name__)
 CORS(app)  # Allow cross-origin requests from Raspberry Pis
@@ -21,12 +22,14 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 DATA_DIR = os.path.join(parent_dir, "data")
 TRAIN_STATES_FILE = os.path.join(DATA_DIR, "train_states.json")
+TRAIN_DATA_FILE = os.path.join(os.path.dirname(parent_dir), "Train Model", "train_data.json")
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # Thread-safe file access
 file_lock = Lock()
+sync_running = True  # Flag to control sync thread
 
 def read_json_file(filepath):
     """Thread-safe JSON file read."""
@@ -49,6 +52,101 @@ def write_json_file(filepath, data):
                 json.dump(data, f, indent=4)
         except Exception as e:
             print(f"[Server] Error writing {filepath}: {e}")
+
+def sync_train_data_to_states():
+    """Background thread that syncs train_data.json to train_states.json.
+    
+    This allows the Train Model Test UI to write inputs to train_data.json,
+    and this server automatically syncs those inputs to train_states.json
+    for hardware controllers to read via REST API.
+    """
+    global sync_running
+    print("[Server] Train data sync thread started (500ms interval)")
+    
+    while sync_running:
+        try:
+            # Read train_data.json from Train Model
+            train_data = read_json_file(TRAIN_DATA_FILE)
+            
+            if not train_data:
+                time.sleep(0.5)
+                continue
+            
+            # Read current train_states.json
+            train_states = read_json_file(TRAIN_STATES_FILE)
+            
+            # Sync each train_X section
+            for key in train_data.keys():
+                if key.startswith("train_"):
+                    section = train_data[key]
+                    inputs = section.get("inputs", {})
+                    outputs = section.get("outputs", {})
+                    
+                    # Ensure train exists in states
+                    if key not in train_states:
+                        # Extract train_id from key
+                        train_id = int(key.split("_")[1])
+                        train_states[key] = {
+                            "train_id": train_id,
+                            "commanded_speed": 0.0,
+                            "commanded_authority": 0.0,
+                            "speed_limit": 0.0,
+                            "train_velocity": 0.0,
+                            "next_stop": "",
+                            "station_side": "Right",
+                            "train_temperature": 70.0,
+                            "train_model_engine_failure": False,
+                            "train_model_signal_failure": False,
+                            "train_model_brake_failure": False,
+                            "train_controller_engine_failure": False,
+                            "train_controller_signal_failure": False,
+                            "train_controller_brake_failure": False,
+                            "manual_mode": False,
+                            "driver_velocity": 0.0,
+                            "service_brake": False,
+                            "right_door": False,
+                            "left_door": False,
+                            "interior_lights": True,
+                            "exterior_lights": True,
+                            "set_temperature": 70.0,
+                            "temperature_up": False,
+                            "temperature_down": False,
+                            "announcement": "",
+                            "announce_pressed": False,
+                            "emergency_brake": False,
+                            "kp": 0.0,
+                            "ki": 0.0,
+                            "engineering_panel_locked": False,
+                            "power_command": 0.0,
+                            "current_station": "",
+                            "beacon_read_blocked": False
+                        }
+                    
+                    # Update train_states with inputs from train_data
+                    # (same mapping as train_controller_api.py update_from_train_data)
+                    train_states[key]["commanded_speed"] = inputs.get("commanded speed", 0.0)
+                    train_states[key]["commanded_authority"] = inputs.get("commanded authority", 0.0)
+                    train_states[key]["speed_limit"] = inputs.get("speed limit", 0.0)
+                    train_states[key]["train_velocity"] = outputs.get("velocity_mph", 0.0)
+                    train_states[key]["train_temperature"] = outputs.get("temperature_F", 70.0)
+                    train_states[key]["train_model_engine_failure"] = inputs.get("train_model_engine_failure", False)
+                    train_states[key]["train_model_signal_failure"] = inputs.get("train_model_signal_failure", False)
+                    train_states[key]["train_model_brake_failure"] = inputs.get("train_model_brake_failure", False)
+                    
+                    # Also sync beacon info (current_station, next_station, side_door)
+                    train_states[key]["current_station"] = inputs.get("current station", "")
+                    train_states[key]["next_stop"] = inputs.get("next station", "")
+                    train_states[key]["station_side"] = inputs.get("side_door", "Right")
+            
+            # Write updated states back
+            write_json_file(TRAIN_STATES_FILE, train_states)
+            
+        except Exception as e:
+            print(f"[Server] Error in sync thread: {e}")
+        
+        time.sleep(0.5)  # Sync every 500ms (same as UI update rate)
+    
+    print("[Server] Train data sync thread stopped")
 
 # ========== Train State Endpoints ==========
 
@@ -215,6 +313,7 @@ if __name__ == '__main__':
     print("=" * 70)
     print(f"\nData directory: {DATA_DIR}")
     print(f"State file: {TRAIN_STATES_FILE}")
+    print(f"Train data file: {TRAIN_DATA_FILE}")
     print("\nServer starting on http://0.0.0.0:5000")
     print("Raspberry Pis should connect to: http://<server-ip>:5000\n")
     print("Available endpoints:")
@@ -225,4 +324,15 @@ if __name__ == '__main__':
     print("  POST /api/train/<id>/reset    - Reset train state")
     print("=" * 70)
     
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    # Start background sync thread
+    sync_thread = Thread(target=sync_train_data_to_states, daemon=True)
+    sync_thread.start()
+    
+    try:
+        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    except KeyboardInterrupt:
+        print("\n[Server] Shutting down...")
+        sync_running = False
+        sync_thread.join(timeout=2.0)
+    finally:
+        sync_running = False
