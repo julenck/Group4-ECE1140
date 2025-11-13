@@ -180,15 +180,30 @@ class train_controller:
         
         return power
 
-    #not yet completed (still just a placeholder from it #2 feedback)
-    def emergency_brake_activated(self):
-        current_state = self.api.get_state()
-        # if emergency brake is active, decreease speed to 0
-        # another way to do this is when e brake is active, disable usage of set speed potentiometer
-        if current_state['emergency_brake']:
-            self.api.update_state({'driver_velocity': 0, 'emergency_brake': True})
-        else:
-            self.api.update_state({'emergency_brake': False})
+    def set_emergency_brake(self, activate: bool) -> None:
+        """Set emergency brake state through vital validation.
+        
+        Args:
+            activate: True to activate emergency brake, False to release.
+        """
+        changes = {
+            'emergency_brake': activate,
+            'driver_velocity': 0 if activate else self.api.get_state()['driver_velocity'],
+            'power_command': 0 if activate else self.api.get_state()['power_command']
+        }
+        self.vital_control_check_and_update(changes)
+    
+    def set_service_brake(self, activate: bool) -> None:
+        """Set service brake state through vital validation.
+        
+        Args:
+            activate: True to activate service brake, False to release.
+        """
+        changes = {
+            'service_brake': activate,
+            'power_command': 0 if activate else self.api.get_state()['power_command']
+        }
+        self.vital_control_check_and_update(changes)
 
     def toggle_mode(self):
         """Flip manual/automatic mode flag in the API.
@@ -522,7 +537,7 @@ class train_controller_ui(tk.Tk):
             # Auto-release emergency brake when velocity reaches 0
             if state['emergency_brake'] and state['train_velocity'] == 0.0:
                 print("[Train Controller] Train stopped - Releasing emergency brake")
-                self.api.update_state({'emergency_brake': False})
+                self.controller.set_emergency_brake(False)
                 state = self.api.get_state()
             
             # Check for critical failures that require emergency brake
@@ -532,12 +547,7 @@ class train_controller_ui(tk.Tk):
             
             if critical_failure and not state['emergency_brake']:
                 # Automatically engage emergency brake on critical failure
-                # Emergency brake sets driver_velocity to 0 (matches SW controller behavior)
-                self.api.update_state({
-                    'emergency_brake': True,
-                    'driver_velocity': 0,
-                    'power_command': 0
-                })
+                self.controller.set_emergency_brake(True)
                 state = self.api.get_state()
 
             # Read ADC (potentiometer inputs) ONLY in manual mode
@@ -560,9 +570,10 @@ class train_controller_ui(tk.Tk):
                 # Reset accumulated error when brakes are active
                 self.controller._accumulated_error = 0
                 # No power when brakes are active or failures present
-                # Note: driver_velocity is NOT changed here - it's the driver's desired speed
-                # Only power_command is set to 0
-                self.controller.vital_control_check_and_update({'power_command': 0})
+                self.controller.vital_control_check_and_update({
+                    'power_command': 0,
+                    'driver_velocity': 0
+                })
             # try:
             # # Recalculate power command based on current state
             #     if not state['emergency_brake'] and state['service_brake'] == 0:
