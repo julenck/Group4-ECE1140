@@ -35,23 +35,37 @@ class train_controller_api_client:
         # Default state (fallback if server unreachable)
         self.default_state = {
             "train_id": train_id,
+            # Inputs FROM Train Model
             "commanded_speed": 0.0,
             "commanded_authority": 0.0,
             "speed_limit": 0.0,
             "train_velocity": 0.0,
-            "next_stop": "Station A",
-            "station_side": "Right",
+            "current_station": "",
+            "next_stop": "",
+            "station_side": "",
             "train_temperature": 70.0,
-            "engine_failure": False,
-            "signal_failure": False,
-            "brake_failure": False,
+            
+            # Train Model Failure Flags (activated by Train Model)
+            "train_model_engine_failure": False,
+            "train_model_signal_failure": False,
+            "train_model_brake_failure": False,
+            
+            # Train Controller Failure Flags (detected by Train Controller)
+            "train_controller_engine_failure": False,
+            "train_controller_signal_failure": False,
+            "train_controller_brake_failure": False,
+            
+            # Signal for Train Controller (set by Train Model when beacon read is blocked)
+            "beacon_read_blocked": False,
+            
+            # Internal Train Controller State
             "manual_mode": False,
             "driver_velocity": 0.0,
             "service_brake": False,
             "right_door": False,
             "left_door": False,
-            "interior_lights": True,
-            "exterior_lights": True,
+            "interior_lights": False,
+            "exterior_lights": False,
             "set_temperature": 70.0,
             "temperature_up": False,
             "temperature_down": False,
@@ -61,6 +75,8 @@ class train_controller_api_client:
             "kp": 0.0,
             "ki": 0.0,
             "engineering_panel_locked": False,
+            
+            # Outputs TO Train Model
             "power_command": 0.0
         }
         
@@ -168,6 +184,14 @@ class train_controller_api_client:
         except requests.exceptions.RequestException as e:
             print(f"[API Client] Reset request failed: {e}")
     
+    def update_from_train_data(self) -> None:
+        """Stub method for compatibility with local API.
+        
+        In client mode, the server handles reading from train_data.json.
+        The Train Model writes directly to the server, so this is a no-op.
+        """
+        pass
+    
     def receive_from_train_model(self, data: dict) -> None:
         """Receive updates from Train Model.
         
@@ -175,11 +199,14 @@ class train_controller_api_client:
             data: Dictionary containing Train Model outputs
         """
         # Filter relevant data from train model
+        # NOTE: manual_mode is controller-only state, not from Train Model
         relevant_data = {
             k: v for k, v in data.items() 
             if k in ['commanded_speed', 'commanded_authority', 'speed_limit',
-                    'train_velocity', 'next_stop', 'station_side', 'train_temperature',
-                    'engine_failure', 'signal_failure', 'brake_failure', 'manual_mode']
+                    'train_velocity', 'current_station', 'next_stop', 'station_side', 
+                    'train_temperature', 'train_model_engine_failure', 
+                    'train_model_signal_failure', 'train_model_brake_failure',
+                    'beacon_read_blocked']
         }
         
         self.update_state(relevant_data)
