@@ -106,7 +106,7 @@ class TrainManager:
                 json.dump({}, f, indent=4)
     
     def add_train(self, train_specs: dict = None, create_uis: bool = True, 
-                  use_hardware: bool = False, is_remote: bool = False) -> int:
+                  use_hardware: bool = False, is_remote: bool = False, server_url: str = None) -> int:
         """Add a new train (TrainModel + train_controller pair with UIs).
         
         Creates a new TrainModel and train_controller instance, assigns a unique ID,
@@ -119,6 +119,7 @@ class TrainManager:
             create_uis: If True, creates UI windows for this train (default: True).
             use_hardware: If True, uses hardware controller UI instead of software (default: False).
             is_remote: If True, controller runs on Raspberry Pi (not locally).
+            server_url: Server URL for remote mode (e.g., http://192.168.1.100:5000).
         
         Returns:
             The train_id of the newly created train.
@@ -194,8 +195,8 @@ class TrainManager:
         controller_ui = None
         
         if create_uis:
-            # Create Train Model UI with train_id
-            model_ui = TrainModelUI(train_id=train_id)
+            # Create Train Model UI with train_id and optional server URL for remote mode
+            model_ui = TrainModelUI(train_id=train_id, server_url=server_url if is_remote else None)
             # Position window based on train_id to avoid overlap
             x_offset = 50 + (train_id - 1) * 60
             y_offset = 50 + (train_id - 1) * 60
@@ -789,12 +790,7 @@ class TrainManagerUI(tk.Tk):
                 print(f"Train {train_id} created with SOFTWARE controller")
                 
             elif controller_type == "hardware_remote":
-                train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True)
-                self.update_train_list()
-                self.update_status(f"Train {train_id} added - START CONTROLLER ON RASPBERRY PI")
-                print(f"Train {train_id} created - REMOTE hardware controller")
-                
-                # Show instructions popup
+                # Get server IP for remote mode
                 import socket
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -804,6 +800,14 @@ class TrainManagerUI(tk.Tk):
                 except:
                     server_ip = "localhost"
                 
+                server_url = f"http://{server_ip}:5000"
+                
+                train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True, server_url=server_url)
+                self.update_train_list()
+                self.update_status(f"Train {train_id} added - START CONTROLLER ON RASPBERRY PI")
+                print(f"Train {train_id} created - REMOTE hardware controller")
+                
+                # Show instructions popup
                 msg = f"""Train {train_id} Model created on this server!
 
 Hardware Controller must run on Raspberry Pi.
@@ -812,7 +816,7 @@ Hardware Controller must run on Raspberry Pi.
 On Raspberry Pi, run:
 
 cd train_controller/ui
-python train_controller_hw_ui.py --train-id {train_id} --server http://{server_ip}:5000
+python train_controller_hw_ui.py --train-id {train_id} --server {server_url}
 
 ═══════════════════════════════════════
 

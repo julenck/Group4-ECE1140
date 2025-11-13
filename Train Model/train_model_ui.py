@@ -1,6 +1,8 @@
 import os, json, time, random, tkinter as tk
 from tkinter import ttk
 import threading
+import requests
+import sys
 
 # === File paths ===
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
@@ -199,10 +201,13 @@ class TrainModel:
 
 # === UI ===
 class TrainModelUI(tk.Tk):
-    def __init__(self, train_id=None):
+    def __init__(self, train_id=None, server_url=None):
         super().__init__()
         self.train_id = train_id  # None = single-train legacy mode
+        self.server_url = server_url  # None = local mode, URL = remote mode
         title = f"Train {train_id} Model" if train_id else "Train Model"
+        if server_url:
+            title += " (Remote Mode)"
         self.title(title)
         self.geometry("820x560")
         self.minsize(760, 520)
@@ -440,6 +445,23 @@ class TrainModelUI(tk.Tk):
 
     # Controller state IO
     def get_train_state(self):
+        # Remote mode: fetch from server via REST API
+        if self.server_url and self.train_id is not None:
+            try:
+                response = requests.get(
+                    f"{self.server_url}/api/train/{self.train_id}/state",
+                    timeout=2.0
+                )
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    print(f"[Train Model] Server returned {response.status_code}")
+                    return {}
+            except requests.exceptions.RequestException as e:
+                print(f"[Train Model] Error fetching state from server: {e}")
+                return {}
+        
+        # Local mode: read from file
         try:
             all_states = safe_read_json(TRAIN_STATES_FILE)
         except Exception:
@@ -449,6 +471,21 @@ class TrainModelUI(tk.Tk):
         return all_states.get(f"train_{self.train_id}", {})
 
     def update_train_state(self, updates: dict):
+        # Remote mode: send to server via REST API
+        if self.server_url and self.train_id is not None:
+            try:
+                response = requests.post(
+                    f"{self.server_url}/api/train/{self.train_id}/state",
+                    json=updates,
+                    timeout=2.0
+                )
+                if response.status_code != 200:
+                    print(f"[Train Model] Server update returned {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"[Train Model] Error updating state on server: {e}")
+            return
+        
+        # Local mode: write to file
         all_states = safe_read_json(TRAIN_STATES_FILE)
         if self.train_id is None:
             # legacy single-train mode
@@ -714,8 +751,18 @@ class TrainModelUI(tk.Tk):
     def on_close(self):
         self._stop_event.set()
         self.destroy()
+
 # Entrypoint
 if __name__ == "__main__":
-    app = TrainModelUI()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Train Model UI")
+    parser.add_argument("--train-id", type=int, default=None, 
+                        help="Train ID for multi-train mode (default: legacy single-train)")
+    parser.add_argument("--server", type=str, default=None,
+                        help="Server URL for remote mode (e.g., http://192.168.1.100:5000)")
+    args = parser.parse_args()
+    
+    app = TrainModelUI(train_id=args.train_id, server_url=args.server)
     app.mainloop()
 
