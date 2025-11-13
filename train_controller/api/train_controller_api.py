@@ -6,7 +6,12 @@ for communication between Train Controller and Train Model modules.
 
 import json
 import os
+import threading
 from typing import Dict, Optional
+
+# Global file lock for thread-safe access to train_states.json
+# Using RLock (reentrant lock) to allow same thread to acquire lock multiple times
+_file_lock = threading.Lock()
 
 class train_controller_api:
     """Manages train state persistence and module communication using JSON."""
@@ -29,37 +34,48 @@ class train_controller_api:
         # Default state template
         self.train_states = {
             # Inputs FROM Train Model
-            'commanded_speed': 60.0,      # mph - realistic commanded speed
-            'commanded_authority': 1000.0,   # yards - enough authority to move
-            'speed_limit': 60.0,         # mph - realistic speed limit
-            'train_velocity': 0.0,             # mph - train starts at rest
-            'next_stop': 'Station A',             # station name
-            'station_side': 'Right',     # left/right
-            'train_temperature': 70.0,   # °F - comfortable room temperature
-            'engine_failure': False,
-            'signal_failure': False,
-            'brake_failure': False,
-            'manual_mode': False,       # manual/automatic mode
+            'commanded_speed': 0.0,
+            'commanded_authority': 0.0,
+            'speed_limit': 0.0,
+            'train_velocity': 0.0,
+            'current_station': '',
+            'next_stop': '',
+            'station_side': '',
+            'train_temperature': 0.0,
+            'manual_mode': False,
+            
+            # Train Model Failure Flags (activated by Train Model)
+            'train_model_engine_failure': False,
+            'train_model_signal_failure': False,
+            'train_model_brake_failure': False,
+            
+            # Train Controller Failure Flags (detected and activated by Train Controller)
+            'train_controller_engine_failure': False,
+            'train_controller_signal_failure': False,
+            'train_controller_brake_failure': False,
+            
+            # Signal for Train Controller (set by Train Model when beacon read is blocked)
+            'beacon_read_blocked': False,
             
             # Internal Train Controller State
-            'driver_velocity': 0.0,           # mph - driver's set speed, will be initialized to match commanded_speed
-            'service_brake': False,         # boolean
-            'right_door': False,        # door state
-            'left_door': False,         # door state
-            'interior_lights': True,   # interior lights state - on by default
-            'exterior_lights': True,   # exterior lights state - on by default
-            'set_temperature': 70.0,     # Driver's desired temperature (°F) - will be initialized to match train_temperature
-            'temperature_up': False,    # temperature control
-            'temperature_down': False,   # temperature control
-            'announcement': '',         # current announcement
-            'announce_pressed': False,  # tracks if announcement button is pressed
-            'emergency_brake': False,   # emergency brake state
-            'kp': 0.0,                  # proportional gain - default to 0 until set by user
-            'ki': 0.0,                  # integral gain - default to 0 until set by user
-            'engineering_panel_locked': False,  # engineering panel state
+            'driver_velocity': 0.0,
+            'service_brake': False,
+            'right_door': False,
+            'left_door': False,
+            'interior_lights': False,
+            'exterior_lights': False,
+            'set_temperature': 70.0,  # Default to 70°F for automatic mode
+            'temperature_up': False,
+            'temperature_down': False,
+            'announcement': '',
+            'announce_pressed': False,
+            'emergency_brake': False,
+            'kp': 0.0,
+            'ki': 0.0,
+            'engineering_panel_locked': False,
             
             # Outputs TO Train Model
-            'power_command': 0.0,        # power in Watts
+            'power_command': 0.0,
         }
         
         # Initialize state file if it doesn't exist or is empty/malformed
@@ -115,33 +131,34 @@ class train_controller_api:
         Returns:
             dict: Current state of the train. Returns default state if there are any issues.
         """
-        try:
-            if os.path.exists(self.state_file):
-                with open(self.state_file, 'r') as f:
-                    try:
-                        all_states = json.load(f)
-                        
-                        # If train_id is specified, read from train_X section
-                        if self.train_id is not None:
-                            train_key = f"train_{self.train_id}"
-                            if train_key in all_states:
-                                return all_states[train_key]
+        with _file_lock:
+            try:
+                if os.path.exists(self.state_file):
+                    with open(self.state_file, 'r') as f:
+                        try:
+                            all_states = json.load(f)
+                            
+                            # If train_id is specified, read from train_X section
+                            if self.train_id is not None:
+                                train_key = f"train_{self.train_id}"
+                                if train_key in all_states:
+                                    return all_states[train_key]
+                                else:
+                                    # Return default state if train section doesn't exist
+                                    default = self.train_states.copy()
+                                    default['train_id'] = self.train_id
+                                    return default
                             else:
-                                # Return default state if train section doesn't exist
-                                default = self.train_states.copy()
-                                default['train_id'] = self.train_id
-                                return default
-                        else:
-                            # Legacy mode: read from root level
-                            return all_states
-                    except json.JSONDecodeError as e:
-                        print(f"Error reading state file: {e}")
-                        # Reset to default state if file is corrupted
-                        self.save_state(self.train_states)
-            return self.train_states.copy()
-        except Exception as e:
-            print(f"Error accessing state file: {e}")
-            return self.train_states.copy()
+                                # Legacy mode: read from root level
+                                return all_states
+                        except json.JSONDecodeError as e:
+                            print(f"Error reading state file: {e}")
+                            # Reset to default state if file is corrupted
+                            self.save_state(self.train_states)
+                return self.train_states.copy()
+            except Exception as e:
+                print(f"Error accessing state file: {e}")
+                return self.train_states.copy()
 
     def save_state(self, state: dict) -> None:
         """Save train state to file.
@@ -152,49 +169,50 @@ class train_controller_api:
         The method ensures all required fields are present in the state
         by merging with default values for any missing fields.
         """
-        try:
-            # Ensure all default fields are present
-            complete_state = self.train_states.copy()
-            complete_state.update(state)
-            if self.train_id is not None:
-                complete_state['train_id'] = self.train_id
-            
-            # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
-            
-            if self.train_id is not None:
-                # Multi-train mode: update specific train's section at ROOT level only
-                if os.path.exists(self.state_file):
-                    with open(self.state_file, 'r') as f:
-                        all_states = json.load(f)
+        with _file_lock:
+            try:
+                # Ensure all default fields are present
+                complete_state = self.train_states.copy()
+                complete_state.update(state)
+                if self.train_id is not None:
+                    complete_state['train_id'] = self.train_id
+                
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+                
+                if self.train_id is not None:
+                    # Multi-train mode: update specific train's section at ROOT level only
+                    if os.path.exists(self.state_file):
+                        with open(self.state_file, 'r') as f:
+                            all_states = json.load(f)
+                    else:
+                        all_states = {}
+                    
+                    # IMPORTANT: Only update at root level, never nested
+                    # Remove any nested train_X keys from complete_state to prevent nesting
+                    clean_state = {}
+                    for key, value in complete_state.items():
+                        # Skip nested train_X sections and only keep actual state data
+                        if not (key.startswith('train_') and isinstance(value, dict)):
+                            clean_state[key] = value
+                        elif key == f"train_{self.train_id}":  # Keep train_id field
+                            clean_state['train_id'] = self.train_id
+                    
+                    train_key = f"train_{self.train_id}"
+                    all_states[train_key] = clean_state
+                    
+                    with open(self.state_file, 'w') as f:
+                        json.dump(all_states, f, indent=4)
                 else:
-                    all_states = {}
-                
-                # IMPORTANT: Only update at root level, never nested
-                # Remove any nested train_X keys from complete_state to prevent nesting
-                clean_state = {}
-                for key, value in complete_state.items():
-                    # Skip nested train_X sections and only keep actual state data
-                    if not (key.startswith('train_') and isinstance(value, dict)):
-                        clean_state[key] = value
-                    elif key == f"train_{self.train_id}":  # Keep train_id field
-                        clean_state['train_id'] = self.train_id
-                
-                train_key = f"train_{self.train_id}"
-                all_states[train_key] = clean_state
-                
-                with open(self.state_file, 'w') as f:
-                    json.dump(all_states, f, indent=4)
-            else:
-                # Legacy mode: save to root level
-                with open(self.state_file, 'w') as f:
-                    json.dump(complete_state, f, indent=4)
+                    # Legacy mode: save to root level
+                    with open(self.state_file, 'w') as f:
+                        json.dump(complete_state, f, indent=4)
 
-        except Exception as e:
-            print(f"Error saving state: {e}")
-            # If all else fails, try direct write
-            with open(self.state_file, 'w') as f:
-                json.dump(self.train_states.copy(), f, indent=4)
+            except Exception as e:
+                print(f"Error saving state: {e}")
+                # If all else fails, try direct write
+                with open(self.state_file, 'w') as f:
+                    json.dump(self.train_states.copy(), f, indent=4)
 
     def reset_state(self) -> None:
         """Reset train state to default values."""
@@ -245,13 +263,14 @@ class train_controller_api:
             'commanded_authority': inputs.get('commanded authority', 0.0),
             'speed_limit': inputs.get('speed limit', 0.0),
             'train_velocity': outputs.get('velocity_mph', 0.0),
-            'train_temperature': outputs.get('temperature_F', 70.0),
-            'engine_failure': inputs.get('engine_failure', False),
-            'signal_failure': inputs.get('signal_failure', False),
-            'brake_failure': inputs.get('brake_failure', False),
-            'manual_mode': inputs.get('manual_mode', False),
-            'next_stop': inputs.get('next station', ''),
-            'station_side': inputs.get('side_door', '')
+            'train_temperature': outputs.get('temperature_F', 0.0),
+            'train_model_engine_failure': inputs.get('train_model_engine_failure', False),
+            'train_model_signal_failure': inputs.get('train_model_signal_failure', False),
+            'train_model_brake_failure': inputs.get('train_model_brake_failure', False),
+            # NOTE: manual_mode is a controller-only state, not read from train_data.json
+            # NOTE: Do NOT read beacon info (current_station, next_stop, station_side) from train_data.json
+            # The Train Model writes beacon info to train_states.json with proper signal failure handling
+            # Reading from inputs here would bypass the frozen data logic during signal failure
         }
 
         # Update controller state
@@ -271,16 +290,11 @@ class train_controller_api:
         relevant_data = {
             k: v for k, v in data.items() 
             if k in ['commanded_speed', 'commanded_authority', 'speed_limit',
-                    'train_velocity', 'next_stop', 'station_side', 'train_temperature',
-                    'engine_failure', 'signal_failure', 'brake_failure', 'manual_mode']
+                    'train_velocity', 'current_station', 'next_stop', 'station_side', 'train_temperature',
+                    'train_model_engine_failure', 'train_model_signal_failure', 
+                    'train_model_brake_failure', 'manual_mode']
         }
         
-        # If commanded_speed is changing and driver_velocity matches old commanded_speed,
-        # update driver_velocity to match new commanded_speed
-        if ('commanded_speed' in relevant_data and 
-            current_state['driver_velocity'] == current_state['commanded_speed']):
-            relevant_data['driver_velocity'] = relevant_data['commanded_speed']
-            
         # If train_temperature is changing and set_temperature matches old train_temperature,
         # update set_temperature to match new train_temperature
         if ('train_temperature' in relevant_data and 

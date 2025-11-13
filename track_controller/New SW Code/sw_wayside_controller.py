@@ -70,7 +70,7 @@ class sw_wayside_controller:
             return
         #call plc function
         if self.active_plc != "":
-            self.load_inputs_track()
+            #self.load_inputs_track()
             
             if self.active_plc == "Green_Line_PLC_XandLup.py":
                 occ1 = self.occupied_blocks[0:73]
@@ -113,7 +113,7 @@ class sw_wayside_controller:
                 self.light_states[18]=signals[6]
                 self.light_states[19]=signals[7]
                 self.gate_states[1] = crossing[0]
-            self.load_track_outputs()
+            #self.load_track_outputs()
             
             if self.running:
                 threading.Timer(0.2, self.run_plc).start()
@@ -134,7 +134,7 @@ class sw_wayside_controller:
                     "pos": self.active_trains[train]["Train Position"]
 
                 }
-                    self.pos_start = self.idx
+                    self.pos_start = self.active_trains[train]["Train Position"] 
                 else:
                     self.cmd_trains[train] = {
                         "cmd auth": self.active_trains[train]["Suggested Authority"],
@@ -156,13 +156,8 @@ class sw_wayside_controller:
             
             if auth <= 0:
                 auth = 0
-                with self.file_lock:
-                    with open(self.ctc_comm_file, 'r') as f:
-                        data = json.load(f)
-                    data["Trains"][cmd_train]["Active"] = 0
-                    with open(self.ctc_comm_file, 'w') as f:
-                        json.dump(data, f, indent=4)
-
+                # Don't set Active to 0 here - let CTC manage the Active state
+                # Only remove from cmd_trains to stop processing
                 ttr.append(cmd_train)
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
@@ -170,8 +165,8 @@ class sw_wayside_controller:
             sug_auth = self.active_trains[cmd_train]["Suggested Authority"]
 
 
-            if (self.traveled_enough(sug_auth, auth)):
-                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos)
+            if (self.traveled_enough(sug_auth, auth, self.idx)):
+                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos, self.idx)
                 self.idx += 1
 
 
@@ -214,27 +209,29 @@ class sw_wayside_controller:
 
         return block_dist[idx]
 
-    def traveled_enough(self, sug_auth: int, cmd_auth: int) -> bool:
+    def traveled_enough(self, sug_auth: int, cmd_auth: int, idx: int) -> bool:
         if self.pos_start != 0:
-            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.pos_start)
-            
+            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start))
         else:
             traveled = sug_auth - cmd_auth
-        if traveled > self.dist_to_EOB(self.idx):
+        if traveled > self.dist_to_EOB(idx):
             return True
         else:
             return False
 
-    def get_next_block(self, current_block: int):
+    def get_next_block(self, current_block: int, block_idx: int):
 
+        self.occupied_blocks[current_block] = 0
+        
+
+        
+        
         if current_block == 151:
-            self.occupied_blocks[self.green_order[self.idx]] = 0
             self.idx = 0
             return -1
         else:
-            self.occupied_blocks[self.green_order[self.idx]] = 0
-            self.occupied_blocks[self.green_order[self.idx + 1]] = 1
-            return self.green_order[self.idx + 1]
+            self.occupied_blocks[self.green_order[block_idx + 1]] = 1
+            return self.green_order[block_idx + 1]
 
 
     def override_light(self, block_id: int, state: int):
@@ -296,19 +293,14 @@ class sw_wayside_controller:
             data["G-Occupancy"] = self.occupied_blocks
 
             if self.cmd_trains != {}:
-                # for i in range (5):
-                #     try:
-                #         train_id = list(self.cmd_trains.keys())[i]
-                #         data["G-Commanded Authority"][i] = self.cmd_trains[train_id]["cmd auth"]
-                #         data["G-Commanded Speed"][i] = self.cmd_trains[train_id]["cmd speed"]
-                #     except IndexError:
-                #         data["G-Commanded Authority"][i] = 0
-                #         data["G-Commanded Speed"][i] = 0   
-                a = self.cmd_trains["Train 1"]["cmd auth"]
-                b = self.cmd_trains["Train 1"]["cmd speed"]
-                data["G-Commanded Authority"] = [a,0,0,0,0]
-                data["G-Commanded Speed"] = [b,0,0,0,0]
-                          
+                for i in range (5):
+                    try:
+                        train_id = list(self.cmd_trains.keys())[i]
+                        data["G-Commanded Authority"][i] = self.cmd_trains[train_id]["cmd auth"]
+                        data["G-Commanded Speed"][i] = self.cmd_trains[train_id]["cmd speed"]
+                    except IndexError:
+                        data["G-Commanded Authority"][i] = 0
+                        data["G-Commanded Speed"][i] = 0
             else:
                 data["G-Commanded Authority"] = [0]*5
                 data["G-Commanded Speed"] = [0]*5

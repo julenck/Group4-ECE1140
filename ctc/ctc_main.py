@@ -131,19 +131,6 @@ try:
         while(train_pos != next_station_loc):
             time.sleep(0.5)
             print("here")
-
-        # train is at station -- update ctc_track_controller.json with speed = 0, authority = 0 
-        authority_at_station = 0
-        speed_at_station = 0
-    
-        with open(data_file_track_cont, "r") as f_updates: 
-            updates = json.load(f_updates)
-
-        #updates["Trains"][train]["Suggested Authority"] = authority_at_station 
-        #updates["Trains"][train]["Suggested Speed"] = speed_at_station
-       
-        with open(data_file_track_cont,"w") as f_updates: 
-            json.dump(updates, f_updates, indent=4)
         
         # train is at station -- update ctc_data.json
         current_station = test
@@ -151,8 +138,8 @@ try:
             data = json.load(f_data)
 
         data["Dispatcher"]["Trains"][train]["Current Station"] = current_station
-        data["Dispatcher"]["Trains"][train]["Authority"] = authority_at_station
-        data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_at_station
+        data["Dispatcher"]["Trains"][train]["Authority"] = authority_yards
+        data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_mph
 
         with open(data_file_ctc_data, "w") as f_data:
             json.dump(data, f_data, indent=4)
@@ -161,6 +148,9 @@ try:
 
         # once train gets to station, wait for dwell time 
         time.sleep(dwell_time_s)
+
+        # wait for wayside to finish writes 
+        time.sleep(0.5)
 
         # train is moving now, clear current station
         with open(data_file_ctc_data, "r") as f_data:
@@ -171,6 +161,15 @@ try:
         with open(data_file_ctc_data, "w") as f_data:
             json.dump(data, f_data, indent=4)
 
+        if test != station: 
+            with open(data_file_track_cont, "r") as f_updates: 
+                updates = json.load(f_updates) 
+            
+            updates["Trains"][train]["Active"] = 1
+ 
+            with open(data_file_track_cont, "w") as f_updates: 
+                json.dump(updates, f_updates, indent=4)
+        
         # iterate to go to next station
         #i = i+1
 

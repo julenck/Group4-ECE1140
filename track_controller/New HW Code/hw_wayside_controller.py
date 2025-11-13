@@ -75,12 +75,15 @@ class HW_Wayside_Controller:
         self._speed_mph = 0.0
         self._authority_yds = 0
         self._last_auth_ts: Optional[float] = None  # for local authority decay
+        self._occupied: set[str] = set()
         self._closed: set[str] = set()
 
-        # Occupancy sources and the merged view used everywhere
-        self._occ_ctc: set[str] = set()    # from CTC (if provided)
-        self._occ_track: set[str] = set()  # from Track snapshot arrays
-        self._occupied: set[str] = set()   # MERGED VIEW (this is the only one used by UI)
+        # outputs (dummy placeholders to mirror a real wayside)
+        self._switch_state: Dict[str, str] = {}
+        self._light_state: Dict[str, str] = {}
+        self._gate_state: Dict[str, str] = {}
+
+        self._failures: Dict[str, Tuple[bool, bool, bool]] = {}
 
         self._last_occ_array: Optional[List[int]] = None
 
@@ -180,17 +183,14 @@ class HW_Wayside_Controller:
     ):
         with self._lock:
             self._speed_mph = float(speed_mph)
-
             new_auth = int(authority_yards)
             # Reset decay baseline when external authority changes
+
             if new_auth != self._authority_yds:
                 self._authority_yds = new_auth
                 self._last_auth_ts = None
-                self._auth_start_m = self._authority_yds * _YARD_TO_M
             else:
                 self._authority_yds = new_auth
-                if self._auth_start_m is None:
-                    self._auth_start_m = self._authority_yds * _YARD_TO_M
 
             self._emergency = bool(emergency)
 
@@ -198,13 +198,6 @@ class HW_Wayside_Controller:
                 self._occ_ctc = {str(b) for b in occupied_blocks}
             if closed_blocks is not None:
                 self._closed = {str(b) for b in closed_blocks}
-
-            if self._train_idx is None:
-                self._init_train_position()
-
-            self._recompute_occupied()
-
-    # ---------------- local authority countdown -----------------
 
     def tick_authority_decay(self) -> None:
         """Optionally reduce authority in yards based on current speed (mph)."""
@@ -222,37 +215,39 @@ class HW_Wayside_Controller:
                 dec = yards_per_sec * dt
                 self._authority_yds = max(0, int(self._authority_yds - dec))
 
-    # ------------- apply track-model snapshot arrays ------------
-
     def apply_track_snapshot(self, snapshot: Dict[str, Any], *, limit_blocks: List[str]) -> None:
-
+        """
+        Map arrays from the track model JSON to this controller's block states.
+        Only updates blocks in 'limit_blocks' (Wayside B partition).
+        """
         if not isinstance(snapshot, dict):
-
             return
 
         occ = snapshot.get("G-Occupancy")
-        sw  = snapshot.get("G-switches")
-        lt  = snapshot.get("G-lights")
-        gt  = snapshot.get("G-gates")
-        fl  = snapshot.get("G-Failures")
+        sw = snapshot.get("G-switches")
+        lt = snapshot.get("G-lights")
+        gt = snapshot.get("G-gates")
+        fl = snapshot.get("G-Failures")
 
         limit_set = set(str(b) for b in (limit_blocks or []))
 
         with self._lock:
-
-            # -------- Occupancy --------
+            # Occupancy
             if isinstance(occ, list):
+                self._occupied = {str(i) for i, v in enumerate(occ) if v and str(i) in limit_set}
 
-                self._last_occ_array = list(occ)  
-                self._occ_track = {
-                    str(i) for i, v in enumerate(occ)
-                    if v and str(i) in limit_set
-                }
+            # Switches (0/1 -> Left/Right)
+            if isinstance(sw, list):
+                for i, v in enumerate(sw):
+                    bid = str(i)
+                    if bid in limit_set:
+                        name = _SWITCH_NAMES.get(int(v), str(v))
+                        self._switch_state[bid] = name
 
-            # -------- Switches (6 entries) --------
-            if isinstance(sw, list) and len(sw) == len(_BLOCKS_WITH_SWITCHES):
-                for idx, block in enumerate(_BLOCKS_WITH_SWITCHES):
-                    bid = str(block)
+            # Lights (0..3 -> enum names)
+            if isinstance(lt, list):
+                for i, v in enumerate(lt):
+                    bid = str(i)
                     if bid in limit_set:
                         val = int(sw[idx])
                         self._switch_state[bid] = _SWITCH_NAMES.get(val, str(val))
@@ -278,95 +273,20 @@ class HW_Wayside_Controller:
                 for idx, block in enumerate(_BLOCKS_WITH_GATES):
                     bid = str(block)
                     if bid in limit_set:
-                        val = int(gt[idx])
-                        self._gate_state[bid] = _GATE_NAMES.get(val, str(val))
+                        name = _GATE_NAMES.get(int(v), str(v))
+                        self._gate_state[bid] = name
 
-            # -------- Failures (3 * nBlocks flat) --------
+            # Failures (flat array of len = 3*blocks)
             if isinstance(fl, list) and len(fl) >= 3:
-                count = len(fl) // 3
-                for i in range(count):
+                for i in range(0, len(fl) // 3):
                     bid = str(i)
                     if bid in limit_set:
-                        f1 = bool(fl[3 * i + 0])
-                        f2 = bool(fl[3 * i + 1])
-                        f3 = bool(fl[3 * i + 2])
+                        f1 = bool(fl[3*i + 0])
+                        f2 = bool(fl[3*i + 1])
+                        f3 = bool(fl[3*i + 2])
                         self._failures[bid] = (f1, f2, f3)
 
-            if self._train_idx is None:
-                self._init_train_position()
-
-            self._recompute_occupied()
-
-    # ---------------- Train progress (SW parity) -----------------
-
-    def _init_train_position(self) -> None:
-
-        occ_in_partition = []
-        part = set(self.block_ids)
-        for b in self._occ_track:
-            if b in part:
-                occ_in_partition.append(int(b))
-        for b in self._occ_ctc:
-            if b in part:
-                occ_in_partition.append(int(b))
-
-        # If nothing is occupied, do NOT assume a train exists
-        if not occ_in_partition:
-            return
-
-        # Choose the first occupied block along the direction in green_order
-        try:
-            # Sort occupied candidates by their index in green_order and take the earliest
-            occ_in_partition.sort(key=lambda bb: self.green_order.index(bb))
-            candidate = occ_in_partition[0]
-            idx = self.green_order.index(candidate)
-        except ValueError:
-            return  # safety: if any block isn't in green_order
-
-        self._train_idx = idx
-        self._train_block = str(candidate)
-        # Load distance to end-of-block
-        self._remaining_m = float(self.block_eob_m[idx]) if idx < len(self.block_eob_m) else None
-        if self._auth_start_m is None:
-            self._auth_start_m = self._authority_yds * _YARD_TO_M
-
-    def tick_train_progress(self) -> None:
-        """Advance the simulated train along green_order using (start_auth - current_auth) in meters."""
-        with self._lock:
-            if self._train_idx is None:
-                self._init_train_position()
-                if self._train_idx is None:
-                    return
-
-            if self._auth_start_m is None:
-                self._auth_start_m = self._authority_yds * _YARD_TO_M
-                return
-
-            current_m = self._authority_yds * _YARD_TO_M
-            traveled_m = max(0.0, self._auth_start_m - current_m)
-
-            if self._remaining_m is None:
-                if self._train_idx < len(self.block_eob_m):
-                    self._remaining_m = float(self.block_eob_m[self._train_idx])
-                else:
-                    return
-
-            moved = False
-            while traveled_m >= self._remaining_m - 1e-6:
-                traveled_m -= self._remaining_m
-                if self._train_idx + 1 >= len(self.green_order):
-                    self._remaining_m = None
-                    break
-                self._train_idx += 1
-                next_block = self.green_order[self._train_idx]
-                self._train_block = str(next_block)
-                self._remaining_m = float(self.block_eob_m[self._train_idx]) if self._train_idx < len(self.block_eob_m) else None
-                moved = True
-
-            # Recompute occupancy so UI reflects the current train block
-            self._recompute_occupied()
-
-    # ---------------------- PLC operations ----------------------
+    # --------------- PLC operations (no-ops by default) ----------------
 
     def load_plc(self, path: str) -> bool:
         self._plc_loaded = True
@@ -527,9 +447,7 @@ class HW_Wayside_Controller:
             "occupied": st.get("occupied"),
             "closed": (block_id in self._closed),
         }
-
-    # ---------------- build commanded arrays to write back ---------------
-
+    
     def build_commanded_arrays(self, n_total_blocks: int) -> Dict[str, List[int]]:
         inv_switch = {"Left": 0, "Right": 1}
         inv_gate   = {"DOWN": 0, "UP": 1}
