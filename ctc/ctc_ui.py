@@ -4,6 +4,9 @@ from tkinter import filedialog, ttk
 from watchdog.observers import Observer 
 from watchdog.events import FileSystemEventHandler 
 
+# Add train_controller to path for train dispatch integration
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'train_controller'))
+
 # Set up json file 
 data_file = 'ctc_data.json'
 
@@ -247,10 +250,26 @@ def manual_dispatch():
 
     update_active_trains_table()
 
-    # run ctc_main.py
+    # Run ctc_main.py to update ctc_data.json
     python_exe = sys.executable 
     script_path = os.path.join(os.path.dirname(__file__), "ctc_main.py")
     subprocess.Popen([python_exe, script_path])
+
+    # Open train dispatch dialog to select controller type
+    try:
+        from train_manager import dispatch_train_from_ctc
+        
+        # Show dispatch dialog and get selected train
+        train_id, controller_type = dispatch_train_from_ctc()
+        
+        if train_id is not None:
+            print(f"[CTC] Train {train_id} dispatched successfully with {controller_type} controller")
+        else:
+            print("[CTC] Train dispatch cancelled")
+    except Exception as e:
+        print(f"[CTC] Error dispatching train: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Maintenance Frame UI 
 maint_frame.grid_columnconfigure((0,1,2,3),weight=1)
