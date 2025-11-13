@@ -18,8 +18,8 @@ from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 # Config
 # ---------------------------------------------------------------------
 
-IN_FILE    = os.environ.get("WAYSIDE_IN",    "ctc_track_controller.json")          # CTC 
-TRACK_FILE = os.environ.get("WAYSIDE_TRACK", "track_to_wayside.json")              # Track Model
+IN_FILE    =  "ctc_track_controller.json"         # CTC 
+TRACK_FILE =  "track_to_wayside.json"             # Track Model
 POLL_MS = 500
 ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed 
 
@@ -238,6 +238,8 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
     raw = _read_ctc_json()
     vital_in = _make_vital_in(raw)
 
+    print("[DEBUG] vital_in:", vital_in)
+
     track_snapshot = _safe_read_track_json()
 
     merged_status = {"waysides": {}}
@@ -250,6 +252,8 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
             controller.tick_authority_decay()
 
         controller.apply_track_snapshot(track_snapshot, limit_blocks=blocks)
+
+        controller.tick_train_progress()
 
         status = controller.assess_safety(blocks, vital_in)
         # identify this controller in output
