@@ -7,7 +7,7 @@ Author: Julen Coca-Knorr
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk 
 import os
 import sys
 import threading
