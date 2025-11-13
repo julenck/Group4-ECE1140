@@ -298,7 +298,7 @@ def main() -> None:
     root = tk.Tk()
 
     root.title("Wayside B")
-    root.geometry("9can00x520")
+    root.geometry("900x520")
 
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
     ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Wayside B")
