@@ -139,11 +139,9 @@ try:
         with open(data_file_track_cont, "r") as f_updates: 
             updates = json.load(f_updates)
 
-        updates["Trains"][train]["Suggested Authority"] = authority_at_station 
-        updates["Trains"][train]["Suggested Speed"] = speed_at_station
-        updates["Trains"][train]["Active"] = 0
+        #updates["Trains"][train]["Suggested Authority"] = authority_at_station 
+        #updates["Trains"][train]["Suggested Speed"] = speed_at_station
        
-
         with open(data_file_track_cont,"w") as f_updates: 
             json.dump(updates, f_updates, indent=4)
         

@@ -99,7 +99,7 @@ class I2CLcd:
             self._char(ord(c))
 
     def show_speed_auth(self, block_id: str, speed_mph: float, auth_yds: float):
-        l1 = f"Blk {str(block_id)[:3]:<3} Spd {int(speed_mph):>3}"
-        l2 = f"Auth {int(auth_yds):>4} yd"
+        l1 = f"Blk {str(block_id):<3} Spd {int(speed_mph):>2} mph"
+        l2 = f"Auth {int(auth_yds):>3} yd"
         self.write_line(0, l1)
         self.write_line(1, l2)
