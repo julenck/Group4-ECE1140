@@ -16,7 +16,7 @@ class DynamicBlockManager:
                 "switch_position": "N/A",
             }
 
-    def write_inputs(self, line_name, switches, gates, lights, occupancy, failures):
+    def write_inputs(self, line_name, switches, gates, lights, failures):
         """Write arrays from JSON to storage."""
         if line_name not in self.line_states or not self.line_states[line_name]:
             return
@@ -24,17 +24,17 @@ class DynamicBlockManager:
         blocks = sorted(self.line_states[line_name].keys())
 
         for idx, block_id in enumerate(blocks):
-            if idx < len(occupancy):
-                self.line_states[line_name][block_id]["occupancy"] = occupancy[idx] == 1
 
             if idx < len(lights):
                 self.line_states[line_name][block_id]["light"] = lights[idx]
 
-            if idx < len(gates):
-                self.line_states[line_name][block_id]["gate"] = gates[idx]
+            if block_id in gates:
+                self.line_states[line_name][block_id]["gate"] = gates[block_id]
 
-            if idx < len(switches):
-                self.line_states[line_name][block_id]["switch_position"] = switches[idx]
+            if block_id in switches:
+                self.line_states[line_name][block_id]["switch_position"] = switches[
+                    block_id
+                ]
 
             failure_idx = idx * 3
             if failure_idx + 2 < len(failures):
@@ -64,7 +64,7 @@ class DynamicBlockManager:
             return None
 
         state = self.line_states[line_name][block_id]
-        light_map = {0: "Red", 1: "Green"}
+        light_map = {0: "Super Green", 1: "Green", 2: "Yellow", 3: "Red"}
 
         return {
             "temperature": state["temperature"],

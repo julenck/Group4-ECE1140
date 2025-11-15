@@ -8,6 +8,7 @@ from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 import re
 from typing import List, Tuple, Dict
+from PIL import Image, ImageTk
 
 # Import network builder and parser
 from LineNetwork import LineNetworkBuilder
@@ -97,7 +98,7 @@ def parse_excel(filepath: str) -> dict:
 class RailwayDiagram:
     """Railway track visualization using skeleton paths."""
 
-    def __init__(self, parent=None, embedded=False):
+    def __init__(self, parent=None, embedded=False, block_manager=None):
         """
         Initialize visualizer.
 
@@ -106,6 +107,7 @@ class RailwayDiagram:
             embedded: If True, create canvas in parent widget. If False, create own window.
         """
         self.embedded = embedded
+        self.block_manager = block_manager
 
         if embedded:
             self.parent = parent
@@ -128,7 +130,8 @@ class RailwayDiagram:
             "Orange Line": "#FF8C00",
             "Purple Line": "#9370DB",
         }
-
+        self.all_positions_green = {}
+        self.all_positions_red = {}
         self.show_blocks = True
         self.show_stations = True
 
@@ -276,8 +279,10 @@ class RailwayDiagram:
 
             # Build LineNetwork for this line
             df = self.track_data[line_name]
+            # In on_line_selected():
             builder = LineNetworkBuilder(df, line_name)
             self.line_network = builder.build()
+            self.line_network.block_manager = self.block_manager  # ADD THIS LINE
 
             # Route to appropriate draw method
             if line_name == "Red Line":
@@ -386,7 +391,7 @@ class RailwayDiagram:
         # Size reduction factor
         size_reduction = 0.5
 
-        all_positions = {}
+        self.all_positions_red = {}
         section_order = sorted(section_blocks.keys())
 
         # Draw each section with smooth curves
@@ -491,7 +496,7 @@ class RailwayDiagram:
                 label_x = x + perp_x * offset_dist
                 label_y = y + perp_y * offset_dist
 
-                all_positions[block["block_num"]] = (x, y)
+                self.all_positions_red[block["block_num"]] = (x, y)
 
                 # Draw block label
                 if self.blocks_var.get():
@@ -615,11 +620,11 @@ class RailwayDiagram:
                 first_block = next_blocks[0]
 
                 if (
-                    last_block["block_num"] in all_positions
-                    and first_block["block_num"] in all_positions
+                    last_block["block_num"] in self.all_positions_red
+                    and first_block["block_num"] in self.all_positions_red
                 ):
-                    x1, y1 = all_positions[last_block["block_num"]]
-                    x2, y2 = all_positions[first_block["block_num"]]
+                    x1, y1 = self.all_positions_red[last_block["block_num"]]
+                    x2, y2 = self.all_positions_red[first_block["block_num"]]
 
                     # Draw smooth connecting arrow with midpoint
                     mid_x = (x1 + x2) / 2
@@ -707,7 +712,7 @@ class RailwayDiagram:
                     splinesteps=24,
                     tags="branch_connector",
                 )
-
+        self.draw_yard(line_name, scale_factor, size_reduction)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
         # Update info
@@ -800,7 +805,7 @@ class RailwayDiagram:
         # Size reduction factor
         size_reduction = 0.5
 
-        all_positions = {}
+        self.all_positions_green = {}
         section_order = sorted(section_blocks.keys())
 
         # Draw each section with smooth curves
@@ -905,7 +910,7 @@ class RailwayDiagram:
                 label_x = x + perp_x * offset_dist
                 label_y = y + perp_y * offset_dist
 
-                all_positions[block["block_num"]] = (x, y)
+                self.all_positions_green[block["block_num"]] = (x, y)
 
                 # Draw block label
                 if self.blocks_var.get():
@@ -1029,11 +1034,11 @@ class RailwayDiagram:
                 first_block = next_blocks[0]
 
                 if (
-                    last_block["block_num"] in all_positions
-                    and first_block["block_num"] in all_positions
+                    last_block["block_num"] in self.all_positions_green
+                    and first_block["block_num"] in self.all_positions_green
                 ):
-                    x1, y1 = all_positions[last_block["block_num"]]
-                    x2, y2 = all_positions[first_block["block_num"]]
+                    x1, y1 = self.all_positions_green[last_block["block_num"]]
+                    x2, y2 = self.all_positions_green[first_block["block_num"]]
 
                     # Draw smooth connecting arrow with midpoint
                     mid_x = (x1 + x2) / 2
@@ -1121,7 +1126,7 @@ class RailwayDiagram:
                     splinesteps=24,
                     tags="branch_connector",
                 )
-
+        self.draw_yard(line_name, scale_factor, size_reduction)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
         # Update info
@@ -1285,6 +1290,7 @@ class RailwayDiagram:
 
         builder = LineNetworkBuilder(df, line_name)
         self.line_network = builder.build()
+        self.line_network.block_manager = self.block_manager
 
         # Draw based on line type
         if line_name == "Red Line":
@@ -1327,6 +1333,119 @@ class RailwayDiagram:
                 ##self.canvas.see(element["id"])
                 self.highlighted_block_id = element["id"]
                 break
+
+    def draw_yard(self, line_name: str, scale_factor: float, size_reduction: float):
+        """Draw the yard section on the track."""
+
+        if line_name == "Red Line":
+            skeleton = self.parser.get_section_path_red("YARD")
+        elif line_name == "Green Line":
+            skeleton = self.parser.get_section_path_green("YARD")
+        else:
+            return
+
+        if not skeleton:
+            return
+
+        color = self.line_colors.get(line_name, "#228B22")
+
+        # Draw each pixel as a small circle instead of a line
+        for x, y in skeleton:
+            scaled_x = int(x * scale_factor * size_reduction)
+            scaled_y = int(y * scale_factor * size_reduction)
+            self.canvas.create_oval(
+                scaled_x - 2,
+                scaled_y - 2,
+                scaled_x + 2,
+                scaled_y + 2,
+                fill=color,
+                outline="",
+                tags="yard_track",
+            )
+
+        # Add YARD label at center
+        xs = [int(x * scale_factor * size_reduction) for x, y in skeleton]
+        ys = [int(y * scale_factor * size_reduction) for x, y in skeleton]
+        center_x = sum(xs) // len(xs)
+        center_y = sum(ys) // len(ys)
+
+        self.canvas.create_text(
+            center_x,
+            center_y,
+            text="YARD",
+            font=("Arial", 10, "bold"),
+            fill="purple",
+            tags="yard_label",
+        )
+
+    def start_train_animation(self, starting_block=0):
+        """Initialize and start train animation from yard."""
+        try:
+            from PIL import Image, ImageTk
+
+            # Load train image
+            train_image = Image.open("train.png")
+            train_image = train_image.resize((20, 20))
+            self.train_photo = ImageTk.PhotoImage(train_image)
+
+            # Get starting position (yard or block 0)
+            if starting_block == 0:
+                # Use yard position or default
+                x, y = 100, 100  # Default position, will be updated immediately
+            else:
+                x, y = self.all_positions_green.get(starting_block, (100, 100))
+
+            # Create train on canvas
+            self.train_id = self.canvas.create_image(
+                x, y, image=self.train_photo, tags="train"
+            )
+
+            # Initialize train state
+            self.current_train_block = starting_block
+            self.previous_train_block = None
+
+            # Start animation
+            self.animate_train_step()
+
+        except Exception as e:
+            print(f"Error starting train animation: {e}")
+
+    def animate_train_step(self):
+        """Move train to next block."""
+        if not self.line_network:
+            return
+
+        # Get next block from network
+        next_block = self.line_network.get_next_block(
+            self.current_train_block, self.previous_train_block
+        )
+
+        # Get position for next block
+        x, y = self.all_positions_green.get(next_block, (0, 0))
+
+        # Move train
+        if hasattr(self, "train_id"):
+            self.canvas.coords(self.train_id, x, y)
+
+        # Highlight current block
+        block_name = None
+        if self.current_line and self.current_line in self.track_data:
+            df = self.track_data[self.current_line]
+            for _, row in df.iterrows():
+                if row.get("Block Number") == next_block:
+                    section = str(row.get("Section", "")).strip()
+                    block_name = f"{section}{next_block}"
+                    break
+
+        if block_name:
+            self.highlight_block(block_name)
+
+        # Update train state
+        self.previous_train_block = self.current_train_block
+        self.current_train_block = next_block
+
+        # Schedule next step
+        self.root.after(500, self.animate_train_step)
 
 
 def main():

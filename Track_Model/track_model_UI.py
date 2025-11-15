@@ -83,6 +83,9 @@ class TrackModelUI(tk.Tk):
         block_frame.grid_columnconfigure(0, weight=1)
         block_frame.grid_columnconfigure(1, weight=1)
 
+        ttk.Button(
+            control_frame, text="Start Train", command=self.start_train, width=15
+        ).pack(side=tk.LEFT, padx=5)
         left_fields = [
             "Line:",
             "Direction of Travel:",
@@ -178,7 +181,10 @@ class TrackModelUI(tk.Tk):
         ).pack(side=tk.LEFT, padx=2)
 
         # --- Station Information --- #
-        self.station_vars = {"Disembarking:": tk.StringVar(value="N/A")}
+        self.station_vars = {
+            "Boarding:": tk.StringVar(value="N/A"),
+            "Disembarking:": tk.StringVar(value="N/A"),  # ADD THIS LINE
+        }
         station_frame = ttk.LabelFrame(right_frame, text="Station Information")
         station_frame.grid(row=4, column=0, sticky="EW", padx=5, pady=5)
         for label, var in self.station_vars.items():
@@ -357,7 +363,9 @@ class TrackModelUI(tk.Tk):
     def setup_track_visualizer(self):
         if hasattr(self, "track_label"):
             self.track_label.destroy()
-        self.visualizer = RailwayDiagram(self.left_frame, embedded=True)
+        self.visualizer = RailwayDiagram(
+            self.left_frame, embedded=True, block_manager=self.block_manager
+        )
         self.excel_file_path = None
 
     def update_visualizer_display(
@@ -379,6 +387,19 @@ class TrackModelUI(tk.Tk):
             self.visualizer.load_excel_data(self.excel_file_path)
         full_line_name = f"{line_name} Line" if line_name else None
         self.visualizer.display_line(full_line_name, highlighted_block=block_name)
+
+    def start_train(self):
+        """Start train animation on the visualizer."""
+        if hasattr(self, "visualizer") and self.visualizer:
+            if self.visualizer.line_network:
+                self.visualizer.start_train_animation(starting_block=0)
+            else:
+                messagebox.showwarning(
+                    "No Line Selected",
+                    "Please select a line first before starting the train.",
+                )
+        else:
+            messagebox.showerror("Error", "Visualizer not initialized.")
 
     def on_block_selected(self, event=None):
         self.block_selected = True
@@ -419,66 +440,8 @@ class TrackModelUI(tk.Tk):
                 print(f"Failed to highlight block '{selected_block}': {e}")
 
     def load_data(self):
-        # WRITE PHASE: Read JSON file and parse it
+        """Read Phase: Retrieve dynamic data from block_manager and update UI."""
         selected_line = self.line_selector.get()
-        try:
-            with open("track_model_Track_controller.json", "r") as f:
-                data = json.load(f)
-
-            if self.block_manager and selected_line:
-                # Determine prefix based on line
-                prefix = selected_line[0]  # "G" for Green, "R" for Red
-
-                # Parse arrays from JSON
-                switches = data.get(f"{prefix}-switches", [])
-                gates = data.get(f"{prefix}-gates", [])
-                lights = data.get(f"{prefix}-lights", [])
-                occupancy = data.get(f"{prefix}-Occupancy", [])
-                failures = data.get(f"{prefix}-Failures", [])
-
-                # Build lists of blocks with switches and gates
-                switch_blocks = []
-                gate_blocks = []
-                for b in self.static_data:
-                    # Skip blocks with N/A block numbers
-                    if b.get("Block Number") == "N/A":
-                        continue
-
-                    block_id = f"{b['Section']}{int(float(b['Block Number']))}"
-                    if b.get("Branching", "N/A") != "N/A":
-                        switch_blocks.append((block_id, b["Branching"]))
-                    if b.get("Crossing", "No") == "Yes":
-                        gate_blocks.append(block_id)
-
-                # Map switches to blocks
-                switch_positions = {}
-                for i, (block_id, branching) in enumerate(switch_blocks):
-                    if i < len(switches):
-                        branches = [s.strip() for s in branching.split(",")]
-                        switch_positions[block_id] = branches[switches[i]]
-
-                # Map gates to blocks
-                gate_statuses = {}
-                for i, block_id in enumerate(gate_blocks):
-                    if i < len(gates):
-                        gate_statuses[block_id] = "Open" if gates[i] == 0 else "Closed"
-
-                self.block_manager.write_inputs(
-                    selected_line,
-                    switch_positions,
-                    gate_statuses,
-                    lights,
-                    occupancy,
-                    failures,
-                )
-                print(
-                    f"[JSON WRITE] Data written for line '{selected_line} and {switch_positions} and {gate_statuses} and {lights} and {occupancy} and {failures}'"
-                )
-
-        except Exception as e:
-            print(f"Error reading JSON: {e}")
-
-        # READ PHASE: Get data from storage and update UI
         selected_block = self.block_selector.get()
 
         if self.block_manager and selected_block:
@@ -515,6 +478,7 @@ class TrackModelUI(tk.Tk):
                 traffic_light = light_input
                 gate_status = gate_input
 
+                # Failure handling
                 if failures.get("power"):
                     traffic_light = "OFF"
                     crossing_value = next(
@@ -552,6 +516,7 @@ class TrackModelUI(tk.Tk):
                     )
                     gate_status = "Closed" if crossing_value == "Yes" else "N/A"
 
+                # Update UI
                 self.block_labels["Direction of Travel:"].set("--")
                 self.block_labels["Traffic Light:"].set(traffic_light)
                 self.block_labels["Gate:"].set(gate_status)
@@ -589,6 +554,7 @@ class TrackModelUI(tk.Tk):
                         text="All Systems Normal", foreground="green"
                     )
 
+        # Keep only the read phase looping
         self.after(500, self.load_data)
 
     def increase_temp_immediate(self):

@@ -1,11 +1,11 @@
 {
     "G-switches": [
+        1,
+        1,
         0,
         0,
         0,
-        0,
-        0,
-        1
+        0
     ],
     "G-gates": [
         0,
@@ -649,5 +649,8 @@
         0,
         0
     ],
-    "G-Trains": {}
+    "G-Trains": {
+        "commanded speed": 25,
+        "commanded authority": 0
+    }
 }
