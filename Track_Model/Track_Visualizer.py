@@ -98,119 +98,42 @@ def parse_excel(filepath: str) -> dict:
 class RailwayDiagram:
     """Railway track visualization using skeleton paths."""
 
-    def __init__(self, parent=None, embedded=False, block_manager=None):
+    def __init__(self, parent, block_manager=None):
         """
-        Initialize visualizer.
+        Initialize visualizer in embedded mode only.
 
         Args:
-            parent: Parent tkinter widget (if embedded) or None (standalone)
-            embedded: If True, create canvas in parent widget. If False, create own window.
+            parent: Parent tkinter widget
+            block_manager: Reference to DynamicBlockManager
         """
-        self.embedded = embedded
+        self.parent = parent
+        self.root = parent.winfo_toplevel()
         self.block_manager = block_manager
-
-        if embedded:
-            self.parent = parent
-            self.root = parent.winfo_toplevel()
-        else:
-            self.root = tk.Tk() if parent is None else parent
-            self.root.title("Railway Track Visualizer")
-            self.root.geometry("1600x900")
-            self.parent = self.root
 
         self.last_clicked_block = None
         self.track_data = {}
         self.parser = None
         self.line_network = None  # LineNetwork for current line
         self.line_colors = {
-            "Blue Line": "#1E90FF",
             "Red Line": "#DC143C",
             "Green Line": "#228B22",
-            "Yellow Line": "#FFD700",
-            "Orange Line": "#FF8C00",
-            "Purple Line": "#9370DB",
         }
         self.all_positions_green = {}
         self.all_positions_red = {}
         self.show_blocks = True
         self.show_stations = True
 
+        # Variables still used internally
+        self.blocks_var = tk.BooleanVar(value=True)
+        self.stations_var = tk.BooleanVar(value=True)
+        self.line_var = tk.StringVar()
+
         self.setup_ui()
 
     def setup_ui(self):
-        """Setup user interface - adapts for embedded vs standalone mode."""
+        """Setup user interface for embedded mode."""
 
-        # CONTROL FRAME - Only in standalone mode
-        if not self.embedded:
-            control_frame = ttk.Frame(self.parent, padding="10")
-            control_frame.pack(side=tk.TOP, fill=tk.X)
-
-            ttk.Button(
-                control_frame, text="Load Excel File", command=self.load_excel
-            ).pack(side=tk.LEFT, padx=5)
-
-            ttk.Label(control_frame, text="Line:").pack(side=tk.LEFT, padx=(20, 5))
-            self.line_var = tk.StringVar()
-            self.line_combo = ttk.Combobox(
-                control_frame, textvariable=self.line_var, state="readonly", width=20
-            )
-            self.line_combo.pack(side=tk.LEFT, padx=5)
-            self.line_combo.bind("<<ComboboxSelected>>", self.on_line_selected)
-
-            ttk.Button(
-                control_frame, text="Show All Lines", command=self.show_all_lines
-            ).pack(side=tk.LEFT, padx=5)
-
-            ttk.Separator(control_frame, orient=tk.VERTICAL).pack(
-                side=tk.LEFT, fill=tk.Y, padx=10
-            )
-
-            # Display toggles
-            self.blocks_var = tk.BooleanVar(value=True)
-            self.stations_var = tk.BooleanVar(value=True)
-
-            ttk.Checkbutton(
-                control_frame,
-                text="Show Blocks",
-                variable=self.blocks_var,
-                command=self.refresh_display,
-            ).pack(side=tk.LEFT, padx=5)
-
-            ttk.Checkbutton(
-                control_frame,
-                text="Show Stations",
-                variable=self.stations_var,
-                command=self.refresh_display,
-            ).pack(side=tk.LEFT, padx=5)
-
-            # Legend
-            legend_frame = ttk.LabelFrame(control_frame, text="Legend", padding="5")
-            legend_frame.pack(side=tk.RIGHT, padx=10)
-
-            legend_canvas = tk.Canvas(
-                legend_frame, width=200, height=30, bg="white", highlightthickness=0
-            )
-            legend_canvas.pack()
-
-            legend_canvas.create_oval(
-                10, 10, 20, 20, fill="#1E90FF", outline="black", width=2
-            )
-            legend_canvas.create_text(
-                25, 15, text="Station", anchor="w", font=("Arial", 8)
-            )
-
-            points = [80, 15, 85, 10, 90, 15, 85, 20]
-            legend_canvas.create_polygon(points, fill="red", outline="darkred", width=2)
-            legend_canvas.create_text(
-                95, 15, text="Crossing", anchor="w", font=("Arial", 8)
-            )
-        else:
-            # Embedded mode - create minimal variables
-            self.blocks_var = tk.BooleanVar(value=True)
-            self.stations_var = tk.BooleanVar(value=True)
-            self.line_var = tk.StringVar()
-
-        # CANVAS WITH SCROLLBARS - Always needed
+        # CANVAS WITH SCROLLBARS
         canvas_frame = ttk.Frame(self.parent)
         canvas_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -233,25 +156,7 @@ class RailwayDiagram:
         v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # INFO PANEL - Only in standalone mode
-        if not self.embedded:
-            info_frame = ttk.LabelFrame(self.parent, text="Information", padding="10")
-            info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
-
-            self.info_text = tk.Text(
-                info_frame, height=5, wrap=tk.WORD, font=("Arial", 9)
-            )
-            self.info_text.pack(fill=tk.BOTH, expand=True)
-            self.info_text.insert(
-                "1.0",
-                "Load an Excel file to visualize railway tracks\n\n"
-                "Features:\n"
-                "• Skeleton-based visualization\n"
-                "• Interactive blocks and stations",
-            )
-            self.info_text.config(state=tk.DISABLED)
-
-        # EVENT BINDINGS - Always needed
+        # EVENT BINDINGS
         self.canvas.bind("<Button-1>", self.on_canvas_click)
         self.canvas.bind("<Motion>", self.on_canvas_hover)
 
@@ -271,30 +176,6 @@ class RailwayDiagram:
         except Exception as e:
             print(f"Error loading Excel: {e}")
 
-    def on_line_selected(self, event=None):
-        """Handle line selection."""
-        line_name = self.line_var.get()
-        if line_name and line_name in self.track_data:
-            self.current_line = line_name
-
-            # Build LineNetwork for this line
-            df = self.track_data[line_name]
-            # In on_line_selected():
-            builder = LineNetworkBuilder(df, line_name)
-            self.line_network = builder.build()
-            self.line_network.block_manager = self.block_manager  # ADD THIS LINE
-
-            # Route to appropriate draw method
-            if line_name == "Red Line":
-                self.draw_single_line_red(line_name)
-            elif line_name == "Green Line":
-                self.draw_single_line_green(line_name)
-            else:
-                messagebox.showwarning(
-                    "Unsupported Line",
-                    f"{line_name} visualization not yet implemented.",
-                )
-
     def show_all_lines(self):
         """Show overview of all lines."""
         if not self.track_data:
@@ -302,16 +183,6 @@ class RailwayDiagram:
             return
         self.current_line = None
         self.draw_all_lines()
-
-    def refresh_display(self):
-        """Refresh current display."""
-        if self.current_line:
-            if self.current_line == "Red Line":
-                self.draw_single_line_red(self.current_line)
-            elif self.current_line == "Green Line":
-                self.draw_single_line_green(self.current_line)
-        elif self.track_data:
-            self.draw_all_lines()
 
     def draw_single_line_red(self, line_name: str):
         """Draw railway line using skeleton paths from parser."""
@@ -725,7 +596,6 @@ class RailwayDiagram:
         info += f"• Scale: {scale_factor:.2f}x\n"
         info += f"• Total blocks: {sum(len(blocks) for blocks in section_blocks.values())}\n"
         info += f"• Stations: {station_count}"
-        self.update_info(info)
 
     def draw_single_line_green(self, line_name: str):
         """Draw railway line using skeleton paths from parser."""
@@ -1139,7 +1009,6 @@ class RailwayDiagram:
         info += f"• Scale: {scale_factor:.2f}x\n"
         info += f"• Total blocks: {sum(len(blocks) for blocks in section_blocks.values())}\n"
         info += f"• Stations: {station_count}"
-        self.update_info(info)
 
     def draw_all_lines(self):
         """Draw simple overview of all lines."""
@@ -1186,7 +1055,6 @@ class RailwayDiagram:
                     )
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        self.update_info(f"Overview: {len(line_names)} railway lines")
 
     def on_canvas_click(self, event):
         """Handle canvas click events."""
@@ -1250,24 +1118,6 @@ class RailwayDiagram:
             font=("Arial", 10, "bold"),
             tags="tooltip",
         )
-
-    def show_station_info(self, data):
-        """Display station information."""
-        info = f"STATION: {data['station']}\nBlock: {data['block']}"
-        self.update_info(info)
-
-    def show_block_info(self, data):
-        """Display block information."""
-        info = f"BLOCK: {data['block_name']} (#{data['block_num']})"
-        self.update_info(info)
-
-    def update_info(self, text):
-        """Update info panel."""
-        if not self.embedded and hasattr(self, "info_text"):
-            self.info_text.config(state=tk.NORMAL)
-            self.info_text.delete("1.0", tk.END)
-            self.info_text.insert("1.0", text)
-            self.info_text.config(state=tk.DISABLED)
 
     def display_line(self, line_name: str, highlighted_block=None):
         """
@@ -1446,13 +1296,3 @@ class RailwayDiagram:
 
         # Schedule next step
         self.root.after(500, self.animate_train_step)
-
-
-def main():
-    root = tk.Tk()
-    app = RailwayDiagram(root)
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()

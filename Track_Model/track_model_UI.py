@@ -454,72 +454,16 @@ class TrackModelUI(tk.Tk):
                 occupancy = block_data["occupancy"]
                 authority = block_data["commanded_authority"]
                 speed = block_data["commanded_speed"]
-                light_input = block_data["traffic_light"]
-                gate_input = block_data["gate"]
+                traffic_light = block_data["traffic_light"]
+                gate = block_data["gate"]
                 failures = block_data["failures"]
                 switch_position = block_data["switch_position"]
-
-                branching_value = next(
-                    (
-                        b["Branching"]
-                        for b in self.static_data
-                        if f"{b['Section']}{int(float(b['Block Number']))}"
-                        == selected_block
-                    ),
-                    "No",
-                )
-                if branching_value in ["No", "N/A", "To/From Yard"]:
-                    switch_position = "N/A"
-                self.block_labels["Switch Position:"].set(switch_position)
-
-                failures_active = any(failures.values())
-                heating_on = temp < 32
-
-                traffic_light = light_input
-                gate_status = gate_input
-
-                # Failure handling
-                if failures.get("power"):
-                    traffic_light = "OFF"
-                    crossing_value = next(
-                        (
-                            b["Crossing"]
-                            for b in self.static_data
-                            if f"{b['Section']}{int(float(b['Block Number']))}"
-                            == selected_block
-                        ),
-                        "No",
-                    )
-                    gate_status = "Closed" if crossing_value == "Yes" else "N/A"
-
-                if failures.get("circuit"):
-                    occupancy = 0
-                    if authority != "N/A" and authority > 0:
-                        traffic_light = "Green"
-                        gate_status = "Open"
-                    else:
-                        traffic_light = "Red"
-                        gate_status = "Open"
-
-                if failures.get("broken"):
-                    authority = 0
-                    speed = 0
-                    traffic_light = "Red"
-                    crossing_value = next(
-                        (
-                            b["Crossing"]
-                            for b in self.static_data
-                            if f"{b['Section']}{int(float(b['Block Number']))}"
-                            == selected_block
-                        ),
-                        "No",
-                    )
-                    gate_status = "Closed" if crossing_value == "Yes" else "N/A"
 
                 # Update UI
                 self.block_labels["Direction of Travel:"].set("--")
                 self.block_labels["Traffic Light:"].set(traffic_light)
-                self.block_labels["Gate:"].set(gate_status)
+                self.block_labels["Gate:"].set(gate)
+                self.block_labels["Switch Position:"].set(switch_position)
                 self.dynamic_labels["Commanded Speed (mph):"].set(speed)
                 self.dynamic_labels["Commanded Authority (yards):"].set(authority)
                 self.dynamic_labels["Occupancy:"].set(
@@ -527,6 +471,7 @@ class TrackModelUI(tk.Tk):
                 )
 
                 self.temperature.set(str(temp))
+                heating_on = temp < 32
                 self.heating_status.config(
                     text="ON" if heating_on else "OFF",
                     foreground="green" if heating_on else "red",
@@ -536,6 +481,7 @@ class TrackModelUI(tk.Tk):
                     state_key = key.split()[0].lower()
                     self.failure_vars[key].set(failures.get(state_key, False))
 
+                failures_active = any(failures.values())
                 if failures_active:
                     active = []
                     if failures.get("power"):
