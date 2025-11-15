@@ -12,6 +12,6 @@
         "passengers_onboard": 0
     },
     "motion": {
-        "current motion": "Stopped",
+        "current motion": "Stopped"
     }
 }
