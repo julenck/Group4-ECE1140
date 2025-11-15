@@ -10,5 +10,8 @@
         "next station": "N/A",
         "passengers_boarding": 0,
         "passengers_onboard": 0
+    },
+    "motion": {
+        "current motion": "Stopped",
     }
 }
