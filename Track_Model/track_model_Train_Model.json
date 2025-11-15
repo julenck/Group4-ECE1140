@@ -9,8 +9,7 @@
             "side_door": "N/A",
             "current station": "N/A",
             "next station": "N/A",
-            "passengers_boarding": 0,
-            "passengers_onboard": 0
+            "passengers_boarding": 0
         },
         "motion": {
             "current motion": "Stopped"
@@ -26,8 +25,7 @@
             "side_door": "N/A",
             "current station": "N/A",
             "next station": "N/A",
-            "passengers_boarding": 0,
-            "passengers_onboard": 0
+            "passengers_boarding": 0
         },
         "motion": {
             "current motion": "Undispatched"
@@ -43,8 +41,7 @@
             "side_door": "N/A",
             "current station": "N/A",
             "next station": "N/A",
-            "passengers_boarding": 0,
-            "passengers_onboard": 0
+            "passengers_boarding": 0
         },
         "motion": {
             "current motion": "Undispatched"
