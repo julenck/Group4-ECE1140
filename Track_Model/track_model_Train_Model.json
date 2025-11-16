@@ -1,44 +1,82 @@
 {
-    "block": {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 171baff (update commit message for your changes. Lines starting with '#' will be ignored, and an empty message aborts the commit.)
-        "commanded speed": [
-            40,
-            67,
-            90,
-            30,
-            30
-        ],
-        "commanded authority": [
-            5,
-            10,
-            15,
-            3,
-            3
-        ]
-<<<<<<< HEAD
-=======
-        "commanded_speed": 40,
-        "commanded_authority": 0
->>>>>>> d02c1bb (git push)
-=======
->>>>>>> 171baff (update commit message for your changes. Lines starting with '#' will be ignored, and an empty message aborts the commit.)
+    "G_train_1": {
+        "block": {
+            "commanded speed": 35,
+            "commanded authority": 5
+        },
+        "beacon": {
+            "speed limit": 70.0,
+            "side_door": "Right",
+            "current station": "N/A",
+            "next station": "Glenbury",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Moving"
+        }
     },
-    "beacon": {
-        "speed limit": 30,
-        "side_door": "Right",
-        "current station": "Penn Station",
-        "next station": "Park Street"
+    "G_train_2": {
+        "block": {
+            "commanded speed": 30,
+            "commanded authority": 10
+        },
+        "beacon": {
+            "speed limit": 0,
+            "side_door": "N/A",
+            "current station": "N/A",
+            "next station": "N/A",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Stopped"
+        }
     },
-    "train": {
-        "passengers_boarding_": [
-            14,
-            25,
-            16,
-            7,
-            30
-        ]
+    "G_train_3": {
+        "block": {
+            "commanded speed": 25,
+            "commanded authority": 15
+        },
+        "beacon": {
+            "speed limit": 0,
+            "side_door": "N/A",
+            "current station": "N/A",
+            "next station": "N/A",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Undispatched"
+        }
+    },
+    "R_train_4": {
+        "block": {
+            "commanded speed": 0,
+            "commanded authority": 0
+        },
+        "beacon": {
+            "speed limit": 0,
+            "side_door": "N/A",
+            "current station": "N/A",
+            "next station": "N/A",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Undispatched"
+        }
+    },
+    "R_train_5": {
+        "block": {
+            "commanded speed": 0,
+            "commanded authority": 0
+        },
+        "beacon": {
+            "speed limit": 0,
+            "side_door": "N/A",
+            "current station": "N/A",
+            "next station": "N/A",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Undispatched"
+        }
     }
 }
