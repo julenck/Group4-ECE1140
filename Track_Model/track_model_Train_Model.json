@@ -1,21 +1,5 @@
 {
-    "train_1": {
-        "block": {
-            "commanded speed": 0,
-            "commanded authority": 0
-        },
-        "beacon": {
-            "speed limit": 0,
-            "side_door": "N/A",
-            "current station": "N/A",
-            "next station": "N/A",
-            "passengers_boarding": 0
-        },
-        "motion": {
-            "current motion": "Stopped"
-        }
-    },
-    "train_2": {
+    "G_train_1": {
         "block": {
             "commanded speed": 0,
             "commanded authority": 0
@@ -31,7 +15,55 @@
             "current motion": "Undispatched"
         }
     },
-    "train_3": {
+    "G_train_2": {
+        "block": {
+            "commanded speed": 0,
+            "commanded authority": 0
+        },
+        "beacon": {
+            "speed limit": 0,
+            "side_door": "N/A",
+            "current station": "N/A",
+            "next station": "N/A",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Undispatched"
+        }
+    },
+    "G_train_3": {
+        "block": {
+            "commanded speed": 0,
+            "commanded authority": 0
+        },
+        "beacon": {
+            "speed limit": 0,
+            "side_door": "N/A",
+            "current station": "N/A",
+            "next station": "N/A",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Undispatched"
+        }
+    },
+    "R_train_4": {
+        "block": {
+            "commanded speed": 0,
+            "commanded authority": 0
+        },
+        "beacon": {
+            "speed limit": 0,
+            "side_door": "N/A",
+            "current station": "N/A",
+            "next station": "N/A",
+            "passengers_boarding": 0
+        },
+        "motion": {
+            "current motion": "Undispatched"
+        }
+    },
+    "R_train_5": {
         "block": {
             "commanded speed": 0,
             "commanded authority": 0

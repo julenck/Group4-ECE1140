@@ -110,6 +110,17 @@ class RailwayDiagram:
         self.root = parent.winfo_toplevel()
         self.block_manager = block_manager
 
+        self.trains = {}
+
+        self.train_colors = {
+            1: "#FF0000",  # Red
+            2: "#0000FF",  # Blue
+            3: "#00AA00",  # Green
+            4: "#FFA500",  # Orange
+            5: "#800080",  # Purple
+        }
+        self.train_icons = {}
+
         self.last_clicked_block = None
         self.track_data = {}
         self.parser = None
@@ -172,7 +183,6 @@ class RailwayDiagram:
             self.track_data = parse_excel(filepath)
             self.parser = TrackDiagramParser("track.png")
             self.parser.parse()
-            print(f"✓ Loaded {len(self.track_data)} railway lines")
         except Exception as e:
             print(f"Error loading Excel: {e}")
 
@@ -257,8 +267,6 @@ class RailwayDiagram:
         # Add some padding
         scale_factor = worst_ratio * 1.2
 
-        print(f"Scaling skeleton by {scale_factor:.2f}x")
-
         # Size reduction factor
         size_reduction = 0.5
 
@@ -298,9 +306,6 @@ class RailwayDiagram:
                     # If closest pixel is in first half, reverse skeleton
                     if closest_curr_idx < len(skeleton) / 2:
                         skeleton = skeleton[::-1]
-                        print(
-                            f"Section {section}: Reversed to minimize distance to {next_section}"
-                        )
 
             # Sample skeleton points for smoothing (every 5th pixel)
             sampled_skeleton = [skeleton[i] for i in range(0, len(skeleton), 5)]
@@ -670,8 +675,6 @@ class RailwayDiagram:
         # Add some padding
         scale_factor = worst_ratio * 1.2
 
-        print(f"Scaling skeleton by {scale_factor:.2f}x")
-
         # Size reduction factor
         size_reduction = 0.5
 
@@ -711,9 +714,6 @@ class RailwayDiagram:
                     # If closest pixel is in first half, reverse skeleton
                     if closest_curr_idx < len(skeleton) / 2:
                         skeleton = skeleton[::-1]
-                        print(
-                            f"Section {section}: Reversed to minimize distance to {next_section}"
-                        )
 
             # Sample skeleton points for smoothing (every 5th pixel)
             sampled_skeleton = [skeleton[i] for i in range(0, len(skeleton), 5)]
@@ -1228,71 +1228,61 @@ class RailwayDiagram:
             tags="yard_label",
         )
 
-    def start_train_animation(self, starting_block=0):
-        """Initialize and start train animation from yard."""
-        try:
-            from PIL import Image, ImageTk
-
-            # Load train image
-            train_image = Image.open("train.png")
-            train_image = train_image.resize((20, 20))
-            self.train_photo = ImageTk.PhotoImage(train_image)
-
-            # Get starting position (yard or block 0)
-            if starting_block == 0:
-                # Use yard position or default
-                x, y = 100, 100  # Default position, will be updated immediately
-            else:
-                x, y = self.all_positions_green.get(starting_block, (100, 100))
-
-            # Create train on canvas
-            self.train_id = self.canvas.create_image(
-                x, y, image=self.train_photo, tags="train"
-            )
-
-            # Initialize train state
-            self.current_train_block = starting_block
-            self.previous_train_block = None
-
-            # Start animation
-            self.animate_train_step()
-
-        except Exception as e:
-            print(f"Error starting train animation: {e}")
-
-    def animate_train_step(self):
-        """Move train to next block."""
-        if not self.line_network:
+    def animate_train(self, train_id, line):
+        # Skip if the train already exists
+        if train_id in self.trains:
             return
 
-        # Get next block from network
-        next_block = self.line_network.get_next_block(
-            self.current_train_block, self.previous_train_block
+        # Create new train entry
+        self.trains[train_id] = {"line": line, "previous_block": 0, "current_block": 0}
+
+        # Draw the train icon at the yard (block 0)
+        x, y = self.block_coords[0]
+        color = self.train_colors.get(train_id, "red")
+        self.train_icons[train_id] = self.canvas.create_oval(
+            x - 10, y - 10, x + 10, y + 10, fill=color
         )
 
-        # Get position for next block
-        x, y = self.all_positions_green.get(next_block, (0, 0))
+        # Bind hover events
+        self.canvas.tag_bind(
+            self.train_icons[train_id],
+            "<Enter>",
+            lambda event, t=train_id: self.show_train_info(event, t),
+        )
 
-        # Move train
-        if hasattr(self, "train_id"):
-            self.canvas.coords(self.train_id, x, y)
+        # Start animation
+        self.animate_train_step(train_id)
 
-        # Highlight current block
-        block_name = None
-        if self.current_line and self.current_line in self.track_data:
-            df = self.track_data[self.current_line]
-            for _, row in df.iterrows():
-                if row.get("Block Number") == next_block:
-                    section = str(row.get("Section", "")).strip()
-                    block_name = f"{section}{next_block}"
-                    break
+    def animate_train_step(self, train_id):
+        train = self.trains[train_id]
 
-        if block_name:
-            self.highlight_block(block_name)
+        # Ask Line Network for the next block
+        next_block = self.line_network.get_next_block(
+            train_id, train["current_block"], train["previous_block"]
+        )
 
-        # Update train state
-        self.previous_train_block = self.current_train_block
-        self.current_train_block = next_block
+        next_x, next_y = self.get_block_center(next_block)
+        current_x, current_y = self.get_block_center(train["current_block"])
+        dx = (next_x - current_x) / 20
+        dy = (next_y - current_y) / 20
 
-        # Schedule next step
-        self.root.after(500, self.animate_train_step)
+        # Smooth motion loop
+        for _ in range(20):
+            self.canvas.move(self.train_icons[train_id], dx, dy)
+            self.canvas.update()
+            time.sleep(0.05)
+
+        # Update train position
+        train["previous_block"] = train["current_block"]
+        train["current_block"] = next_block
+
+        # Continue animation only if still moving
+        motion = self.line_network.get_train_motion(train_id)
+        if motion == "Moving":
+            self.animate_train_step(train_id)
+
+    def show_train_info(self, event, train_id):
+        train = self.trains[train_id]
+        info = f"Train {train_id} | Line: {train['line']} | Block: {train['current_block']}"
+        self.hover_label = tk.Label(self.root, text=info, bg="yellow")
+        self.hover_label.place(x=event.x_root + 10, y=event.y_root + 10)

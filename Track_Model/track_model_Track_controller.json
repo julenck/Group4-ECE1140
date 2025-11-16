@@ -649,8 +649,16 @@
         0,
         0
     ],
-    "G-Trains": {
-        "commanded speed": 25,
-        "commanded authority": 0
+    "G-Train": {
+        "commanded speed": [
+            25,
+            0,
+            0
+        ],
+        "commanded authority": [
+            5,
+            0,
+            0
+        ]
     }
 }

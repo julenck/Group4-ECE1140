@@ -83,9 +83,6 @@ class TrackModelUI(tk.Tk):
         block_frame.grid_columnconfigure(0, weight=1)
         block_frame.grid_columnconfigure(1, weight=1)
 
-        ttk.Button(
-            control_frame, text="Start Train", command=self.start_train, width=15
-        ).pack(side=tk.LEFT, padx=5)
         left_fields = [
             "Line:",
             "Direction of Travel:",
@@ -136,11 +133,7 @@ class TrackModelUI(tk.Tk):
         # --- Block Information (Dynamic Fields) --- #
         dynamic_frame = ttk.LabelFrame(right_frame, text="Block Information")
         dynamic_frame.grid(row=2, column=0, sticky="EW", padx=5, pady=5)
-        dyn_fields = [
-            "Commanded Speed (mph):",
-            "Commanded Authority (yards):",
-            "Occupancy:",
-        ]
+        dyn_fields = ["Occupancy:"]
         self.dynamic_labels = {f: tk.StringVar(value="N/A") for f in dyn_fields}
         for field in dyn_fields:
             frame = ttk.Frame(dynamic_frame)
@@ -183,7 +176,8 @@ class TrackModelUI(tk.Tk):
         # --- Station Information --- #
         self.station_vars = {
             "Boarding:": tk.StringVar(value="N/A"),
-            "Disembarking:": tk.StringVar(value="N/A"),  # ADD THIS LINE
+            "Disembarking:": tk.StringVar(value="N/A"),
+            "Ticket Sales:": tk.StringVar(value="N/A"),
         }
         station_frame = ttk.LabelFrame(right_frame, text="Station Information")
         station_frame.grid(row=4, column=0, sticky="EW", padx=5, pady=5)
@@ -364,7 +358,7 @@ class TrackModelUI(tk.Tk):
         if hasattr(self, "track_label"):
             self.track_label.destroy()
         self.visualizer = RailwayDiagram(
-            self.left_frame, embedded=True, block_manager=self.block_manager
+            self.left_frame, block_manager=self.block_manager
         )
         self.excel_file_path = None
 
@@ -387,19 +381,6 @@ class TrackModelUI(tk.Tk):
             self.visualizer.load_excel_data(self.excel_file_path)
         full_line_name = f"{line_name} Line" if line_name else None
         self.visualizer.display_line(full_line_name, highlighted_block=block_name)
-
-    def start_train(self):
-        """Start train animation on the visualizer."""
-        if hasattr(self, "visualizer") and self.visualizer:
-            if self.visualizer.line_network:
-                self.visualizer.start_train_animation(starting_block=0)
-            else:
-                messagebox.showwarning(
-                    "No Line Selected",
-                    "Please select a line first before starting the train.",
-                )
-        else:
-            messagebox.showerror("Error", "Visualizer not initialized.")
 
     def on_block_selected(self, event=None):
         self.block_selected = True
@@ -439,6 +420,14 @@ class TrackModelUI(tk.Tk):
             except Exception as e:
                 print(f"Failed to highlight block '{selected_block}': {e}")
 
+    def get_crossing_for_block(self, block_id):
+        """Helper method to get crossing status for a block from static data."""
+        for b in self.static_data:
+            identifier = f"{b['Section']}{int(float(b['Block Number']))}"
+            if identifier == block_id:
+                return b.get("Crossing", "No")
+        return "No"
+
     def load_data(self):
         """Read Phase: Retrieve dynamic data from block_manager and update UI."""
         selected_line = self.line_selector.get()
@@ -452,23 +441,53 @@ class TrackModelUI(tk.Tk):
             if block_data:
                 temp = block_data["temperature"]
                 occupancy = block_data["occupancy"]
-                authority = block_data["commanded_authority"]
-                speed = block_data["commanded_speed"]
                 traffic_light = block_data["traffic_light"]
                 gate = block_data["gate"]
                 failures = block_data["failures"]
                 switch_position = block_data["switch_position"]
 
-                # Update UI
+                station_name = self.get_station_name_for_block(selected_block)
+                passengers_boarding = 0
+                if station_name != "N/A":
+                    # Sum passengers boarding from all trains at this station
+                    for train_id in self.block_manager.passengers_boarding_data:
+                        passengers_boarding += (
+                            self.block_manager.get_passengers_boarding(
+                                train_id, station_name
+                            )
+                        )
+
+                # Ticket sales is cumulative across all trains
+                ticket_sales = self.block_manager.total_ticket_sales
+
+                # Check for failures and apply overrides
+                if failures.get("power"):
+                    # Power failure: lights off, gates closed, switches N/A
+                    traffic_light = "OFF"
+                    crossing = self.get_crossing_for_block(selected_block)
+                    if crossing == "Yes":
+                        gate = "Closed"
+                    else:
+                        gate = "N/A"
+                    switch_position = "N/A"
+
+                if failures.get("circuit"):
+                    # Circuit failure: occupancy unavailable
+                    self.dynamic_labels["Occupancy:"].set("N/A")
+                else:
+                    # Normal occupancy display
+                    self.dynamic_labels["Occupancy:"].set(
+                        "OCCUPIED" if occupancy else "CLEAR"
+                    )
+
+                # Update UI with processed values
                 self.block_labels["Direction of Travel:"].set("--")
                 self.block_labels["Traffic Light:"].set(traffic_light)
                 self.block_labels["Gate:"].set(gate)
                 self.block_labels["Switch Position:"].set(switch_position)
-                self.dynamic_labels["Commanded Speed (mph):"].set(speed)
-                self.dynamic_labels["Commanded Authority (yards):"].set(authority)
-                self.dynamic_labels["Occupancy:"].set(
-                    "OCCUPIED" if occupancy else "CLEAR"
-                )
+
+                self.station_vars["Boarding:"].set(passengers_boarding)
+                self.station_vars["Ticket Sales:"].set(ticket_sales)
 
                 self.temperature.set(str(temp))
                 heating_on = temp < 32
@@ -500,7 +519,7 @@ class TrackModelUI(tk.Tk):
                         text="All Systems Normal", foreground="green"
                     )
 
-        # Keep only the read phase looping
+        self.check_and_start_trains()
         self.after(500, self.load_data)
 
     def increase_temp_immediate(self):
@@ -546,7 +565,6 @@ class TrackModelUI(tk.Tk):
 
         clicked = getattr(self.visualizer, "last_clicked_block", None)
         if clicked:
-            print(f"[POLL] Click detected: {clicked}")
             self.visualizer.last_clicked_block = None  # reset
 
             if clicked in self.block_selector["values"]:
@@ -556,6 +574,57 @@ class TrackModelUI(tk.Tk):
                 print(f"[POLL] '{clicked}' not found in current block list.")
 
         self.after(500, self.poll_visualizer_clicks)
+
+    def get_station_name_for_block(self, block_id):
+        """Get station name for a block from static JSON."""
+        import json
+
+        selected_line = self.line_selector.get()
+
+        try:
+            with open("track_model_static.json", "r") as f:
+                static_data = json.load(f)
+
+            line_key = selected_line.replace(" Line", "")
+
+            # FIX: Access through "static_data" wrapper
+            blocks = static_data.get("static_data", {}).get(line_key, [])
+
+            for block in blocks:
+                block_num = block.get("Block Number")
+                section = block.get("Section", "")
+
+                # Construct the identifier the same way it's done in upload_track_file
+                if block_num not in ["N/A", "nan", None] and section not in [
+                    "N/A",
+                    "nan",
+                    None,
+                ]:
+                    try:
+                        constructed_id = f"{section}{int(float(block_num))}"
+                        if constructed_id == block_id:
+                            return block.get("Station", "N/A")
+                    except (ValueError, TypeError):
+                        continue
+
+            return "N/A"
+
+        except FileNotFoundError:
+            print("Error: track_model_static.json not found")
+            return "N/A"
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in static file: {e}")
+            return "N/A"
+        except Exception as e:
+            print(f"Error getting station name: {e}")
+            return "N/A"
+
+    def check_and_start_trains(self):
+        for train in self.block_manager.trains:
+            train_id = train["train_id"]
+            line = train["line"]
+            if train["start"] and train_id not in self.visualizer.trains:
+                self.visualizer.animate_train(train_id, line)
 
 
 if __name__ == "__main__":
