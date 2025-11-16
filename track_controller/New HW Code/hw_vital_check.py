@@ -87,3 +87,79 @@ class HW_Vital_Check:
             actions["protect_blocks"] = closed_blocks
 
         return {"safe": len(reasons) == 0, "reasons": reasons, "actions": actions}
+    
+# ============================================================
+# TEST CASE - LAB 12
+# ============================================================
+
+def compute_commanded_speed(light_state: str, suggested_speed: float, authority: int):
+
+    """
+    - GREEN → normal speed
+    - YELLOW → reduced speed
+    - RED → 0 mph
+    - Authority = 0 → 0 mph regardless of signal
+    """
+
+    if authority <= 0:
+
+        return 0, "No authority but speed > 0"
+
+    if light_state == "GREEN":
+
+        return suggested_speed, "Signal is GREEN"
+
+    if light_state == "YELLOW":
+
+        return suggested_speed * 0.50, "Signal is YELLOW"
+
+    if light_state == "RED":
+
+        return 0, "Signal is RED"
+
+    return suggested_speed, "Unknown signal state"
+
+
+def run_tests():
+
+    vc = HW_Vital_Check()
+
+    tests = [
+
+        ("RED", 30.0, 100),                 # Expect 0 mph due to RED light
+        ("GREEN", 20.0, 200),               # Expect 20 mph due to GREEN light
+        ("YELLOW", 20.0, 200),              # Expect 10 mph due to YELLOW light
+        ("GREEN", 20.0, 0),                 # Expect 0 mph due to no authority
+    ]
+
+    for light, speed, auth in tests:
+
+        print(f"Test: Light={light}, Suggested Speed={speed} mph, Authority={auth}")
+
+        commanded, reason = compute_commanded_speed(light, speed, auth)
+
+        print(f" Commanded Speed: {commanded:.2f} mph")
+
+        if reason:
+
+            print(f" Reason: {reason}")
+
+        # Show vital safety system output
+        vital_in = {
+
+            "speed_mph": speed,
+            "authority_yards": auth
+        }
+
+        report = vc.verify_system_safety(
+            block_ids=[],
+            light_states=[],
+            gate_states=[],
+            switch_states=[],
+            occupied_blocks=[],
+            active_plc=None,
+            vital_in=vital_in
+        )
+
+if __name__ == "__main__":
+    run_tests()
