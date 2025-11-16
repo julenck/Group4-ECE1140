@@ -4,6 +4,8 @@ from tkinter import filedialog, ttk
 from watchdog.observers import Observer 
 from watchdog.events import FileSystemEventHandler 
 
+from track_controller.New_SW_Code import sw_wayside_controller, sw_vital_check
+
 # Add train_controller to path for train dispatch integration
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'train_controller'))
 
