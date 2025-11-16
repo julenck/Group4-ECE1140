@@ -6,6 +6,8 @@ TRAIN_DATA_FILE = "train_data.json"
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
 TRACK_OUTPUT_FILE = "../Track_Model/train_model_to_track_model.json"
 
+TRAIN_DATA_WATCH_MS = 1000  # refresh train list every 1s
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 DEFAULT_SPECS = {
@@ -90,36 +92,142 @@ class TrainModelTestUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Train Model Test UI (Full Feature)")
-        self.geometry("900x700")
+        self.geometry("1100x700")
         self.specs = self.load_specs()
         self.model = TrainModel(self.specs)
         self.passengers_onboard = self.specs["crew_count"]
         self.last_disembark_station = None
         self.last_disembarking = 0
         self.boarding_last_cycle = 0
-        self.build_inputs()
-        self.build_outputs()
-        self.build_passenger_panel()
-        self.build_failure_panel()
-        self.build_buttons()
+        
+        # Create main container with two columns
+        main_container = ttk.Frame(self)
+        main_container.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Left column
+        left_column = ttk.Frame(main_container)
+        left_column.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        
+        # Right column
+        right_column = ttk.Frame(main_container)
+        right_column.pack(side="right", fill="both", expand=True, padx=(5, 0))
+        
+        self.build_inputs(left_column)
+        self.build_failure_panel(left_column)
+        self.build_buttons(right_column)
+        self.build_passenger_panel(right_column)
+        self.build_outputs(right_column)
         self.update_loop()
 
+    def build_train_selector(self):
+        bar = ttk.Frame(self); bar.pack(fill="x", padx=10, pady=5)
+        ttk.Label(bar, text="Target Train:").pack(side="left")
+        self.var_train_combo = tk.StringVar(value="")
+        self.cbo_trains = ttk.Combobox(bar, textvariable=self.var_train_combo, width=12, state="readonly", values=[])
+        self.cbo_trains.pack(side="left", padx=5)
+        self.cbo_trains.bind("<<ComboboxSelected>>", self.on_train_selected)
+        ttk.Button(bar, text="Refresh", command=self.refresh_train_list).pack(side="left", padx=5)
+        self.lbl_sel = ttk.Label(bar, text="No train selected")
+        self.lbl_sel.pack(side="left", padx=10)
+
     def load_specs(self):
-        if os.path.exists(TRAIN_DATA_FILE):
-            try:
+        # Load specs for the selected train if present; else root specs; fallback to defaults
+        try:
+            if not os.path.exists(TRAIN_DATA_FILE):
+                return DEFAULT_SPECS.copy()
+            with open(TRAIN_DATA_FILE, "r") as f:
+                data = json.load(f)
+            if self.selected_train_id is not None:
+                key = f"train_{self.selected_train_id}"
+                specs = (data.get(key, {}) or {}).get("specs") or data.get("specs", {})
+            else:
+                specs = data.get("specs", {})
+            merged = DEFAULT_SPECS.copy()
+            merged.update(specs or {})
+            return merged
+        except Exception:
+            return DEFAULT_SPECS.copy()
+
+    def load_inputs_from_train_data(self):
+        # Prefill UI entries from the selected train inputs if present
+        try:
+            if self.selected_train_id is None or not os.path.exists(TRAIN_DATA_FILE):
+                return
+            with open(TRAIN_DATA_FILE, "r") as f:
+                data = json.load(f)
+            key = f"train_{self.selected_train_id}"
+            section = data.get(key, {})
+            inputs = section.get("inputs", {})
+            outputs = section.get("outputs", {})
+            # Map into UI fields with safe defaults
+            def set_entry(label, val):
+                e = self.entries[label]
+                e.delete(0, "end")
+                e.insert(0, str(val))
+            set_entry("Commanded Speed (mph)", inputs.get("commanded speed", 40))
+            set_entry("Commanded Authority (yds)", inputs.get("commanded authority", 0))
+            set_entry("Speed Limit (mph)", inputs.get("speed limit", 30))
+            set_entry("Current Station", inputs.get("current station", ""))
+            set_entry("Next Station", inputs.get("next station", ""))
+            set_entry("Side Door (Left/Right)", inputs.get("side_door", "Right"))
+            set_entry("Set Temperature (°F)", 70 if "set_temperature" not in inputs else inputs.get("set_temperature", 70))
+            set_entry("Passengers Boarding", inputs.get("passengers_boarding", 0))
+            self.var_left_door.set(bool(outputs.get("left_door_open", False)))
+            self.var_right_door.set(bool(outputs.get("right_door_open", False)))
+            # Failures
+            self.var_engine.set(bool(inputs.get("engine_failure", False)))
+            self.var_signal.set(bool(inputs.get("signal_failure", False)))
+            self.var_brake.set(bool(inputs.get("brake_failure", False)))
+            self.var_emergency.set(bool(inputs.get("emergency_brake", False)))
+            # Onboard from outputs if present; else keep min crew
+            onboard = int(outputs.get("passengers_onboard", self.specs["crew_count"]))
+            self.passengers_onboard = max(self.specs["crew_count"], onboard)
+            self.update_passenger_labels(disembark=0)
+        except Exception:
+            pass
+
+    def refresh_train_list(self, auto_select_newest=False):
+        trains = []
+        try:
+            if os.path.exists(TRAIN_DATA_FILE):
                 with open(TRAIN_DATA_FILE, "r") as f:
                     data = json.load(f)
-                    specs = data.get("specs", {})
-                    for k,v in DEFAULT_SPECS.items():
-                        specs.setdefault(k,v)
-                    return specs
-            except:
-                pass
-        return DEFAULT_SPECS
+                for k in sorted(data.keys()):
+                    if k.startswith("train_"):
+                        trains.append(k)
+        except Exception:
+            trains = []
+        self.available_trains = trains
+        self.cbo_trains["values"] = trains
+        if auto_select_newest and trains:
+            newest = trains[-1]
+            self.var_train_combo.set(newest)
+            self.on_train_selected()
+        elif self.selected_train_id is not None:
+            key = f"train_{self.selected_train_id}"
+            if key in trains:
+                self.var_train_combo.set(key)
+            else:
+                self.var_train_combo.set(trains[0] if trains else "")
+                self.on_train_selected()
+        self.lbl_sel.config(text=f"Selected: {self.var_train_combo.get() or 'None'}")
 
-    def build_inputs(self):
-        frm = ttk.LabelFrame(self, text="Inputs")
-        frm.pack(fill="x", padx=10, pady=5)
+    def on_train_selected(self, event=None):
+        label = self.var_train_combo.get()
+        try:
+            self.selected_train_id = int(label.split("_")[1]) if label.startswith("train_") else None
+        except Exception:
+            self.selected_train_id = None
+        self.lbl_sel.config(text=f"Selected: {label or 'None'}")
+        # Reload specs/model and prefill inputs from file
+        self.specs = self.load_specs()
+        self.model = TrainModel(self.specs)
+        self.passengers_onboard = self.specs["crew_count"]
+        self.load_inputs_from_train_data()
+
+    def build_inputs(self, parent):
+        frm = ttk.LabelFrame(parent, text="Inputs")
+        frm.pack(fill="x", pady=5)
         self.entries = {}
         fields = [
             ("Commanded Speed (mph)", "40"),
@@ -149,9 +257,9 @@ class TrainModelTestUI(tk.Tk):
         self.var_right_door = tk.BooleanVar(value=False)
         ttk.Checkbutton(door_row2, variable=self.var_right_door).pack(side="left")
 
-    def build_failure_panel(self):
-        frm = ttk.LabelFrame(self, text="Failures / Safety")
-        frm.pack(fill="x", padx=10, pady=5)
+    def build_failure_panel(self, parent):
+        frm = ttk.LabelFrame(parent, text="Failures / Safety")
+        frm.pack(fill="x", pady=5)
         self.var_engine = tk.BooleanVar(value=False)
         self.var_signal = tk.BooleanVar(value=False)
         self.var_brake = tk.BooleanVar(value=False)
@@ -165,9 +273,9 @@ class TrainModelTestUI(tk.Tk):
         self.lbl_status = ttk.Label(frm, text="Status: OK")
         self.lbl_status.pack(anchor="w")
 
-    def build_passenger_panel(self):
-        frm = ttk.LabelFrame(self, text="Passengers")
-        frm.pack(fill="x", padx=10, pady=5)
+    def build_passenger_panel(self, parent):
+        frm = ttk.LabelFrame(parent, text="Passengers")
+        frm.pack(fill="x", pady=5)
         self.lbl_onboard = ttk.Label(frm, text=f"Onboard: {self.passengers_onboard}")
         self.lbl_onboard.pack(anchor="w")
         self.lbl_boarding = ttk.Label(frm, text="Boarding: 0")
@@ -176,16 +284,17 @@ class TrainModelTestUI(tk.Tk):
         self.lbl_disembark.pack(anchor="w")
         ttk.Label(frm, text=f"Capacity: {self.specs['capacity']} (Crew {self.specs['crew_count']})").pack(anchor="w")
 
-    def build_outputs(self):
-        frm = ttk.LabelFrame(self, text="Outputs")
-        frm.pack(fill="both", expand=True, padx=10, pady=5)
+    def build_outputs(self, parent):
+        frm = ttk.LabelFrame(parent, text="Outputs")
+        frm.pack(fill="both", expand=True, pady=5)
         self.txt_out = tk.Text(frm, height=18)
         self.txt_out.pack(fill="both", expand=True)
 
-    def build_buttons(self):
-        bar = ttk.Frame(self); bar.pack(fill="x", padx=10, pady=5)
-        ttk.Button(bar, text="Step Simulation", command=self.step_once).pack(side="left", padx=5)
-        ttk.Button(bar, text="Write train_data.json", command=self.write_train_data_only).pack(side="left", padx=5)
+    def build_buttons(self, parent):
+        bar = ttk.LabelFrame(parent, text="Controls")
+        bar.pack(fill="x", pady=5)
+        ttk.Button(bar, text="Step Simulation", command=self.step_once).pack(fill="x", padx=10, pady=5)
+        ttk.Button(bar, text="Write train_data.json", command=self.write_train_data_only).pack(fill="x", padx=10, pady=5)
 
     def parse_inputs(self):
         def f(name, cast=str):
@@ -271,69 +380,87 @@ class TrainModelTestUI(tk.Tk):
         self.update_status()
 
     def write_jsons(self, inp, out, passengers_out):
-        train_data = {
-            "specs": self.specs,
-            "inputs": {
-                "commanded speed": inp["commanded_speed"],
-                "commanded authority": inp["commanded_authority"],
-                "speed limit": inp["speed_limit"],
-                "current station": inp["current_station"],
-                "next station": inp["next_station"],
-                "side_door": inp["side_door"],
-                "passengers_boarding": inp["passengers_boarding"],
-                "engine_failure": inp["engine_failure"],
-                "signal_failure": inp["signal_failure"],
-                "brake_failure": inp["brake_failure"],
-                "emergency_brake": inp["emergency_brake"]
-            },
-            "outputs": {
-                "velocity_mph": out["velocity_mph"],
-                "acceleration_ftps2": out["acceleration_ftps2"],
-                "position_yds": out["position_yds"],
-                "authority_yds": out["authority_yds"],
-                "station_name": out["station_name"],
-                "next_station": out["next_station"],
-                "left_door_open": out["left_door_open"],
-                "right_door_open": out["right_door_open"],
-                "temperature_F": out["temperature_F"],
-                "door_side": inp["side_door"],
-                "passengers_onboard": self.passengers_onboard,
-                # Echo the input boarding value in outputs
-                "passengers_boarding": inp["passengers_boarding"],
-                "passengers_disembarking": passengers_out
-            }
+        # Read existing train_data to preserve all sections
+        existing_data = {}
+        if os.path.exists(TRAIN_DATA_FILE):
+            try:
+                with open(TRAIN_DATA_FILE, "r") as f:
+                    existing_data = json.load(f)
+            except:
+                pass
+        
+        # Prepare inputs and outputs
+        inputs_dict = {
+            "commanded speed": inp["commanded_speed"],
+            "commanded authority": inp["commanded_authority"],
+            "speed limit": inp["speed_limit"],
+            "current station": inp["current_station"],
+            "next station": inp["next_station"],
+            "side_door": inp["side_door"],
+            "passengers_boarding": inp["passengers_boarding"],
+            "passengers_onboard": self.passengers_onboard,
+            "train_model_engine_failure": inp["engine_failure"],
+            "train_model_signal_failure": inp["signal_failure"],
+            "train_model_brake_failure": inp["brake_failure"],
+            "emergency_brake": inp["emergency_brake"]
         }
+        
+        # Start with existing data to preserve all trains
+        train_data = existing_data if existing_data else {}
+        
+        # Ensure root level has specs
+        if "specs" not in train_data:
+            train_data["specs"] = self.specs
+        
+        # Preserve train_model_* failure flags from current file state (Train Model UI controls these)
+        existing_root_inputs = train_data.get("inputs", {})
+        for flag in ["train_model_engine_failure", "train_model_signal_failure", "train_model_brake_failure"]:
+            if flag in existing_root_inputs:
+                inputs_dict[flag] = existing_root_inputs[flag]
+        
+        # Update root level inputs ONLY (Train Model will generate outputs)
+        train_data["inputs"] = inputs_dict
+        
+        # Update train_1 section (for multi-train mode)
+        if "train_1" not in train_data:
+            train_data["train_1"] = {"specs": self.specs}
+        elif not isinstance(train_data["train_1"], dict):
+            train_data["train_1"] = {"specs": self.specs}
+        
+        # Prepare inputs for train_1, preserving failure flags from current state
+        train_1_inputs = dict(inputs_dict)
+        existing_train_1_inputs = train_data.get("train_1", {}).get("inputs", {})
+        for flag in ["train_model_engine_failure", "train_model_signal_failure", "train_model_brake_failure"]:
+            if flag in existing_train_1_inputs:
+                train_1_inputs[flag] = existing_train_1_inputs[flag]
+        
+        # Always update inputs for train_1 (Train Model generates outputs)
+        train_data["train_1"]["inputs"] = train_1_inputs
+        
         try:
-            with open(TRAIN_DATA_FILE, "w") as f:
+            # Write atomically to avoid corruption
+            temp_file = TRAIN_DATA_FILE + ".tmp"
+            with open(temp_file, "w") as f:
                 json.dump(train_data, f, indent=4)
+            os.replace(temp_file, TRAIN_DATA_FILE)
         except Exception as e:
             print("train_data write error:", e)
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            except:
+                pass
+        
         track_out = {"passengers_disembarking": passengers_out}
         try:
             with open(TRACK_OUTPUT_FILE, "w") as f:
                 json.dump(track_out, f, indent=4)
         except Exception as e:
             print("track output write error:", e)
-        # controller state (minimal)
-        try:
-            state = {}
-            if os.path.exists(TRAIN_STATES_FILE):
-                with open(TRAIN_STATES_FILE, "r") as f:
-                    state = json.load(f)
-            state.update({
-                "train_velocity": out["velocity_mph"],
-                "train_temperature": out["temperature_F"],
-                "next_stop": inp["next_station"],
-                "station_side": inp["side_door"],
-                "engine_failure": inp["engine_failure"],
-                "signal_failure": inp["signal_failure"],
-                "brake_failure": inp["brake_failure"],
-                "emergency_brake": inp["emergency_brake"]
-            })
-            with open(TRAIN_STATES_FILE, "w") as f:
-                json.dump(state, f, indent=4)
-        except Exception as e:
-            print("train_states write error:", e)
+        
+        # NOTE: We DO NOT write to train_states.json anymore!
+        # The Train Controller owns that file and updates it based on train_data.json.
+        # Writing here was causing race conditions and resetting power_command.
 
     def render(self, out, inp, passengers_out):
         self.txt_out.delete("1.0", "end")
@@ -383,6 +510,17 @@ class TrainModelTestUI(tk.Tk):
         # Auto step each second
         self.step_once()
         self.after(int(self.model.dt * 1000), self.update_loop)
+
+    def watch_train_data_file(self):
+        try:
+            mtime = os.path.getmtime(TRAIN_DATA_FILE) if os.path.exists(TRAIN_DATA_FILE) else 0.0
+            if mtime != self._train_data_mtime:
+                self._train_data_mtime = mtime
+                # File changed: refresh list; if no selection yet, auto-select newest
+                self.refresh_train_list(auto_select_newest=(self.selected_train_id is None))
+        except Exception:
+            pass
+        self.after(TRAIN_DATA_WATCH_MS, self.watch_train_data_file)
 
 if __name__ == "__main__":
     app = TrainModelTestUI()

@@ -25,11 +25,5 @@
     "kp": 1500.0,
     "ki": 50.0,
     "engineering_panel_locked": false,
-    "power_command": 0.0,
-    "train_1": {
-        "train_velocity": 23.481811920000002,
-        "train_temperature": 70.0,
-        "next_stop": "Park Street",
-        "station_side": "Right"
-    }
+    "power_command": 0.0
 }

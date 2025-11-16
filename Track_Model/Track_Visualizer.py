@@ -8,6 +8,8 @@ from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 import re
 from typing import List, Tuple, Dict
+from PIL import Image, ImageTk
+import time
 
 # Import network builder and parser
 from LineNetwork import LineNetworkBuilder
@@ -97,117 +99,46 @@ def parse_excel(filepath: str) -> dict:
 class RailwayDiagram:
     """Railway track visualization using skeleton paths."""
 
-    def __init__(self, parent=None, embedded=False):
+    def __init__(self, parent, block_manager=None, line_network=None):
         """
-        Initialize visualizer.
+        Initialize visualizer in embedded mode only.
 
         Args:
-            parent: Parent tkinter widget (if embedded) or None (standalone)
-            embedded: If True, create canvas in parent widget. If False, create own window.
+            parent: Parent tkinter widget
+            block_manager: Reference to DynamicBlockManager
         """
-        self.embedded = embedded
+        self.parent = parent
+        self.root = parent.winfo_toplevel()
+        self.block_manager = block_manager
 
-        if embedded:
-            self.parent = parent
-            self.root = parent.winfo_toplevel()
-        else:
-            self.root = tk.Tk() if parent is None else parent
-            self.root.title("Railway Track Visualizer")
-            self.root.geometry("1600x900")
-            self.parent = self.root
+        self.trains = {}
+        self.train_icons = {}
 
         self.last_clicked_block = None
         self.track_data = {}
         self.parser = None
-        self.line_network = None  # LineNetwork for current line
+        self.line_network = line_network
         self.line_colors = {
-            "Blue Line": "#1E90FF",
             "Red Line": "#DC143C",
             "Green Line": "#228B22",
-            "Yellow Line": "#FFD700",
-            "Orange Line": "#FF8C00",
-            "Purple Line": "#9370DB",
         }
-
+        self.all_positions_green = {}
+        self.all_positions_red = {}
         self.show_blocks = True
         self.show_stations = True
 
+        # Variables still used internally
+        self.blocks_var = tk.BooleanVar(value=True)
+        self.stations_var = tk.BooleanVar(value=True)
+        self.line_var = tk.StringVar()
+
         self.setup_ui()
+        print(f"[Visualizer] LineNetwork connected: {self.line_network is not None}")
 
     def setup_ui(self):
-        """Setup user interface - adapts for embedded vs standalone mode."""
+        """Setup user interface for embedded mode."""
 
-        # CONTROL FRAME - Only in standalone mode
-        if not self.embedded:
-            control_frame = ttk.Frame(self.parent, padding="10")
-            control_frame.pack(side=tk.TOP, fill=tk.X)
-
-            ttk.Button(
-                control_frame, text="Load Excel File", command=self.load_excel
-            ).pack(side=tk.LEFT, padx=5)
-
-            ttk.Label(control_frame, text="Line:").pack(side=tk.LEFT, padx=(20, 5))
-            self.line_var = tk.StringVar()
-            self.line_combo = ttk.Combobox(
-                control_frame, textvariable=self.line_var, state="readonly", width=20
-            )
-            self.line_combo.pack(side=tk.LEFT, padx=5)
-            self.line_combo.bind("<<ComboboxSelected>>", self.on_line_selected)
-
-            ttk.Button(
-                control_frame, text="Show All Lines", command=self.show_all_lines
-            ).pack(side=tk.LEFT, padx=5)
-
-            ttk.Separator(control_frame, orient=tk.VERTICAL).pack(
-                side=tk.LEFT, fill=tk.Y, padx=10
-            )
-
-            # Display toggles
-            self.blocks_var = tk.BooleanVar(value=True)
-            self.stations_var = tk.BooleanVar(value=True)
-
-            ttk.Checkbutton(
-                control_frame,
-                text="Show Blocks",
-                variable=self.blocks_var,
-                command=self.refresh_display,
-            ).pack(side=tk.LEFT, padx=5)
-
-            ttk.Checkbutton(
-                control_frame,
-                text="Show Stations",
-                variable=self.stations_var,
-                command=self.refresh_display,
-            ).pack(side=tk.LEFT, padx=5)
-
-            # Legend
-            legend_frame = ttk.LabelFrame(control_frame, text="Legend", padding="5")
-            legend_frame.pack(side=tk.RIGHT, padx=10)
-
-            legend_canvas = tk.Canvas(
-                legend_frame, width=200, height=30, bg="white", highlightthickness=0
-            )
-            legend_canvas.pack()
-
-            legend_canvas.create_oval(
-                10, 10, 20, 20, fill="#1E90FF", outline="black", width=2
-            )
-            legend_canvas.create_text(
-                25, 15, text="Station", anchor="w", font=("Arial", 8)
-            )
-
-            points = [80, 15, 85, 10, 90, 15, 85, 20]
-            legend_canvas.create_polygon(points, fill="red", outline="darkred", width=2)
-            legend_canvas.create_text(
-                95, 15, text="Crossing", anchor="w", font=("Arial", 8)
-            )
-        else:
-            # Embedded mode - create minimal variables
-            self.blocks_var = tk.BooleanVar(value=True)
-            self.stations_var = tk.BooleanVar(value=True)
-            self.line_var = tk.StringVar()
-
-        # CANVAS WITH SCROLLBARS - Always needed
+        # CANVAS WITH SCROLLBARS
         canvas_frame = ttk.Frame(self.parent)
         canvas_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -230,25 +161,7 @@ class RailwayDiagram:
         v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # INFO PANEL - Only in standalone mode
-        if not self.embedded:
-            info_frame = ttk.LabelFrame(self.parent, text="Information", padding="10")
-            info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
-
-            self.info_text = tk.Text(
-                info_frame, height=5, wrap=tk.WORD, font=("Arial", 9)
-            )
-            self.info_text.pack(fill=tk.BOTH, expand=True)
-            self.info_text.insert(
-                "1.0",
-                "Load an Excel file to visualize railway tracks\n\n"
-                "Features:\n"
-                "• Skeleton-based visualization\n"
-                "• Interactive blocks and stations",
-            )
-            self.info_text.config(state=tk.DISABLED)
-
-        # EVENT BINDINGS - Always needed
+        # EVENT BINDINGS
         self.canvas.bind("<Button-1>", self.on_canvas_click)
         self.canvas.bind("<Motion>", self.on_canvas_hover)
 
@@ -264,31 +177,8 @@ class RailwayDiagram:
             self.track_data = parse_excel(filepath)
             self.parser = TrackDiagramParser("track.png")
             self.parser.parse()
-            print(f"✓ Loaded {len(self.track_data)} railway lines")
         except Exception as e:
             print(f"Error loading Excel: {e}")
-
-    def on_line_selected(self, event=None):
-        """Handle line selection."""
-        line_name = self.line_var.get()
-        if line_name and line_name in self.track_data:
-            self.current_line = line_name
-
-            # Build LineNetwork for this line
-            df = self.track_data[line_name]
-            builder = LineNetworkBuilder(df, line_name)
-            self.line_network = builder.build()
-
-            # Route to appropriate draw method
-            if line_name == "Red Line":
-                self.draw_single_line_red(line_name)
-            elif line_name == "Green Line":
-                self.draw_single_line_green(line_name)
-            else:
-                messagebox.showwarning(
-                    "Unsupported Line",
-                    f"{line_name} visualization not yet implemented.",
-                )
 
     def show_all_lines(self):
         """Show overview of all lines."""
@@ -297,16 +187,6 @@ class RailwayDiagram:
             return
         self.current_line = None
         self.draw_all_lines()
-
-    def refresh_display(self):
-        """Refresh current display."""
-        if self.current_line:
-            if self.current_line == "Red Line":
-                self.draw_single_line_red(self.current_line)
-            elif self.current_line == "Green Line":
-                self.draw_single_line_green(self.current_line)
-        elif self.track_data:
-            self.draw_all_lines()
 
     def draw_single_line_red(self, line_name: str):
         """Draw railway line using skeleton paths from parser."""
@@ -381,12 +261,10 @@ class RailwayDiagram:
         # Add some padding
         scale_factor = worst_ratio * 1.2
 
-        print(f"Scaling skeleton by {scale_factor:.2f}x")
-
         # Size reduction factor
         size_reduction = 0.5
 
-        all_positions = {}
+        self.all_positions_red = {}
         section_order = sorted(section_blocks.keys())
 
         # Draw each section with smooth curves
@@ -422,9 +300,6 @@ class RailwayDiagram:
                     # If closest pixel is in first half, reverse skeleton
                     if closest_curr_idx < len(skeleton) / 2:
                         skeleton = skeleton[::-1]
-                        print(
-                            f"Section {section}: Reversed to minimize distance to {next_section}"
-                        )
 
             # Sample skeleton points for smoothing (every 5th pixel)
             sampled_skeleton = [skeleton[i] for i in range(0, len(skeleton), 5)]
@@ -491,7 +366,7 @@ class RailwayDiagram:
                 label_x = x + perp_x * offset_dist
                 label_y = y + perp_y * offset_dist
 
-                all_positions[block["block_num"]] = (x, y)
+                self.all_positions_red[block["block_num"]] = (x, y)
 
                 # Draw block label
                 if self.blocks_var.get():
@@ -615,11 +490,11 @@ class RailwayDiagram:
                 first_block = next_blocks[0]
 
                 if (
-                    last_block["block_num"] in all_positions
-                    and first_block["block_num"] in all_positions
+                    last_block["block_num"] in self.all_positions_red
+                    and first_block["block_num"] in self.all_positions_red
                 ):
-                    x1, y1 = all_positions[last_block["block_num"]]
-                    x2, y2 = all_positions[first_block["block_num"]]
+                    x1, y1 = self.all_positions_red[last_block["block_num"]]
+                    x2, y2 = self.all_positions_red[first_block["block_num"]]
 
                     # Draw smooth connecting arrow with midpoint
                     mid_x = (x1 + x2) / 2
@@ -707,9 +582,12 @@ class RailwayDiagram:
                     splinesteps=24,
                     tags="branch_connector",
                 )
+        yard_position = self.draw_yard(line_name, scale_factor, size_reduction)
+        if yard_position:
+            # Store yard position as block 0
+            self.all_positions_green[0] = yard_position
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
         # Update info
         station_count = len(
             [r for _, r in df.iterrows() if r.get("Station", "N/A") != "N/A"]
@@ -720,7 +598,6 @@ class RailwayDiagram:
         info += f"• Scale: {scale_factor:.2f}x\n"
         info += f"• Total blocks: {sum(len(blocks) for blocks in section_blocks.values())}\n"
         info += f"• Stations: {station_count}"
-        self.update_info(info)
 
     def draw_single_line_green(self, line_name: str):
         """Draw railway line using skeleton paths from parser."""
@@ -795,12 +672,10 @@ class RailwayDiagram:
         # Add some padding
         scale_factor = worst_ratio * 1.2
 
-        print(f"Scaling skeleton by {scale_factor:.2f}x")
-
         # Size reduction factor
         size_reduction = 0.5
 
-        all_positions = {}
+        self.all_positions_green = {}
         section_order = sorted(section_blocks.keys())
 
         # Draw each section with smooth curves
@@ -836,9 +711,6 @@ class RailwayDiagram:
                     # If closest pixel is in first half, reverse skeleton
                     if closest_curr_idx < len(skeleton) / 2:
                         skeleton = skeleton[::-1]
-                        print(
-                            f"Section {section}: Reversed to minimize distance to {next_section}"
-                        )
 
             # Sample skeleton points for smoothing (every 5th pixel)
             sampled_skeleton = [skeleton[i] for i in range(0, len(skeleton), 5)]
@@ -905,7 +777,7 @@ class RailwayDiagram:
                 label_x = x + perp_x * offset_dist
                 label_y = y + perp_y * offset_dist
 
-                all_positions[block["block_num"]] = (x, y)
+                self.all_positions_green[block["block_num"]] = (x, y)
 
                 # Draw block label
                 if self.blocks_var.get():
@@ -1029,11 +901,11 @@ class RailwayDiagram:
                 first_block = next_blocks[0]
 
                 if (
-                    last_block["block_num"] in all_positions
-                    and first_block["block_num"] in all_positions
+                    last_block["block_num"] in self.all_positions_green
+                    and first_block["block_num"] in self.all_positions_green
                 ):
-                    x1, y1 = all_positions[last_block["block_num"]]
-                    x2, y2 = all_positions[first_block["block_num"]]
+                    x1, y1 = self.all_positions_green[last_block["block_num"]]
+                    x2, y2 = self.all_positions_green[first_block["block_num"]]
 
                     # Draw smooth connecting arrow with midpoint
                     mid_x = (x1 + x2) / 2
@@ -1121,6 +993,10 @@ class RailwayDiagram:
                     splinesteps=24,
                     tags="branch_connector",
                 )
+        yard_position = self.draw_yard(line_name, scale_factor, size_reduction)
+        if yard_position:
+            # Store yard position as block 0
+            self.all_positions_green[0] = yard_position
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
@@ -1134,7 +1010,6 @@ class RailwayDiagram:
         info += f"• Scale: {scale_factor:.2f}x\n"
         info += f"• Total blocks: {sum(len(blocks) for blocks in section_blocks.values())}\n"
         info += f"• Stations: {station_count}"
-        self.update_info(info)
 
     def draw_all_lines(self):
         """Draw simple overview of all lines."""
@@ -1181,7 +1056,6 @@ class RailwayDiagram:
                     )
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        self.update_info(f"Overview: {len(line_names)} railway lines")
 
     def on_canvas_click(self, event):
         """Handle canvas click events."""
@@ -1246,24 +1120,6 @@ class RailwayDiagram:
             tags="tooltip",
         )
 
-    def show_station_info(self, data):
-        """Display station information."""
-        info = f"STATION: {data['station']}\nBlock: {data['block']}"
-        self.update_info(info)
-
-    def show_block_info(self, data):
-        """Display block information."""
-        info = f"BLOCK: {data['block_name']} (#{data['block_num']})"
-        self.update_info(info)
-
-    def update_info(self, text):
-        """Update info panel."""
-        if not self.embedded and hasattr(self, "info_text"):
-            self.info_text.config(state=tk.NORMAL)
-            self.info_text.delete("1.0", tk.END)
-            self.info_text.insert("1.0", text)
-            self.info_text.config(state=tk.DISABLED)
-
     def display_line(self, line_name: str, highlighted_block=None):
         """
         Display specified line without user interaction.
@@ -1285,6 +1141,7 @@ class RailwayDiagram:
 
         builder = LineNetworkBuilder(df, line_name)
         self.line_network = builder.build()
+        self.line_network.block_manager = self.block_manager
 
         # Draw based on line type
         if line_name == "Red Line":
@@ -1328,12 +1185,195 @@ class RailwayDiagram:
                 self.highlighted_block_id = element["id"]
                 break
 
+    def draw_yard(self, line_name: str, scale_factor: float, size_reduction: float):
+        """Draw the yard section on the track."""
 
-def main():
-    root = tk.Tk()
-    app = RailwayDiagram(root)
-    root.mainloop()
+        if line_name == "Red Line":
+            skeleton = self.parser.get_section_path_red("YARD")
+        elif line_name == "Green Line":
+            skeleton = self.parser.get_section_path_green("YARD")
+        else:
+            return
 
+        if not skeleton:
+            return
 
-if __name__ == "__main__":
-    main()
+        color = self.line_colors.get(line_name, "#228B22")
+
+        # Draw each pixel as a small circle instead of a line
+        for x, y in skeleton:
+            scaled_x = int(x * scale_factor * size_reduction)
+            scaled_y = int(y * scale_factor * size_reduction)
+            self.canvas.create_oval(
+                scaled_x - 2,
+                scaled_y - 2,
+                scaled_x + 2,
+                scaled_y + 2,
+                fill=color,
+                outline="",
+                tags="yard_track",
+            )
+
+        # Add YARD label at center
+        xs = [int(x * scale_factor * size_reduction) for x, y in skeleton]
+        ys = [int(y * scale_factor * size_reduction) for x, y in skeleton]
+        center_x = sum(xs) // len(xs)
+        center_y = sum(ys) // len(ys)
+
+        self.canvas.create_text(
+            center_x,
+            center_y,
+            text="YARD",
+            font=("Arial", 10, "bold"),
+            fill="purple",
+            tags="yard_label",
+        )
+
+        # Return the center position
+        return (center_x, center_y)
+
+    def animate_train(self, train_id, line):
+        """Initialize and start train animation from yard (block 0)."""
+        # Skip if the train already exists
+        if train_id in self.trains:
+            return
+
+        try:
+            from PIL import Image, ImageTk
+
+            # Load and resize train image - NO COLORING
+            train_image = Image.open("train.png").convert("RGBA")
+            train_image = train_image.resize((30, 30), Image.Resampling.LANCZOS)
+
+            photo = ImageTk.PhotoImage(train_image)
+
+            if not hasattr(self, "train_photos"):
+                self.train_photos = {}
+            self.train_photos[train_id] = photo
+
+        except Exception as e:
+            print(f"Error loading train image: {e}")
+            photo = None
+
+        # Determine which position dictionary to use
+        if line == "Green" or line == "Green Line":
+            positions = self.all_positions_green
+        elif line == "Red" or line == "Red Line":
+            positions = self.all_positions_red
+        else:
+            print(f"Unknown line: {line}")
+            return
+
+        # ALWAYS START AT YARD (block 0)
+        starting_block = 0
+
+        self.trains[train_id] = {
+            "line": line,
+            "previous_block": None,
+            "current_block": starting_block,
+        }
+
+        # Get yard position from stored positions
+        if starting_block in positions:
+            x, y = positions[starting_block]
+            print(f"Train {train_id} starting at yard position: ({x}, {y})")
+        else:
+            x, y = 50, 50
+            print(f"WARNING: Yard position not found for {line}! Using default.")
+
+        # Draw the train icon
+        if photo:
+            icon_id = self.canvas.create_image(
+                x, y, image=photo, tags=f"train_{train_id}"
+            )
+        else:
+            # Fallback to star if image fails - use same color for all
+            icon_id = self.canvas.create_text(
+                x,
+                y,
+                text="★",
+                font=("Segoe UI", 20),
+                fill="gold",  # Single color for all trains
+                tags=f"train_{train_id}",
+            )
+
+        self.train_icons[train_id] = icon_id
+
+        self.canvas.tag_bind(
+            icon_id, "<Enter>", lambda event, t=train_id: self.show_train_info(event, t)
+        )
+        self.canvas.tag_bind(icon_id, "<Leave>", lambda event: self.hide_train_info())
+
+        print(f"Train {train_id} created at yard (block {starting_block})")
+        self.animate_train_step(train_id)
+
+    def animate_train_step(self, train_id):
+        """Move the specified train to its next block."""
+        if not self.line_network or train_id not in self.trains:
+            return
+
+        train = self.trains[train_id]
+        current_block = train["current_block"]
+        previous_block = train["previous_block"]
+
+        # Get next block from the Line Network
+        next_block = self.line_network.get_next_block(
+            train_id, current_block, previous_block
+        )
+
+        # Determine which position dictionary to use
+        line = train["line"]
+        if line == "Green" or line == "Green Line":
+            positions = self.all_positions_green
+        elif line == "Red" or line == "Red Line":
+            positions = self.all_positions_red
+        else:
+            print(f"Unknown line: {line}")
+            return
+
+        # Get position for next block - handle case where block position doesn't exist
+        if next_block in positions:
+            x, y = positions[next_block]
+        else:
+            print(f"Warning: Block {next_block} not found in positions for {line}")
+            # Keep at current position
+            if current_block in positions:
+                x, y = positions[current_block]
+            else:
+                x, y = 100, 100
+
+        # Move the train icon
+        if train_id in self.train_icons:
+            self.canvas.coords(self.train_icons[train_id], x, y)
+
+        # Highlight the current block
+        block_name = None
+        if self.current_line and self.current_line in self.track_data:
+            df = self.track_data[self.current_line]
+            for _, row in df.iterrows():
+                if row.get("Block Number") == next_block:
+                    section = str(row.get("Section", "")).strip()
+                    block_name = f"{section}{next_block}"
+                    break
+
+        if block_name:
+            self.highlight_block(block_name)
+
+        # Update train position in memory
+        train["previous_block"] = current_block
+        train["current_block"] = next_block
+
+        # Schedule next animation step (repeat every 1 second)
+        self.root.after(1000, lambda: self.animate_train_step(train_id))
+
+    def show_train_info(self, event, train_id):
+        train = self.trains[train_id]
+        info = f"Train {train_id} | Line: {train['line']} | Block: {train['current_block']}"
+        self.hover_label = tk.Label(self.root, text=info, bg="yellow")
+        self.hover_label.place(x=event.x_root + 10, y=event.y_root + 10)
+
+    def hide_train_info(self):
+        """Hide train info tooltip on mouse leave."""
+        if hasattr(self, "hover_label") and self.hover_label:
+            self.hover_label.destroy()
+            self.hover_label = None

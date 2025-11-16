@@ -562,15 +562,15 @@ class train_controller_ui(tk.Tk):
         # UI-specific tracking
         self.emergency_brake_release_timer = None
         
+        # Track last beacon info to detect when passing new beacons
+        self._last_beacon_station = None
+        self._last_beacon_for_announcement = None  # For automatic announcements
+        
         # Configure window
         title = f"Train {train_id} - Train Controller" if train_id else "Train Controller - Driver Interface"
         self.title(title)
         self.geometry("1200x800")
         self.configure(bg='lightgray')
-        
-        # Initialize driver velocity to match commanded speed
-        initial_state = self.api.get_state()
-        self.api.update_state({'driver_velocity': initial_state.get('commanded_speed', 0)})
         
         # Define colors for buttons
         self.active_color = '#ff4444'
@@ -633,7 +633,8 @@ class train_controller_ui(tk.Tk):
         self.speed_entry.insert(0, "0")
         self.speed_entry.bind('<Return>', lambda e: self.set_driver_speed())  # Press Enter to set speed
         
-        ttk.Button(input_frame, text="Set Speed", command=self.set_driver_speed).pack(side="left", padx=5)
+        self.set_speed_btn = ttk.Button(input_frame, text="Set Speed", command=self.set_driver_speed)
+        self.set_speed_btn.pack(side="left", padx=5)
         
         # Display current set speed
         self.set_speed_label = ttk.Label(set_speed_frame, text="Current Set: 0 MPH", font=('Arial', 12, 'bold'))
@@ -660,6 +661,7 @@ class train_controller_ui(tk.Tk):
         self.info_table.insert("", "end", "speed_limit", values=("Speed Limit", "0", "mph"))
         self.info_table.insert("", "end", "authority", values=("Commanded Authority", "0", "yds"))
         self.info_table.insert("", "end", "temperature", values=("Train Temperature", "70", "°F"))
+        self.info_table.insert("", "end", "current_station", values=("Current Station", "--", "Name"))
         self.info_table.insert("", "end", "next_stop", values=("Next Stop", "--", "Name"))
         self.info_table.insert("", "end", "power", values=("Power Command", "0", "W"))
         self.info_table.insert("", "end", "station_side", values=("Station Side", "--", "right/left"))
@@ -728,8 +730,10 @@ class train_controller_ui(tk.Tk):
         # Manual Mode button
         self.manual_mode_btn = tk.Button(button_frame, text="Manual Mode", 
                                         command=self.toggle_manual_mode,
-                                        bg=self.normal_color, width=button_width, height=button_height)
+                                        bg=self.normal_color, width=button_width, height=button_height,
+                                        state='normal')  # Explicitly set to normal at creation
         self.manual_mode_btn.grid(row=1, column=3, padx=padding, pady=padding)
+        print(f"[DEBUG] Manual mode button created with state: {self.manual_mode_btn['state']}")
 
                 
         # Row 3 (Temperature Controls)
@@ -747,8 +751,10 @@ class train_controller_ui(tk.Tk):
         self.current_temp_label.grid(row=1, column=1, padx=5, pady=2)
         
         # Temperature control buttons
-        ttk.Button(temperature_frame, text="↑", command=self.temp_up).grid(row=0, column=2, padx=5, pady=2)
-        ttk.Button(temperature_frame, text="↓", command=self.temp_down).grid(row=1, column=2, padx=5, pady=2)
+        self.temp_up_btn = ttk.Button(temperature_frame, text="↑", command=self.temp_up)
+        self.temp_up_btn.grid(row=0, column=2, padx=5, pady=2)
+        self.temp_down_btn = ttk.Button(temperature_frame, text="↓", command=self.temp_down)
+        self.temp_down_btn.grid(row=1, column=2, padx=5, pady=2)
 
         
     def create_engineering_panel(self):
@@ -770,22 +776,115 @@ class train_controller_ui(tk.Tk):
         self.lock_btn = ttk.Button(eng_frame, text="Lock Values", command=self.lock_engineering_values)
         self.lock_btn.grid(row=0, column=4, padx=20, pady=5)
     
+    def detect_and_respond_to_failures(self, state: dict):
+        """Detect failures based on Train Model behavior and activate Train Controller failure flags.
+        
+        Logic:
+        - Engine Failure: Only detected when power is applied but train doesn't accelerate
+        - Signal Failure: Detected immediately when train_model_signal_failure is active
+        - Brake Failure: Only detected when service brake is pressed but train doesn't slow
+        
+        When detected, Train Controller activates corresponding train_controller_* flag and engages emergency brake.
+        """
+        updates = {}
+        
+        # Detect engine failure: Only when trying to apply power but train doesn't respond
+        # Engine failure is latent until driver tries to accelerate
+        if state.get('train_model_engine_failure', False):
+            # Detect if power command is significant (> 1000W) - driver is trying to accelerate
+            power_applied = state.get('power_command', 0.0) > 1000.0
+            
+            # Engine failure detected when significant power is applied
+            # The train won't accelerate properly (Train Model blocks acceleration)
+            if power_applied:
+                if not state.get('train_controller_engine_failure', False):
+                    print("[Train Controller] ENGINE FAILURE DETECTED - Power applied but train not responding! Engaging emergency brake")
+                    updates['train_controller_engine_failure'] = True
+        
+        # Detect signal pickup failure: Only when Train Model blocks a beacon read
+        # Train Model sets beacon_read_blocked=True when it encounters a new beacon but can't read it
+        if state.get('beacon_read_blocked', False):
+            if not state.get('train_controller_signal_failure', False):
+                print("[Train Controller] SIGNAL PICKUP FAILURE DETECTED - Failed to read beacon! Engaging emergency brake")
+                updates['train_controller_signal_failure'] = True
+                updates['beacon_read_blocked'] = False  # Clear the flag after detecting
+        
+        # Detect brake failure: Only detectable when service brake is pressed
+        # Train Model activates train_model_brake_failure, but driver only knows when they try to brake
+        # Once detected, train_controller_brake_failure stays set until manually cleared
+        if state.get('train_model_brake_failure', False) and state.get('service_brake', False):
+            if not state.get('train_controller_brake_failure', False):
+                print("[Train Controller] BRAKE FAILURE DETECTED - Service brake not responding! Engaging emergency brake")
+                updates['train_controller_brake_failure'] = True
+                updates['emergency_brake'] = True  # Engage emergency brake immediately
+        
+        # Apply updates if any failures were detected/cleared
+        if updates:
+            self.api.update_state(updates)
+    
     def periodic_update(self):
         """Update display every update_interval milliseconds."""
         try:
+            # Read inputs from train_data.json (written by Test UI or Train Model)
+            self.api.update_from_train_data()
+            
             # Sync beacon and commanded speed/authority from Train Model
             self.controller.update_from_train_model()
             
             current_state = self.api.get_state()
             
+            # Detect failures based on Train Model behavior
+            self.detect_and_respond_to_failures(current_state)
+            
+            # Reload state after failure detection updates
+            current_state = self.api.get_state()
+            
+            # Handle automatic vs manual mode behaviors
+            manual_mode = current_state.get('manual_mode', False)
+            
+            if not manual_mode:  # Automatic mode
+                # Auto-set driver velocity to commanded speed
+                if current_state['driver_velocity'] != current_state['commanded_speed']:
+                    self.api.update_state({'driver_velocity': current_state['commanded_speed']})
+                    current_state = self.api.get_state()
+                
+                # Auto-regulate temperature to 70°F
+                if current_state['set_temperature'] != 70.0:
+                    self.api.update_state({'set_temperature': 70.0})
+                    current_state = self.api.get_state()
+                
+                # Auto-announcement when beacon changes
+                current_station = current_state.get('current_station', '')
+                if current_station and current_station != self._last_beacon_for_announcement:
+                    # Beacon changed - make announcement
+                    next_stop = current_state.get('next_stop', '')
+                    if next_stop:
+                        announcement = f"Next stop: {next_stop}"
+                        self.api.update_state({'announcement': announcement})
+                    self._last_beacon_for_announcement = current_station
+            else:  # Manual mode
+                # Update beacon tracking even in manual mode
+                current_station = current_state.get('current_station', '')
+                if current_station:
+                    self._last_beacon_for_announcement = current_station
+            
+            # Enable/disable buttons based on mode
+            self.update_button_enabled_states(manual_mode, current_state['emergency_brake'])
+            
+            # Auto-release emergency brake when velocity reaches 0
+            if current_state['emergency_brake'] and current_state['train_velocity'] == 0.0:
+                print("[Train Controller] Train stopped - Releasing emergency brake")
+                self.controller.set_emergency_brake(False)
+                current_state = self.api.get_state()
+            
             # Check for critical failures that require emergency brake
-            critical_failure = (current_state.get('engine_failure', False) or 
-                              current_state.get('signal_failure', False) or 
-                              current_state.get('brake_failure', False))
+            critical_failure = (current_state.get('train_controller_engine_failure', False) or 
+                              current_state.get('train_controller_signal_failure', False) or 
+                              current_state.get('train_controller_brake_failure', False))
             
             if critical_failure and not current_state['emergency_brake']:
                 # Automatically engage emergency brake on critical failure
-                self.emergency_brake()
+                self.controller.set_emergency_brake(True)
                 
             # Recalculate power command based on current state
             if (not current_state['emergency_brake'] and 
@@ -812,6 +911,7 @@ class train_controller_ui(tk.Tk):
             self.info_table.set("speed_limit", column="Value", value=f"{current_state['speed_limit']:.1f}")
             self.info_table.set("authority", column="Value", value=f"{current_state['commanded_authority']:.1f}")
             self.info_table.set("temperature", column="Value", value=f"{int(round(current_state['train_temperature']))}")
+            self.info_table.set("current_station", column="Value", value=current_state.get('current_station', '--'))
             self.info_table.set("next_stop", column="Value", value=current_state['next_stop'])
             self.info_table.set("power", column="Value", value=f"{current_state['power_command']:.1f}")
             self.info_table.set("station_side", column="Value", value=current_state['station_side'])
@@ -819,13 +919,13 @@ class train_controller_ui(tk.Tk):
             # Update failures in table with color
             failures = []
             has_failures = False
-            if current_state.get('engine_failure', False):
+            if current_state.get('train_controller_engine_failure', False):
                 failures.append("Engine")
                 has_failures = True
-            if current_state.get('signal_failure', False):
+            if current_state.get('train_controller_signal_failure', False):
                 failures.append("Signal")
                 has_failures = True
-            if current_state.get('brake_failure', False):
+            if current_state.get('train_controller_brake_failure', False):
                 failures.append("Brake")
                 has_failures = True
             failure_text = ", ".join(failures) if failures else "None"
@@ -876,6 +976,34 @@ class train_controller_ui(tk.Tk):
             foreground="red" if failed else "green"
         )
     
+    def update_button_enabled_states(self, manual_mode, emergency_brake_active):
+        """Enable/disable buttons based on manual vs automatic mode."""
+        # In automatic mode, disable all control buttons except manual mode toggle and emergency brake
+        button_state = 'normal' if manual_mode else 'disabled'
+        
+        # Control buttons that should be disabled in automatic mode
+        self.left_door_btn.configure(state=button_state)
+        self.right_door_btn.configure(state=button_state)
+        self.announce_btn.configure(state=button_state)
+        self.exterior_lights_btn.configure(state=button_state)
+        self.interior_lights_btn.configure(state=button_state)
+        self.temp_up_btn.configure(state=button_state)
+        self.temp_down_btn.configure(state=button_state)
+        self.service_brake_btn.configure(state=button_state)
+        self.speed_entry.configure(state=button_state)
+        self.set_speed_btn.configure(state=button_state)
+        
+        # Emergency brake: ALWAYS enabled (can press in any mode), disabled only after activation
+        if emergency_brake_active:
+            self.emergency_brake_btn.configure(state='disabled')
+        else:
+            self.emergency_brake_btn.configure(state='normal')
+        
+        # Manual mode button is ALWAYS enabled so driver can switch modes
+        mode_text = "Manual Mode: ON" if manual_mode else "Automatic Mode"
+        self.manual_mode_btn.configure(state='normal', text=mode_text)
+        print(f"[DEBUG update_button_enabled_states] Manual mode button set to: state='normal', text='{mode_text}'")
+    
     def update_button_states(self, state):
         """Update button colors based on their states."""
         # Door buttons
@@ -889,20 +1017,15 @@ class train_controller_ui(tk.Tk):
         self.exterior_lights_btn.configure(bg=self.active_color if state['exterior_lights'] else self.normal_color)
         self.interior_lights_btn.configure(bg=self.active_color if state['interior_lights'] else self.normal_color)
         
-        # Manual mode button
-        self.manual_mode_btn.configure(
-            bg=self.active_color if state['manual_mode'] else self.normal_color,
-            text="MANUAL" if state['manual_mode'] else "AUTOMATIC"
-        )
+        # Manual mode button - Only update color, state is handled in update_button_enabled_states
+        bg_color = self.active_color if state['manual_mode'] else self.normal_color
+        self.manual_mode_btn.configure(bg=bg_color)
+        current_state = self.manual_mode_btn['state']
+        print(f"[DEBUG update_button_states] Manual mode button: bg={bg_color}, current state={current_state}")
         
-        # Brake buttons
+        # Brake buttons - Only update colors, states are handled in update_button_enabled_states
         self.service_brake_btn.configure(bg=self.active_color if state['service_brake'] > 0 else self.normal_color)
-        
-        # Emergency brake configuration
-        if state['emergency_brake']:
-            self.emergency_brake_btn.configure(bg=self.active_color, state='disabled')
-        else:
-            self.emergency_brake_btn.configure(bg=self.normal_color, state='normal')
+        self.emergency_brake_btn.configure(bg=self.active_color if state['emergency_brake'] else self.normal_color)
     
     # Control methods
     def set_driver_speed(self):
@@ -968,7 +1091,12 @@ class train_controller_ui(tk.Tk):
     
     def toggle_manual_mode(self):
         """Toggle manual/automatic mode."""
+        print("[UI] Manual mode button clicked!")
+        current_state = self.api.get_state()
+        print(f"[UI] Current manual_mode state: {current_state.get('manual_mode', False)}")
         self.controller.toggle_manual_mode()
+        new_state = self.api.get_state()
+        print(f"[UI] New manual_mode state: {new_state.get('manual_mode', False)}")
         
     def temp_up(self):
         """Increase desired temperature setpoint."""
@@ -984,13 +1112,13 @@ class train_controller_ui(tk.Tk):
         self.controller.set_service_brake(state['service_brake'] == 0)
     
     def emergency_brake(self):
-        """Activate emergency brake for 5 seconds."""
-        self.controller.set_emergency_brake(True)
-        # Schedule the brake to release after 5000ms (5 seconds)
-        self.after(5000, self.release_emergency_brake)
+        """Toggle emergency brake on/off."""
+        state = self.api.get_state()
+        current_brake_state = state.get('emergency_brake', False)
+        self.controller.set_emergency_brake(not current_brake_state)
     
     def release_emergency_brake(self):
-        """Release the emergency brake after delay."""
+        """Manually release the emergency brake."""
         self.controller.set_emergency_brake(False)
     
     def lock_engineering_values(self):

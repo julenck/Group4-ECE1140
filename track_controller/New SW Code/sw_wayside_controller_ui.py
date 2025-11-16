@@ -762,9 +762,9 @@ def main():
     # Create first UI window (still a Tk)
     vital1 = sw_vital_check.sw_vital_check()
     controller1 = sw_wayside_controller.sw_wayside_controller(vital1, "Green_Line_PLC_XandLup.py")
-    #ui1 = sw_wayside_controller_ui(controller1)
-    #ui1.title("Wayside Controller 1")
-    #ui1.geometry("1200x800")
+    ui1 = sw_wayside_controller_ui(controller1)
+    ui1.title("Wayside Controller 1")
+    ui1.geometry("1200x800")
 
     # Create second UI window (another Tk)
     vital2 = sw_vital_check.sw_vital_check()
@@ -778,7 +778,7 @@ def main():
     #ui2.lift()
 
     # Run *one* mainloop (both Tk windows share it)
-    #tk.mainloop()
+    tk.mainloop()
 
 
 if __name__ == "__main__":
