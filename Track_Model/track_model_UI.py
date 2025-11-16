@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from Track_Visualizer import RailwayDiagram
 from DynamicBlockManager import DynamicBlockManager
+from LineNetwork import LineNetwork
 from PIL import Image, ImageTk
 import json
 import pandas as pd
@@ -16,9 +17,15 @@ class TrackModelUI(tk.Tk):
         self.geometry("1700x950")
         self.configure(bg="white")
         self.block_manager = DynamicBlockManager()
+        self.line_network = None
+        self.visualizer = None
+        self.green_line_temp = 72
+        self.red_line_temp = 72
+        self.ticket_sales = 0
+        self.passengers_boarding = 0
 
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=5)  # Left panel gets more space
+        self.grid_columnconfigure(0, weight=9)  # Left panel gets more space
         self.grid_columnconfigure(1, weight=1)  # Right panel
 
         # === LEFT PANEL === #
@@ -49,39 +56,57 @@ class TrackModelUI(tk.Tk):
         right_frame.grid_columnconfigure(0, weight=1)
 
         # --- Upload / Line / Block --- #
+        # --- Upload / Line / Block --- #
         control_frame = ttk.LabelFrame(
             right_frame, text="Track Layout and Line Selection"
         )
         control_frame.grid(row=0, column=0, sticky="EW", padx=5, pady=5)
+
+        # 1. Upload Button (Packs Top)
         ttk.Button(
             control_frame,
             text="Upload Track Layout File",
-            width=25,
             command=self.upload_track_file,
-        ).pack(side=tk.LEFT, padx=10, pady=5)
+        ).pack(
+            fill="x", padx=10, pady=5
+        )  # Use fill='x' to take full available width
+
+        # 2. Line Selection (Packs Top)
+        line_select_frame = ttk.Frame(control_frame)
+        line_select_frame.pack(fill="x", padx=5, pady=2)
         ttk.Label(
-            control_frame, text="Select Line:", font=("Segoe UI", 10, "bold")
+            line_select_frame, text="Select Line:", font=("Segoe UI", 10, "bold")
         ).pack(side=tk.LEFT, padx=5)
 
         # Initialize line selector empty; populate dynamically after upload
         self.line_selector = ttk.Combobox(
-            control_frame, state="readonly", width=10, values=[]
+            line_select_frame, state="readonly", width=10, values=[]
         )
-        self.line_selector.pack(side=tk.LEFT, padx=5)
+        self.line_selector.pack(
+            side=tk.RIGHT, padx=5
+        )  # pack it to the right within its micro-frame
         self.line_selector.bind("<<ComboboxSelected>>", self.on_line_selected)
 
+        # 3. Block Selection (Packs Top)
+        block_select_frame = ttk.Frame(control_frame)
+        block_select_frame.pack(fill="x", padx=5, pady=2)
         ttk.Label(
-            control_frame, text="Select Block:", font=("Segoe UI", 10, "bold")
+            block_select_frame, text="Select Block:", font=("Segoe UI", 10, "bold")
         ).pack(side=tk.LEFT, padx=5)
-        self.block_selector = ttk.Combobox(control_frame, state="readonly", width=10)
-        self.block_selector.pack(side=tk.LEFT, padx=5)
+        self.block_selector = ttk.Combobox(
+            block_select_frame, state="readonly", width=10
+        )
+        self.block_selector.pack(
+            side=tk.RIGHT, padx=5
+        )  # pack it to the right within its micro-frame
         self.block_selector.bind("<<ComboboxSelected>>", self.on_block_selected)
 
         # --- Currently Selected Block --- #
+        # --- Currently Selected Block (MODIFIED TO SINGLE COLUMN) --- #
         block_frame = ttk.LabelFrame(right_frame, text="Currently Selected Block")
         block_frame.grid(row=1, column=0, sticky="EW", padx=5, pady=5)
-        block_frame.grid_columnconfigure(0, weight=1)
-        block_frame.grid_columnconfigure(1, weight=1)
+        # block_frame.grid_columnconfigure(0, weight=1) # Remove these two lines
+        # block_frame.grid_columnconfigure(1, weight=1)
 
         left_fields = [
             "Line:",
@@ -100,35 +125,26 @@ class TrackModelUI(tk.Tk):
             "Branching:",
         ]
 
-        self.block_labels = {
-            f: tk.StringVar(value="N/A") for f in (left_fields + right_fields)
-        }
+        # Combine fields into a single list for vertical stacking
+        all_fields = left_fields + right_fields
+        self.block_labels = {f: tk.StringVar(value="N/A") for f in all_fields}
 
-        # Left column
-        left_col = ttk.Frame(block_frame)
-        left_col.grid(row=0, column=0, sticky="NW", padx=5, pady=5)
-        for field in left_fields:
-            frame = ttk.Frame(left_col)
-            frame.pack(anchor="w", pady=2, expand=False)
-            ttk.Label(frame, text=field, font=("Segoe UI", 10, "bold"), width=25).pack(
+        # Single column layout: iterate through all fields and stack them vertically
+        for field in all_fields:
+            frame = ttk.Frame(block_frame)
+            # Stack frames vertically inside the block_frame
+            frame.pack(anchor="w", pady=2, padx=5, fill="x", expand=False)
+
+            # Label for the field name (e.g., "Line:")
+            ttk.Label(frame, text=field, font=("Segoe UI", 10, "bold"), width=20).pack(
                 side=tk.LEFT
             )
+            # Label for the variable value (e.g., "Red Line")
             ttk.Label(
                 frame, textvariable=self.block_labels[field], font=("Segoe UI", 10)
-            ).pack(side=tk.LEFT)
-
-        # Right column
-        right_col = ttk.Frame(block_frame)
-        right_col.grid(row=0, column=1, sticky="NW", padx=5, pady=5)
-        for field in right_fields:
-            frame = ttk.Frame(right_col)
-            frame.pack(anchor="w", pady=2, expand=False)
-            ttk.Label(frame, text=field, font=("Segoe UI", 10, "bold"), width=25).pack(
+            ).pack(
                 side=tk.LEFT
-            )
-            ttk.Label(
-                frame, textvariable=self.block_labels[field], font=("Segoe UI", 10)
-            ).pack(side=tk.LEFT)
+            )  # Pack the value next to the field name
 
         # --- Block Information (Dynamic Fields) --- #
         dynamic_frame = ttk.LabelFrame(right_frame, text="Block Information")
@@ -145,38 +161,48 @@ class TrackModelUI(tk.Tk):
                 frame, textvariable=self.dynamic_labels[field], font=("Segoe UI", 10)
             ).pack(side=tk.LEFT)
 
-        # --- Environment Line --- #
+        # --- Environment Line (MODIFIED TO STACK VERTICALLY) --- #
         env_line = ttk.Frame(right_frame)
         env_line.grid(row=3, column=0, sticky="EW", padx=5, pady=(0, 5))
-        ttk.Label(env_line, text="Track Heating:", font=("Segoe UI", 10, "bold")).pack(
-            side=tk.LEFT, padx=(10, 2)
-        )
-        self.heating_status = ttk.Label(env_line, text="OFF", foreground="red")
-        self.heating_status.pack(side=tk.LEFT, padx=(0, 40))
+
+        # Row 1: Track Heating Status
+        heating_frame = ttk.Frame(env_line)
+        heating_frame.pack(fill="x", padx=5, pady=2)
         ttk.Label(
-            env_line,
+            heating_frame, text="Track Heating:", font=("Segoe UI", 10, "bold")
+        ).pack(side=tk.LEFT)
+        self.heating_status = ttk.Label(heating_frame, text="OFF", foreground="red")
+        self.heating_status.pack(side=tk.LEFT, padx=(5, 5))
+
+        # Row 2: Temperature Control
+        temp_frame = ttk.Frame(env_line)
+        temp_frame.pack(fill="x", padx=5, pady=2)
+        ttk.Label(
+            temp_frame,
             text="Environment Temperature (°F):",
             font=("Segoe UI", 10, "bold"),
         ).pack(side=tk.LEFT)
+
         self.temperature = tk.StringVar(value="N/A")
+
+        # Packing buttons and display from left to right in the temp_frame
         ttk.Button(
-            env_line, text="-", width=3, command=self.decrease_temp_immediate
-        ).pack(side=tk.LEFT, padx=2)
+            temp_frame, text="-", width=3, command=self.decrease_temp_immediate
+        ).pack(side=tk.LEFT, padx=(5, 2))
         ttk.Label(
-            env_line,
+            temp_frame,
             textvariable=self.temperature,
             font=("Segoe UI", 10),
             width=5,
             anchor="center",
         ).pack(side=tk.LEFT)
         ttk.Button(
-            env_line, text="+", width=3, command=self.increase_temp_immediate
+            temp_frame, text="+", width=3, command=self.increase_temp_immediate
         ).pack(side=tk.LEFT, padx=2)
 
         # --- Station Information --- #
         self.station_vars = {
             "Boarding:": tk.StringVar(value="N/A"),
-            "Disembarking:": tk.StringVar(value="N/A"),
             "Ticket Sales:": tk.StringVar(value="N/A"),
         }
         station_frame = ttk.LabelFrame(right_frame, text="Station Information")
@@ -239,6 +265,48 @@ class TrackModelUI(tk.Tk):
         except Exception:
             self.after(500, self.check_existing_static_data)
 
+    def extract_branching(self, value):
+        text = str(value).upper().strip()
+        if "SWITCH TO YARD" in text or "SWITCH FROM YARD" in text:
+            return {}
+        if "SWITCH" not in text:
+            return {}
+        match = re.search(r"\(([^)]+)\)", text)
+        if not match:
+            return {}
+
+        contents = match.group(1)
+
+        # Parse connections
+        parts = re.split(r"[;,]", contents)
+        all_blocks = []
+        for part in parts:
+            part = part.strip()
+            conn_match = re.search(r"(\d+)\s*-\s*(\d+)", part)
+            if conn_match:
+                all_blocks.append(int(conn_match.group(1)))
+                all_blocks.append(int(conn_match.group(2)))
+
+        if not all_blocks:
+            return {}
+
+        # Find branch point (appears twice)
+        from collections import Counter
+
+        counts = Counter(all_blocks)
+        branch_point = None
+        for blk, count in counts.items():
+            if count > 1:
+                branch_point = blk
+                break
+
+        if branch_point:
+            connected = [c.strip() for c in re.split(r"[;,]", contents) if c.strip()]
+            branch_text = ", ".join(connected)
+            return {branch_point: branch_text}
+
+        return {}
+
     def upload_track_file(self):
         file_path = filedialog.askopenfilename(
             title="Select Track Layout File",
@@ -272,7 +340,26 @@ class TrackModelUI(tk.Tk):
                 df = df.fillna("N/A")
                 df["Station"] = df["Infrastructure"].apply(self.extract_station)
                 df["Crossing"] = df["Infrastructure"].apply(self.extract_crossing)
-                df["Branching"] = df["Infrastructure"].apply(self.extract_branching)
+
+                # Build branch mapping
+                branch_map = {}
+                for idx, row in df.iterrows():
+                    result = self.extract_branching(row["Infrastructure"])
+                    if result:
+                        branch_map.update(result)
+
+                # Assign branching to correct blocks
+                def assign_branching(row):
+                    block_num = row.get("Block Number")
+                    if block_num not in ["N/A", "nan"]:
+                        try:
+                            return branch_map.get(int(float(block_num)), "N/A")
+                        except:
+                            pass
+                    return "N/A"
+
+                df["Branching"] = df.apply(assign_branching, axis=1)
+
                 all_lines_data[line] = df.to_dict(orient="records")
 
             data = {
@@ -303,21 +390,6 @@ class TrackModelUI(tk.Tk):
         match = re.search(r"STATION[:;]?\s*([A-Z\s]+)", text)
         return match.group(1).strip().title() if match else "N/A"
 
-    def extract_branching(self, value):
-        text = str(value).upper().strip()
-        if "SWITCH TO YARD" in text or "SWITCH FROM YARD" in text:
-            return "N/A"
-        if "SWITCH" not in text:
-            return "N/A"
-        match = re.search(r"\(([^)]+)\)", text)
-        if not match:
-            return "N/A"
-        contents = match.group(1)
-        connected = [c.strip() for c in re.split(r"[;,]", contents) if c.strip()]
-        if not connected:
-            return "N/A"
-        return ", ".join(connected)
-
     def on_line_selected(self, event=None):
         """Handle line selection and update the visualizer exactly once."""
         selected_line = self.line_selector.get()
@@ -327,10 +399,15 @@ class TrackModelUI(tk.Tk):
 
         self.load_static_after_upload(selected_line)
 
+        full_line_name = f"{selected_line} Line"
+        self.line_network = LineNetwork(full_line_name, self.block_manager)
+        self.visualizer.line_network = self.line_network
+
         if hasattr(self, "visualizer") and self.visualizer:
             try:
-                full_line_name = f"{selected_line} Line"
                 if getattr(self.visualizer, "current_line", None) != full_line_name:
+                    # Pass the line_network to visualizer
+                    self.visualizer.line_network = self.line_network
                     self.visualizer.display_line(full_line_name)
             except Exception as e:
                 print(f"[Visualizer] Failed to display {selected_line}: {e}")
@@ -439,25 +516,22 @@ class TrackModelUI(tk.Tk):
             )
 
             if block_data:
-                temp = block_data["temperature"]
+                # Get temperature based on current line
+                selected_line = self.line_selector.get()
+                temp = (
+                    self.green_line_temp
+                    if selected_line == "Green"
+                    else self.red_line_temp
+                )
                 occupancy = block_data["occupancy"]
                 traffic_light = block_data["traffic_light"]
                 gate = block_data["gate"]
                 failures = block_data["failures"]
                 switch_position = block_data["switch_position"]
+                direction = block_data.get("direction", "N/A")
 
                 station_name = self.get_station_name_for_block(selected_block)
-                passengers_boarding = 0
-                if station_name != "N/A":
-                    # Sum passengers boarding from all trains at this station
-                    for train_id in self.block_manager.passengers_boarding_data:
-                        passengers_boarding += (
-                            self.block_manager.get_passengers_boarding(
-                                train_id, station_name
-                            )
-                        )
-
-                # Ticket sales is cumulative across all trains
+                passengers_boarding = self.block_manager.passengers_boarding
                 ticket_sales = self.block_manager.total_ticket_sales
 
                 # Check for failures and apply overrides
@@ -481,10 +555,10 @@ class TrackModelUI(tk.Tk):
                     )
 
                 # Update UI with processed values
-                self.block_labels["Direction of Travel:"].set("--")
+                self.block_labels["Direction of Travel:"].set(direction)
                 self.block_labels["Traffic Light:"].set(traffic_light)
                 self.block_labels["Gate:"].set(gate)
-                self.block_labels["Switch Position:"].set(switch_position)
+                self.block_labels["Switch Position:"].set(str(switch_position))
 
                 self.station_vars["Boarding:"].set(passengers_boarding)
                 self.station_vars["Ticket Sales:"].set(ticket_sales)
@@ -523,27 +597,22 @@ class TrackModelUI(tk.Tk):
         self.after(500, self.load_data)
 
     def increase_temp_immediate(self):
-        try:
-            current_temp = float(self.temperature.get())
-        except ValueError:
-            current_temp = 0
-        self.temperature.set(str(int(current_temp + 1)))
-        self.update_json_temperature()
+        selected_line = self.line_selector.get()
+        if selected_line == "Green":
+            self.green_line_temp += 1
+            self.temperature.set(str(self.green_line_temp))
+        elif selected_line == "Red":
+            self.red_line_temp += 1
+            self.temperature.set(str(self.red_line_temp))
 
     def decrease_temp_immediate(self):
-        try:
-            current_temp = float(self.temperature.get())
-        except ValueError:
-            current_temp = 0
-        self.temperature.set(str(int(current_temp - 1)))
-        self.update_json_temperature()
-
-    def update_json_temperature(self):
         selected_line = self.line_selector.get()
-        selected_block = self.block_selector.get()
-        if selected_line and selected_block and self.block_manager:
-            temp = int(self.temperature.get())
-            self.block_manager.update_temperature(selected_line, selected_block, temp)
+        if selected_line == "Green":
+            self.green_line_temp -= 1
+            self.temperature.set(str(self.green_line_temp))
+        elif selected_line == "Red":
+            self.red_line_temp -= 1
+            self.temperature.set(str(self.red_line_temp))
 
     def update_failures(self):
         selected_line = self.line_selector.get()
@@ -625,6 +694,9 @@ class TrackModelUI(tk.Tk):
             line = train["line"]
             if train["start"] and train_id not in self.visualizer.trains:
                 self.visualizer.animate_train(train_id, line)
+            else:
+                if self.line_network:
+                    self.line_network.read_train_data_from_json()
 
 
 if __name__ == "__main__":

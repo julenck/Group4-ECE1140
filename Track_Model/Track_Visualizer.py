@@ -9,6 +9,7 @@ import pandas as pd
 import re
 from typing import List, Tuple, Dict
 from PIL import Image, ImageTk
+import time
 
 # Import network builder and parser
 from LineNetwork import LineNetworkBuilder
@@ -98,7 +99,7 @@ def parse_excel(filepath: str) -> dict:
 class RailwayDiagram:
     """Railway track visualization using skeleton paths."""
 
-    def __init__(self, parent, block_manager=None):
+    def __init__(self, parent, block_manager=None, line_network=None):
         """
         Initialize visualizer in embedded mode only.
 
@@ -111,20 +112,12 @@ class RailwayDiagram:
         self.block_manager = block_manager
 
         self.trains = {}
-
-        self.train_colors = {
-            1: "#FF0000",  # Red
-            2: "#0000FF",  # Blue
-            3: "#00AA00",  # Green
-            4: "#FFA500",  # Orange
-            5: "#800080",  # Purple
-        }
         self.train_icons = {}
 
         self.last_clicked_block = None
         self.track_data = {}
         self.parser = None
-        self.line_network = None  # LineNetwork for current line
+        self.line_network = line_network
         self.line_colors = {
             "Red Line": "#DC143C",
             "Green Line": "#228B22",
@@ -140,6 +133,7 @@ class RailwayDiagram:
         self.line_var = tk.StringVar()
 
         self.setup_ui()
+        print(f"[Visualizer] LineNetwork connected: {self.line_network is not None}")
 
     def setup_ui(self):
         """Setup user interface for embedded mode."""
@@ -588,9 +582,12 @@ class RailwayDiagram:
                     splinesteps=24,
                     tags="branch_connector",
                 )
-        self.draw_yard(line_name, scale_factor, size_reduction)
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        yard_position = self.draw_yard(line_name, scale_factor, size_reduction)
+        if yard_position:
+            # Store yard position as block 0
+            self.all_positions_green[0] = yard_position
 
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         # Update info
         station_count = len(
             [r for _, r in df.iterrows() if r.get("Station", "N/A") != "N/A"]
@@ -996,7 +993,11 @@ class RailwayDiagram:
                     splinesteps=24,
                     tags="branch_connector",
                 )
-        self.draw_yard(line_name, scale_factor, size_reduction)
+        yard_position = self.draw_yard(line_name, scale_factor, size_reduction)
+        if yard_position:
+            # Store yard position as block 0
+            self.all_positions_green[0] = yard_position
+
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
         # Update info
@@ -1228,61 +1229,151 @@ class RailwayDiagram:
             tags="yard_label",
         )
 
+        # Return the center position
+        return (center_x, center_y)
+
     def animate_train(self, train_id, line):
+        """Initialize and start train animation from yard (block 0)."""
         # Skip if the train already exists
         if train_id in self.trains:
             return
 
-        # Create new train entry
-        self.trains[train_id] = {"line": line, "previous_block": 0, "current_block": 0}
+        try:
+            from PIL import Image, ImageTk
 
-        # Draw the train icon at the yard (block 0)
-        x, y = self.block_coords[0]
-        color = self.train_colors.get(train_id, "red")
-        self.train_icons[train_id] = self.canvas.create_oval(
-            x - 10, y - 10, x + 10, y + 10, fill=color
-        )
+            # Load and resize train image - NO COLORING
+            train_image = Image.open("train.png").convert("RGBA")
+            train_image = train_image.resize((30, 30), Image.Resampling.LANCZOS)
 
-        # Bind hover events
+            photo = ImageTk.PhotoImage(train_image)
+
+            if not hasattr(self, "train_photos"):
+                self.train_photos = {}
+            self.train_photos[train_id] = photo
+
+        except Exception as e:
+            print(f"Error loading train image: {e}")
+            photo = None
+
+        # Determine which position dictionary to use
+        if line == "Green" or line == "Green Line":
+            positions = self.all_positions_green
+        elif line == "Red" or line == "Red Line":
+            positions = self.all_positions_red
+        else:
+            print(f"Unknown line: {line}")
+            return
+
+        # ALWAYS START AT YARD (block 0)
+        starting_block = 0
+
+        self.trains[train_id] = {
+            "line": line,
+            "previous_block": None,
+            "current_block": starting_block,
+        }
+
+        # Get yard position from stored positions
+        if starting_block in positions:
+            x, y = positions[starting_block]
+            print(f"Train {train_id} starting at yard position: ({x}, {y})")
+        else:
+            x, y = 50, 50
+            print(f"WARNING: Yard position not found for {line}! Using default.")
+
+        # Draw the train icon
+        if photo:
+            icon_id = self.canvas.create_image(
+                x, y, image=photo, tags=f"train_{train_id}"
+            )
+        else:
+            # Fallback to star if image fails - use same color for all
+            icon_id = self.canvas.create_text(
+                x,
+                y,
+                text="★",
+                font=("Segoe UI", 20),
+                fill="gold",  # Single color for all trains
+                tags=f"train_{train_id}",
+            )
+
+        self.train_icons[train_id] = icon_id
+
         self.canvas.tag_bind(
-            self.train_icons[train_id],
-            "<Enter>",
-            lambda event, t=train_id: self.show_train_info(event, t),
+            icon_id, "<Enter>", lambda event, t=train_id: self.show_train_info(event, t)
         )
+        self.canvas.tag_bind(icon_id, "<Leave>", lambda event: self.hide_train_info())
 
-        # Start animation
+        print(f"Train {train_id} created at yard (block {starting_block})")
         self.animate_train_step(train_id)
 
     def animate_train_step(self, train_id):
-        train = self.trains[train_id]
+        """Move the specified train to its next block."""
+        if not self.line_network or train_id not in self.trains:
+            return
 
-        # Ask Line Network for the next block
+        train = self.trains[train_id]
+        current_block = train["current_block"]
+        previous_block = train["previous_block"]
+
+        # Get next block from the Line Network
         next_block = self.line_network.get_next_block(
-            train_id, train["current_block"], train["previous_block"]
+            train_id, current_block, previous_block
         )
 
-        next_x, next_y = self.get_block_center(next_block)
-        current_x, current_y = self.get_block_center(train["current_block"])
-        dx = (next_x - current_x) / 20
-        dy = (next_y - current_y) / 20
+        # Determine which position dictionary to use
+        line = train["line"]
+        if line == "Green" or line == "Green Line":
+            positions = self.all_positions_green
+        elif line == "Red" or line == "Red Line":
+            positions = self.all_positions_red
+        else:
+            print(f"Unknown line: {line}")
+            return
 
-        # Smooth motion loop
-        for _ in range(20):
-            self.canvas.move(self.train_icons[train_id], dx, dy)
-            self.canvas.update()
-            time.sleep(0.05)
+        # Get position for next block - handle case where block position doesn't exist
+        if next_block in positions:
+            x, y = positions[next_block]
+        else:
+            print(f"Warning: Block {next_block} not found in positions for {line}")
+            # Keep at current position
+            if current_block in positions:
+                x, y = positions[current_block]
+            else:
+                x, y = 100, 100
 
-        # Update train position
-        train["previous_block"] = train["current_block"]
+        # Move the train icon
+        if train_id in self.train_icons:
+            self.canvas.coords(self.train_icons[train_id], x, y)
+
+        # Highlight the current block
+        block_name = None
+        if self.current_line and self.current_line in self.track_data:
+            df = self.track_data[self.current_line]
+            for _, row in df.iterrows():
+                if row.get("Block Number") == next_block:
+                    section = str(row.get("Section", "")).strip()
+                    block_name = f"{section}{next_block}"
+                    break
+
+        if block_name:
+            self.highlight_block(block_name)
+
+        # Update train position in memory
+        train["previous_block"] = current_block
         train["current_block"] = next_block
 
-        # Continue animation only if still moving
-        motion = self.line_network.get_train_motion(train_id)
-        if motion == "Moving":
-            self.animate_train_step(train_id)
+        # Schedule next animation step (repeat every 1 second)
+        self.root.after(1000, lambda: self.animate_train_step(train_id))
 
     def show_train_info(self, event, train_id):
         train = self.trains[train_id]
         info = f"Train {train_id} | Line: {train['line']} | Block: {train['current_block']}"
         self.hover_label = tk.Label(self.root, text=info, bg="yellow")
         self.hover_label.place(x=event.x_root + 10, y=event.y_root + 10)
+
+    def hide_train_info(self):
+        """Hide train info tooltip on mouse leave."""
+        if hasattr(self, "hover_label") and self.hover_label:
+            self.hover_label.destroy()
+            self.hover_label = None
