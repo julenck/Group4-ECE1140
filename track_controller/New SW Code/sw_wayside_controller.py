@@ -70,7 +70,7 @@ class sw_wayside_controller:
             return
         #call plc function
         if self.active_plc != "":
-            #self.load_inputs_track()
+            self.load_inputs_track()
             
             if self.active_plc == "Green_Line_PLC_XandLup.py":
                 occ1 = self.occupied_blocks[0:73]
@@ -113,7 +113,7 @@ class sw_wayside_controller:
                 self.light_states[18]=signals[6]
                 self.light_states[19]=signals[7]
                 self.gate_states[1] = crossing[0]
-            #self.load_track_outputs()
+            self.load_track_outputs()
             
             if self.running:
                 threading.Timer(0.2, self.run_plc).start()
@@ -156,8 +156,14 @@ class sw_wayside_controller:
             
             if auth <= 0:
                 auth = 0
-                # Don't set Active to 0 here - let CTC manage the Active state
-                # Only remove from cmd_trains to stop processing
+                
+                #set train to inactive
+                with self.file_lock:
+                    with open(self.ctc_comm_file,'r') as f:
+                        data = json.load(f)
+                    with open(self.ctc_comm_file,'w') as f:
+                        data["Trains"][cmd_train]["Active"] = 0
+                        json.dump(data,f,indent=4)
                 ttr.append(cmd_train)
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
@@ -292,18 +298,23 @@ class sw_wayside_controller:
 
             data["G-Occupancy"] = self.occupied_blocks
 
-            if self.cmd_trains != {}:
-                for i in range (5):
-                    try:
-                        train_id = list(self.cmd_trains.keys())[i]
-                        data["G-Commanded Authority"][i] = self.cmd_trains[train_id]["cmd auth"]
-                        data["G-Commanded Speed"][i] = self.cmd_trains[train_id]["cmd speed"]
-                    except IndexError:
-                        data["G-Commanded Authority"][i] = 0
-                        data["G-Commanded Speed"][i] = 0
+            # for i in range (5):
+                #     try:
+                #         train_id = list(self.cmd_trains.keys())[i]
+                #         data["G-Commanded Authority"][i] = self.cmd_trains[train_id]["cmd auth"]
+                #         data["G-Commanded Speed"][i] = self.cmd_trains[train_id]["cmd speed"]
+                #     except IndexError:
+                #         data["G-Commanded Authority"][i] = 0
+                #         data["G-Commanded Speed"][i] = 0   
+            if "Train 1" in self.cmd_trains:
+                a = self.cmd_trains["Train 1"]["cmd auth"]
+                b = self.cmd_trains["Train 1"]["cmd speed"]
+                data["G-Commanded Authority"] = [a,0,0,0,0]
+                data["G-Commanded Speed"] = [b,0,0,0,0]
             else:
-                data["G-Commanded Authority"] = [0]*5
-                data["G-Commanded Speed"] = [0]*5
+                data["G-Commanded Authority"] = [0,0,0,0,0]
+                data["G-Commanded Speed"] = [0,0,0,0,0]
+                
 
             
 
