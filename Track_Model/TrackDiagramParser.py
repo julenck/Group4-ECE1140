@@ -33,16 +33,12 @@ class TrackDiagramParser:
 
     def load_image(self):
         """Load the track diagram image."""
-        print(f"Loading image: {self.image_path}")
         self.original_image = cv2.imread(self.image_path)
         if self.original_image is None:
             raise FileNotFoundError(f"Could not load image: {self.image_path}")
-        print(f"✓ Image loaded: {self.original_image.shape}")
 
     def find_red_pixels(self):
         """Find all red pixels in the image."""
-        print("Finding red pixels...")
-
         hsv = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2HSV)
 
         lower_red1 = np.array([0, 100, 100])
@@ -57,11 +53,8 @@ class TrackDiagramParser:
         red_coords = np.where(self.red_mask > 0)
         self.red_pixels = [(x, y) for y, x in zip(red_coords[0], red_coords[1])]
 
-        print(f"✓ Found {len(self.red_pixels)} red pixels")
-
     def find_green_pixels(self):
         """Find all green pixels in the image."""
-        print("Finding green pixels...")
 
         hsv = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2HSV)
 
@@ -77,11 +70,8 @@ class TrackDiagramParser:
         green_coords = np.where(self.green_mask > 0)
         self.green_pixels = [(x, y) for y, x in zip(green_coords[0], green_coords[1])]
 
-        print(f"✓ Found {len(self.green_pixels)} green pixels")
-
     def extract_centerline_red(self):
         """Extract red centerline using skeletonization and filter by thickness."""
-        print("Extracting red centerline...")
 
         distance_red = ndimage.distance_transform_edt(self.red_mask)
         skeleton_red = skeletonize(self.red_mask > 0)
@@ -97,11 +87,9 @@ class TrackDiagramParser:
                 filtered_centerline_red.append((x, y))
 
         self.centerline_pixels_red = filtered_centerline_red
-        print(f"✓ Red centerline extracted: {len(self.centerline_pixels_red)} points")
 
     def extract_centerline_green(self):
         """Extract green centerline using skeletonization and filter by thickness."""
-        print("Extracting green centerline...")
 
         distance_green = ndimage.distance_transform_edt(self.green_mask)
         skeleton_green = skeletonize(self.green_mask > 0)
@@ -117,13 +105,9 @@ class TrackDiagramParser:
                 filtered_centerline_green.append((x, y))
 
         self.centerline_pixels_green = filtered_centerline_green
-        print(
-            f"✓ Green centerline extracted: {len(self.centerline_pixels_green)} points"
-        )
 
     def remove_red_arrowheads(self):
         """Remove arrowhead pixels to create clean breaks at junctions."""
-        print("Removing arrowheads...")
 
         height, width = self.skeleton_array_red.shape
         skeleton_map = np.zeros((height, width), dtype=bool)
@@ -156,18 +140,12 @@ class TrackDiagramParser:
         temp_clean = [
             (x, y) for x, y in self.centerline_pixels_red if (x, y) not in removed_set
         ]
-
-        print(f"✓ Red Arrowheads removed: {len(junction_points)} junction points")
-
         self.clean_skeleton_pixels_red = self._filter_small_components(
             temp_clean, min_size=16
         )
 
-        print(f"✓ Clean skeleton: {len(self.clean_skeleton_pixels_red)} points")
-
     def remove_green_arrowheads(self):
         """Remove arrowhead pixels to create clean breaks at junctions."""
-        print("Removing arrowheads...")
 
         height, width = self.skeleton_array_green.shape
         skeleton_map = np.zeros((height, width), dtype=bool)
@@ -201,13 +179,9 @@ class TrackDiagramParser:
             (x, y) for x, y in self.centerline_pixels_green if (x, y) not in removed_set
         ]
 
-        print(f"✓ Green Arrowheads removed: {len(junction_points)} junction points")
-
         self.clean_skeleton_pixels_green = self._filter_small_components(
             temp_clean, min_size=20
         )
-
-        print(f"✓ Clean skeleton: {len(self.clean_skeleton_pixels_green)} points")
 
     def _filter_small_components(
         self, pixels: List[Tuple[int, int]], min_size: int = 16
@@ -254,7 +228,6 @@ class TrackDiagramParser:
 
     def find_connected_segments_red(self):
         """Group continuous pixels into segments and create bounding boxes."""
-        print("Finding connected segments...")
 
         if not self.clean_skeleton_pixels_red:
             print("⚠️ No clean skeleton pixels to segment!")
@@ -316,13 +289,8 @@ class TrackDiagramParser:
                     }
                 )
 
-        print(f"✓ Found {len(self.segments_red)} segments")
-        for i, seg in enumerate(self.segments_red):
-            print(f"  Segment {i}: {len(seg['pixels'])} pixels")
-
     def find_connected_segments_green(self):
         """Group continuous green pixels into segments and create bounding boxes."""
-        print("Finding green connected segments...")
 
         if not self.clean_skeleton_pixels_green:
             print("⚠️ No clean green skeleton pixels to segment!")
@@ -382,14 +350,12 @@ class TrackDiagramParser:
                         "section_label": None,
                     }
                 )
-        print(f"✓ Found {len(self.segments_green)} green segments")
 
     def manually_label_segments_red(self):
         """Manually hardcode section labels for each segment.
 
         EDIT THE DICTIONARY BELOW to assign section names to segment numbers.
         """
-        print("Applying manual labels...")
 
         # ============================================
         # MANUALLY EDIT THIS DICTIONARY
@@ -399,6 +365,7 @@ class TrackDiagramParser:
             1: "B",
             3: "A",
             4: "D",
+            5: "YARD",
             7: "F",
             8: "E",
             9: "G",
@@ -424,16 +391,12 @@ class TrackDiagramParser:
         for seg_idx, label in manual_labels.items():
             if seg_idx < len(self.segments_red):
                 self.segments_red[seg_idx]["section_label"] = label
-                print(f"  Segment {seg_idx} → {label}")
-
-        print("✓ Manual labels applied")
 
         # Join segments with same label into contiguous paths
         self._merge_segments_by_label_red()
 
     def manually_label_segments_green(self):
         """Manually hardcode section labels for each green segment."""
-        print("Applying manual labels for green segments...")
 
         # ============================================
         # MANUALLY EDIT THIS DICTIONARY for green
@@ -447,10 +410,12 @@ class TrackDiagramParser:
             4: "D",
             6: "E",
             8: "F",
-            10: "G",
-            12: "H",
             9: "Z",
+            10: "G",
             11: "Y",
+            12: "H",
+            13: "YARD",
+            14: "YARD",
             20: "X",
             21: "W",
             22: "W",
@@ -476,16 +441,12 @@ class TrackDiagramParser:
         for seg_idx, label in manual_labels_green.items():
             if seg_idx < len(self.segments_green):
                 self.segments_green[seg_idx]["section_label"] = label
-                print(f"  Green Segment {seg_idx} → {label}")
-
-        print("✓ Green manual labels applied")
 
         # Merge green segments with the same label
         self._merge_segments_by_label_green()
 
     def _merge_segments_by_label_green(self):
         """Merge green segments with the same label into contiguous paths."""
-        print("Merging green segments with same labels...")
 
         label_groups = {}
         for segment in self.segments_green:
@@ -510,9 +471,6 @@ class TrackDiagramParser:
             if len(same_label_segments) == 1:
                 merged_segments.append(segment)
             else:
-                print(
-                    f"  Connecting {len(same_label_segments)} green segments for section {label}"
-                )
 
                 all_pixels = list(same_label_segments[0]["pixels"])
                 remaining_segs = same_label_segments[1:]
@@ -562,10 +520,6 @@ class TrackDiagramParser:
 
                         all_pixels.extend(line_pixels)
                         all_pixels.extend(remaining_segs[closest_idx]["pixels"])
-                        print(
-                            f"    Connected with {len(line_pixels)} green bridge pixels"
-                        )
-
                     remaining_segs.pop(closest_idx)
 
                 all_pixels = list(dict.fromkeys(all_pixels))
@@ -581,19 +535,13 @@ class TrackDiagramParser:
                     "section_label": label,
                 }
                 merged_segments.append(merged_segment)
-                print(
-                    f"  Merged {len(same_label_segments)} green segments into section {label} ({len(all_pixels)} pixels)"
-                )
 
             processed_labels.add(label)
 
         self.segments_green = merged_segments
-        print(f"✓ Final green segment count: {len(self.segments_green)}")
 
     def _merge_segments_by_label_red(self):
         """Merge segments with the same label into single contiguous paths."""
-        print("Merging segments with same labels...")
-
         # Group segments by label
         label_groups = {}
         for segment in self.segments_red:
@@ -626,10 +574,6 @@ class TrackDiagramParser:
                 # Single segment, keep as is
                 merged_segments.append(segment)
             else:
-                # Multiple segments - connect them with straight lines
-                print(
-                    f"  Connecting {len(same_label_segments)} segments for section {label}"
-                )
 
                 # Start with first segment
                 all_pixels = list(same_label_segments[0]["pixels"])
@@ -684,7 +628,6 @@ class TrackDiagramParser:
                         # Add connecting line and next segment
                         all_pixels.extend(line_pixels)
                         all_pixels.extend(remaining_segs[closest_idx]["pixels"])
-                        print(f"    Connected with {len(line_pixels)} bridge pixels")
 
                     remaining_segs.pop(closest_idx)
 
@@ -704,15 +647,10 @@ class TrackDiagramParser:
                     "section_label": label,
                 }
                 merged_segments.append(merged_segment)
-                print(
-                    f"  Merged {len(same_label_segments)} segments into section {label} ({len(all_pixels)} pixels)"
-                )
-
             processed_labels.add(label)
 
         # Replace segments with merged version
         self.segments_red = merged_segments
-        print(f"✓ Final segment count: {len(self.segments_red)}")
 
     def get_section_path_red(self, section_name: str) -> List[Tuple[int, int]]:
         """Get skeleton pixels for a specific RED line section."""
@@ -730,7 +668,6 @@ class TrackDiagramParser:
 
     def order_all_segments_red(self):
         """Final pass to order pixels in each segment before output to visualizer."""
-        print("Ordering pixels in each segment...")
 
         for segment in self.segments_red:
             if not segment["pixels"]:
@@ -801,15 +738,9 @@ class TrackDiagramParser:
                 ordered_pixels.append(current)
 
             segment["pixels"] = ordered_pixels
-            print(
-                f"  Ordered {len(ordered_pixels)} pixels for section {segment.get('section_label', 'UNLABELED')}"
-            )
-
-        print("✓ Pixels ordered in all segments")
 
     def order_all_segments_green(self):
         """Order pixels in each green segment for output to visualizer."""
-        print("Ordering pixels in each green segment...")
 
         for segment in self.segments_green:
             if not segment["pixels"]:
@@ -821,7 +752,6 @@ class TrackDiagramParser:
             if segment.get("section_label") == "P":
                 # Use custom ordering for section P
                 ordered_pixels = self.order_section_p_pixels(pixels)
-                print(f"  🔧 Section P: Custom teardrop ordering applied")
             else:
                 # Find the two furthest pixels (endpoints)
                 max_dist = 0
@@ -882,11 +812,6 @@ class TrackDiagramParser:
                     ordered_pixels.append(current)
 
             segment["pixels"] = ordered_pixels
-            print(
-                f"  Ordered {len(ordered_pixels)} pixels for green section {segment.get('section_label', 'UNLABELED')}"
-            )
-
-        print("✓ Pixels ordered in all green segments")
 
     def order_section_p_pixels(self, pixels):
         """
@@ -944,15 +869,10 @@ class TrackDiagramParser:
             used.add(next_pixel)
             current_pixel = next_pixel
 
-        # Print every pixel
-        for i, pixel in enumerate(ordered):
-            print(f"Pixel {i}: {pixel}")
-
         return ordered
 
     def parse(self):
         """Parse the image and extract segments for both red and green lines."""
-        print("\n=== Parsing Track Diagram ===")
         self.load_image()
 
         # RED LINE PROCESSING
@@ -970,8 +890,6 @@ class TrackDiagramParser:
         self.find_connected_segments_green()
         self.manually_label_segments_green()
         self.order_all_segments_green()
-
-        print("=== Parsing Complete ===\n")
         return self
 
     def visualize(self):

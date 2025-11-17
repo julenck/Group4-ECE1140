@@ -1,56 +1,43 @@
 class DynamicBlockManager:
     def __init__(self):
         self.line_states = {"Green": {}, "Red": {}}
+        self.passengers_boarding = 0
+        self.total_ticket_sales = 0
+        self.trains = []
 
     def initialize_blocks(self, line_name, block_ids):
         """Create empty storage for blocks."""
         for block_id in block_ids:
             self.line_states[line_name][block_id] = {
-                "temperature": 72,
                 "failures": {"power": False, "circuit": False, "broken": False},
                 "occupancy": False,
-                "commanded_speed": 0,
-                "commanded_authority": 0,
                 "light": 0,
                 "gate": "N/A",
                 "switch_position": "N/A",
+                "direction": "N/A",
             }
 
-    def write_inputs(self, line_name, switches, gates, lights, occupancy, failures):
+    def write_inputs(self, line_name, switches, gates, lights):
         """Write arrays from JSON to storage."""
         if line_name not in self.line_states or not self.line_states[line_name]:
             return
-
-        blocks = sorted(self.line_states[line_name].keys())
+        blocks = self.line_states[line_name].keys()
 
         for idx, block_id in enumerate(blocks):
-            if idx < len(occupancy):
-                self.line_states[line_name][block_id]["occupancy"] = occupancy[idx] == 1
 
             if idx < len(lights):
                 self.line_states[line_name][block_id]["light"] = lights[idx]
 
-            if idx < len(gates):
-                self.line_states[line_name][block_id]["gate"] = gates[idx]
+            # Extract numeric block number
+            block_num = int("".join(filter(str.isdigit, block_id)))
 
-            if idx < len(switches):
-                self.line_states[line_name][block_id]["switch_position"] = switches[idx]
+            if block_num in gates:
+                self.line_states[line_name][block_id]["gate"] = gates[block_num]
 
-            failure_idx = idx * 3
-            if failure_idx + 2 < len(failures):
-                self.line_states[line_name][block_id]["failures"]["power"] = (
-                    failures[failure_idx] == 1
-                )
-                self.line_states[line_name][block_id]["failures"]["circuit"] = (
-                    failures[failure_idx + 1] == 1
-                )
-                self.line_states[line_name][block_id]["failures"]["broken"] = (
-                    failures[failure_idx + 2] == 1
-                )
-
-    def update_temperature(self, line_name, block_id, temperature):
-        """Write temperature."""
-        self.line_states[line_name][block_id]["temperature"] = temperature
+            if block_num in switches:
+                self.line_states[line_name][block_id]["switch_position"] = switches[
+                    block_num
+                ]
 
     def update_failures(self, line_name, block_id, power, circuit, broken):
         """Write failures."""
@@ -64,15 +51,29 @@ class DynamicBlockManager:
             return None
 
         state = self.line_states[line_name][block_id]
-        light_map = {0: "Red", 1: "Green"}
+        light_map = {0: "Super Green", 1: "Green", 2: "Yellow", 3: "Red"}
 
         return {
-            "temperature": state["temperature"],
             "occupancy": state["occupancy"],
-            "commanded_authority": state["commanded_authority"],
-            "commanded_speed": state["commanded_speed"],
             "traffic_light": light_map.get(state["light"], "OFF"),
             "gate": state["gate"],
             "failures": state["failures"],
             "switch_position": state["switch_position"],
+            "direction": state["direction"],
         }
+
+    def get_switch_position(self, line_name, block):
+        # If the caller gives a number, convert it to the actual stored key
+        if isinstance(block, int):
+            for block_id in self.line_states[line_name]:
+                # Extract only digits from stored block_id
+                digits = "".join(filter(str.isdigit, str(block_id)))
+                if digits and int(digits) == block:
+                    block = block_id
+                    break
+
+        # If still not found, return None
+        if block not in self.line_states[line_name]:
+            return None
+
+        return self.line_states[line_name][block]["switch_position"]

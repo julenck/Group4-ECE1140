@@ -1,5 +1,5 @@
-{
-    "specs": {
+    {
+        "specs": {
         "length_ft": 66.0,
         "width_ft": 10.0,
         "height_ft": 11.5,
@@ -12,7 +12,7 @@
         "crew_count": 2
     },
     "inputs": {
-        "commanded speed": 45.0,
+        "commanded speed": 40.0,
         "commanded authority": 0.0,
         "speed limit": 30.0,
         "current station": "Central Station",
@@ -25,70 +25,18 @@
         "emergency_brake": false
     },
     "outputs": {
-        "velocity_mph": 30.0,
-        "acceleration_ftps2": 0.0,
-        "position_yds": 2850.1007079113065,
+        "velocity_mph": 5.5909076,
+        "acceleration_ftps2": 1.64,
+        "position_yds": 7.5166666666666675,
         "authority_yds": 0.0,
         "station_name": "Central Station",
         "next_station": "Park Street",
         "left_door_open": false,
         "right_door_open": false,
-        "temperature_F": 69.7500000000004,
+        "temperature_F": 68.25000000000006,
         "door_side": "Right",
         "passengers_onboard": 2,
         "passengers_boarding": 15,
         "passengers_disembarking": 0
-    },
-    "train_1": {
-        "specs": {
-            "length_ft": 66.0,
-            "width_ft": 10.0,
-            "height_ft": 11.5,
-            "mass_lbs": 90100,
-            "max_power_hp": 169,
-            "max_accel_ftps2": 1.64,
-            "service_brake_ftps2": -3.94,
-            "emergency_brake_ftps2": -8.86,
-            "capacity": 222,
-            "crew_count": 2
-        },
-        "inputs": {
-            "commanded speed": 45.0,
-            "commanded authority": 0.0,
-            "speed limit": 30.0,
-            "current station": "Central Station",
-            "next station": "Park Street",
-            "side_door": "Right",
-            "passengers_boarding": 14,
-            "engine_failure": false,
-            "signal_failure": false,
-            "brake_failure": false,
-            "emergency_brake": false,
-            "passengers_onboard": 0
-        },
-        "outputs": {
-            "commanded speed": 45.0,
-            "commanded authority": 0.0,
-            "speed limit": 30.0,
-            "current station": "Central Station",
-            "next station": "Park Street",
-            "side_door": "Right",
-            "passengers_boarding": 14,
-            "engine_failure": false,
-            "signal_failure": false,
-            "brake_failure": false,
-            "emergency_brake": false,
-            "passengers_onboard": 0,
-            "velocity_mph": 59.99999999999999,
-            "acceleration_ftps2": 0.0,
-            "position_yds": 3106.9939512890587,
-            "authority_yds": 1000.0,
-            "station_name": "Park Street",
-            "next_station": "Park Street",
-            "left_door_open": false,
-            "right_door_open": false,
-            "temperature_F": 70.0,
-            "door_side": "Right"
-        }
     }
 }
