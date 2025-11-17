@@ -12,7 +12,7 @@
             "passengers_boarding": 0
         },
         "motion": {
-            "current motion": "Moving"
+            "current motion": "stopped"
         }
     },
     "G_train_2": {
