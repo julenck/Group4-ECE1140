@@ -3,10 +3,10 @@ from tkinter import ttk
 import threading
 
 # === File paths ===
-TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
+TRAIN_STATES_FILE = "train_controller/data/train_states.json"
 TRAIN_SPECS_FILE = "train_data.json"
 TRACK_INPUT_FILE = "track_model_Train_Model.json"
-CTC_OUTPUT_FILE = "../CTC/train_model_to_ctc.json"
+CTC_OUTPUT_FILE = "train_model_to_ctc.json"
 
 # Ensure cwd
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
