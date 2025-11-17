@@ -5,11 +5,12 @@ import threading
 # === File paths ===
 TRAIN_STATES_FILE = "../train_controller/data/train_states.json"
 TRAIN_SPECS_FILE = "train_data.json"
-TRACK_INPUT_FILE = "../Track_Model/track_model_Train_Model.json"
+TRACK_INPUT_FILE = "track_model_Train_Model.json"
 CTC_OUTPUT_FILE = "../CTC/train_model_to_ctc.json"
 
 # Ensure cwd
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 
 # === Safe IO ===
 def safe_read_json(path):
@@ -18,6 +19,7 @@ def safe_read_json(path):
             return json.load(f)
     except Exception:
         return {}
+
 
 def safe_write_json(path, data):
     payload = json.dumps(data, indent=4)
@@ -45,13 +47,21 @@ def safe_write_json(path, data):
     with open(path, "w") as f:
         f.write(payload)
 
+
 # === Train Data shape ===
 DEFAULT_SPECS = {
-    "length_ft": 66.0, "width_ft": 10.0, "height_ft": 11.5,
-    "mass_lbs": 90100, "max_power_hp": 169,
-    "max_accel_ftps2": 1.64, "service_brake_ftps2": -3.94,
-    "emergency_brake_ftps2": -8.86, "capacity": 222, "crew_count": 2
+    "length_ft": 66.0,
+    "width_ft": 10.0,
+    "height_ft": 11.5,
+    "mass_lbs": 90100,
+    "max_power_hp": 169,
+    "max_accel_ftps2": 1.64,
+    "service_brake_ftps2": -3.94,
+    "emergency_brake_ftps2": -8.86,
+    "capacity": 222,
+    "crew_count": 2,
 }
+
 
 def ensure_train_data(path):
     data = {}
@@ -69,6 +79,7 @@ def ensure_train_data(path):
     data.setdefault("outputs", {})
     safe_write_json(path, data)
     return data
+
 
 # === Track input loader (maps underscores -> spaces) ===
 def read_track_input(train_index: int = 0):
@@ -92,6 +103,7 @@ def read_track_input(train_index: int = 0):
         mapped["passengers_boarding"] = int(q[idx])
     return {k: v for k, v in mapped.items() if v is not None}
 
+
 # === Merge inputs (precedence: Track > train_data.inputs > controller fallbacks) ===
 def merge_inputs(td_inputs: dict, track_in: dict, ctrl: dict, onboard_fallback: int):
     merged = dict(td_inputs) if td_inputs else {}
@@ -112,9 +124,13 @@ def merge_inputs(td_inputs: dict, track_in: dict, ctrl: dict, onboard_fallback: 
     merged.setdefault("train_model_brake_failure", False)
     return merged
 
+
 # === CTC write (disembarking only) ===
 def write_ctc_output(passengers_disembarking: int):
-    safe_write_json(CTC_OUTPUT_FILE, {"passengers_disembarking": int(passengers_disembarking)})
+    safe_write_json(
+        CTC_OUTPUT_FILE, {"passengers_disembarking": int(passengers_disembarking)}
+    )
+
 
 # === Train Model core (keep your existing implementation) ===
 class TrainModel:
@@ -140,12 +156,24 @@ class TrainModel:
             self.temperature_F += rate if diff > 0 else -rate
         return self.temperature_F
 
-    def update(self, commanded_speed, commanded_authority, speed_limit,
-               current_station, next_station, side_door, power_command=0,
-               emergency_brake=False, service_brake=False,
-               engine_failure=False, brake_failure=False,  # NEW failure flags
-               set_temperature=70.0, left_door=False, right_door=False,
-               driver_velocity=0.0):  # ADD driver_velocity parameter
+    def update(
+        self,
+        commanded_speed,
+        commanded_authority,
+        speed_limit,
+        current_station,
+        next_station,
+        side_door,
+        power_command=0,
+        emergency_brake=False,
+        service_brake=False,
+        engine_failure=False,
+        brake_failure=False,  # NEW failure flags
+        set_temperature=70.0,
+        left_door=False,
+        right_door=False,
+        driver_velocity=0.0,
+    ):  # ADD driver_velocity parameter
         # Emergency brake overrides all
         if emergency_brake:
             self.acceleration_ftps2 = self.emergency_brake_ftps2
@@ -159,28 +187,32 @@ class TrainModel:
                 # Force = Power / velocity, then F = ma => a = F/m
                 max_power_watts = self.max_power_hp * 745.7  # hp to watts
                 mass_kg = self.mass_lbs * 0.453592  # lbs to kg
-                
+
                 # Get current velocity in m/s (use small minimum to avoid division by zero)
                 velocity_ms = max(0.1, self.velocity_mph * 0.44704)  # mph to m/s
-                
+
                 # Calculate force from power: F = P/v
                 # power_command is already in watts from controller
                 force_N = power_command / velocity_ms if power_command > 0 else 0
-                
+
                 # Calculate acceleration: a = F/m (in m/s²)
                 accel_ms2 = force_N / mass_kg if mass_kg > 0 else 0
-                
+
                 # Convert to ft/s²
                 accel_ftps2 = accel_ms2 * 3.28084
-                
+
                 # Engine failure disables propulsion (no positive accel)
                 if engine_failure and accel_ftps2 > 0:
                     self.acceleration_ftps2 = 0.0
                 else:
                     # Clamp to max acceleration limits
-                    self.acceleration_ftps2 = max(-self.max_accel_ftps2, min(self.max_accel_ftps2, accel_ftps2))
+                    self.acceleration_ftps2 = max(
+                        -self.max_accel_ftps2, min(self.max_accel_ftps2, accel_ftps2)
+                    )
 
-        self.velocity_mph = max(0.0, self.velocity_mph + self.acceleration_ftps2 * self.dt * 0.681818)
+        self.velocity_mph = max(
+            0.0, self.velocity_mph + self.acceleration_ftps2 * self.dt * 0.681818
+        )
         self.position_yds += (self.velocity_mph / 0.681818) * self.dt / 3.0
         self.authority_yds = float(commanded_authority or 0.0)
         self.regulate_temperature(set_temperature)
@@ -194,8 +226,9 @@ class TrainModel:
             "left_door_open": bool(left_door),
             "right_door_open": bool(right_door),
             "speed_limit": float(speed_limit or 0.0),
-            "temperature_F": self.temperature_F
+            "temperature_F": self.temperature_F,
         }
+
 
 # === UI ===
 class TrainModelUI(tk.Tk):
@@ -211,8 +244,10 @@ class TrainModelUI(tk.Tk):
 
         # Styles
         style = ttk.Style(self)
-        try: style.theme_use("vista")
-        except Exception: style.theme_use("clam")
+        try:
+            style.theme_use("vista")
+        except Exception:
+            style.theme_use("clam")
         style.configure("Header.TLabelframe", font=("Segoe UI", 10, "bold"))
         style.configure("Data.TLabel", font=("Consolas", 9))
         style.configure("Status.On.TLabel", foreground="#0a7d12")
@@ -223,7 +258,9 @@ class TrainModelUI(tk.Tk):
         td = ensure_train_data(self.train_data_path)
         # Prefer per-train specs if already present; otherwise fall back to root specs
         if self.train_id is not None and f"train_{self.train_id}" in td:
-            self.specs = td[f"train_{self.train_id}"].get("specs", td.get("specs", DEFAULT_SPECS))
+            self.specs = td[f"train_{self.train_id}"].get(
+                "specs", td.get("specs", DEFAULT_SPECS)
+            )
         else:
             self.specs = td.get("specs", DEFAULT_SPECS)
         self.model = TrainModel(self.specs)
@@ -233,11 +270,7 @@ class TrainModelUI(tk.Tk):
 
         # Real-time file watch state
         self._stop_event = threading.Event()
-        self._last_mtimes = {
-            "track": 0.0,
-            "ctrl": 0.0,
-            "train_data": 0.0
-        }
+        self._last_mtimes = {"track": 0.0, "ctrl": 0.0, "train_data": 0.0}
         # Start background watcher
         threading.Thread(target=self._watch_files, daemon=True).start()
 
@@ -256,10 +289,10 @@ class TrainModelUI(tk.Tk):
         left.rowconfigure(1, weight=1)
         left.rowconfigure(2, weight=1)
 
-        self.create_info_panel(left)   # row 0 col 0
-        self.create_env_panel(left)    # row 0 col 1
+        self.create_info_panel(left)  # row 0 col 0
+        self.create_env_panel(left)  # row 0 col 1
         self.create_specs_panel(left)  # row 1 col 0
-        self.create_failure_panel(left)# row 1 col 1
+        self.create_failure_panel(left)  # row 1 col 1
         self.create_control_panel(left)  # row 2 col 0
         self.create_announcements_panel(left)  # row 2 col 1
 
@@ -272,23 +305,37 @@ class TrainModelUI(tk.Tk):
         frame.grid(row=0, column=0, sticky="NSEW", padx=4, pady=4)
         self.info_labels = {}
         fields = [
-            "Velocity (mph)", "Acceleration (ft/s²)", "Position (yds)",
-            "Authority Remaining (yds)", "Train Temperature (°F)",
-            "Set Temperature (°F)", "Current Station", "Next Station", "Speed Limit (mph)"
+            "Velocity (mph)",
+            "Acceleration (ft/s²)",
+            "Position (yds)",
+            "Authority Remaining (yds)",
+            "Train Temperature (°F)",
+            "Set Temperature (°F)",
+            "Current Station",
+            "Next Station",
+            "Speed Limit (mph)",
         ]
         for i, key in enumerate(fields):
-            ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(row=i, column=0, sticky="w", padx=8, pady=2)
+            ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(
+                row=i, column=0, sticky="w", padx=8, pady=2
+            )
             lbl = ttk.Label(frame, text="--", style="Data.TLabel")
             lbl.grid(row=i, column=1, sticky="w", padx=4, pady=2)
             self.info_labels[key] = lbl
         frame.columnconfigure(1, weight=1)
 
     def create_env_panel(self, parent):
-        frame = ttk.LabelFrame(parent, text="Env / Doors / Lights", style="Header.TLabelframe")
+        frame = ttk.LabelFrame(
+            parent, text="Env / Doors / Lights", style="Header.TLabelframe"
+        )
         frame.grid(row=0, column=1, sticky="NSEW", padx=4, pady=4)
         self.env_labels = {}
-        for i, key in enumerate(["Left Door", "Right Door", "Interior Lights", "Exterior Lights"]):
-            ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(row=i, column=0, sticky="w", padx=8, pady=2)
+        for i, key in enumerate(
+            ["Left Door", "Right Door", "Interior Lights", "Exterior Lights"]
+        ):
+            ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(
+                row=i, column=0, sticky="w", padx=8, pady=2
+            )
             lbl = ttk.Label(frame, text="--", style="Data.TLabel")
             lbl.grid(row=i, column=1, sticky="w", padx=4, pady=2)
             self.env_labels[key] = lbl
@@ -298,7 +345,9 @@ class TrainModelUI(tk.Tk):
         frame = ttk.LabelFrame(parent, text="Specs", style="Header.TLabelframe")
         frame.grid(row=1, column=0, sticky="NSEW", padx=4, pady=4)
         for k, v in self.specs.items():
-            ttk.Label(frame, text=f"{k}: {v}", style="Data.TLabel").pack(anchor="w", padx=8, pady=0)
+            ttk.Label(frame, text=f"{k}: {v}", style="Data.TLabel").pack(
+                anchor="w", padx=8, pady=0
+            )
 
     def create_failure_panel(self, parent):
         frame = ttk.LabelFrame(parent, text="Failures", style="Header.TLabelframe")
@@ -307,27 +356,48 @@ class TrainModelUI(tk.Tk):
         # Status labels
         self.fail_labels = {}
         row = 0
-        for key in ["Engine Failure", "Brake Failure", "Signal Failure", "Emergency Brake"]:
-            ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(row=row, column=0, sticky="w", padx=6, pady=2)
+        for key in [
+            "Engine Failure",
+            "Brake Failure",
+            "Signal Failure",
+            "Emergency Brake",
+        ]:
+            ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(
+                row=row, column=0, sticky="w", padx=6, pady=2
+            )
             lbl = ttk.Label(frame, text="Off", style="Status.Off.TLabel")
             lbl.grid(row=row, column=1, sticky="w", padx=4, pady=2)
             self.fail_labels[key] = lbl
             row += 1
 
         # Toggle buttons
-        ttk.Button(frame, text="Toggle Engine", command=self.toggle_engine_failure).grid(row=0, column=2, padx=4, pady=2)
-        ttk.Button(frame, text="Toggle Brake", command=self.toggle_brake_failure).grid(row=1, column=2, padx=4, pady=2)
-        ttk.Button(frame, text="Toggle Signal", command=self.toggle_signal_failure).grid(row=2, column=2, padx=4, pady=2)
-        ttk.Button(frame, text="Toggle E‑Brake", command=self.toggle_emergency_brake).grid(row=3, column=2, padx=4, pady=2)
+        ttk.Button(
+            frame, text="Toggle Engine", command=self.toggle_engine_failure
+        ).grid(row=0, column=2, padx=4, pady=2)
+        ttk.Button(frame, text="Toggle Brake", command=self.toggle_brake_failure).grid(
+            row=1, column=2, padx=4, pady=2
+        )
+        ttk.Button(
+            frame, text="Toggle Signal", command=self.toggle_signal_failure
+        ).grid(row=2, column=2, padx=4, pady=2)
+        ttk.Button(
+            frame, text="Toggle E‑Brake", command=self.toggle_emergency_brake
+        ).grid(row=3, column=2, padx=4, pady=2)
 
         frame.columnconfigure(1, weight=1)
 
     def create_control_panel(self, parent):
         frame = ttk.LabelFrame(parent, text="Controls", style="Header.TLabelframe")
         frame.grid(row=2, column=0, sticky="NSEW", padx=4, pady=4)
-        ttk.Label(frame, text="Controlled by Train Controller (train_states.json)", style="Data.TLabel").pack(anchor="w", padx=8, pady=2)
+        ttk.Label(
+            frame,
+            text="Controlled by Train Controller (train_states.json)",
+            style="Data.TLabel",
+        ).pack(anchor="w", padx=8, pady=2)
         # Emergency brake toggle (writes to controller state)
-        self.btn_emergency = ttk.Button(frame, text="Toggle Emergency Brake", command=self.toggle_emergency_brake)
+        self.btn_emergency = ttk.Button(
+            frame, text="Toggle Emergency Brake", command=self.toggle_emergency_brake
+        )
         self.btn_emergency.pack(fill="x", padx=8, pady=6)
 
     def toggle_emergency_brake(self):
@@ -338,9 +408,9 @@ class TrainModelUI(tk.Tk):
         flag_map = {
             "engine_failure": "train_model_engine_failure",
             "brake_failure": "train_model_brake_failure",
-            "signal_failure": "train_model_signal_failure"
+            "signal_failure": "train_model_signal_failure",
         }
-        
+
         # Emergency brake goes to train_states.json
         if flag_name == "emergency_brake":
             all_states = safe_read_json(TRAIN_STATES_FILE)
@@ -361,9 +431,9 @@ class TrainModelUI(tk.Tk):
             train_data = safe_read_json(self.train_data_path)
             if not isinstance(train_data, dict):
                 train_data = {}
-            
+
             mapped_flag = flag_map.get(flag_name, flag_name)
-            
+
             if self.train_id is None:
                 # Ensure inputs section exists
                 if "inputs" not in train_data:
@@ -388,23 +458,25 @@ class TrainModelUI(tk.Tk):
                 sect["inputs"] = inputs
                 train_data[key] = sect
                 new_val = inputs[mapped_flag]
-                print(f"[Train Model] Toggle {flag_name}: {mapped_flag} = {current} -> {new_val} (train_{self.train_id})")
+                print(
+                    f"[Train Model] Toggle {flag_name}: {mapped_flag} = {current} -> {new_val} (train_{self.train_id})"
+                )
             safe_write_json(self.train_data_path, train_data)
-        
+
         # Immediate UI refresh (update button visual state)
         key_map = {
             "engine_failure": "Engine Failure",
             "brake_failure": "Brake Failure",
             "signal_failure": "Signal Failure",
-            "emergency_brake": "Emergency Brake"
+            "emergency_brake": "Emergency Brake",
         }
         ui_key = key_map.get(flag_name)
         if ui_key and ui_key in self.fail_labels:
             self.fail_labels[ui_key].config(
                 text="On" if new_val else "Off",
-                style="Status.On.TLabel" if new_val else "Status.Off.TLabel"
+                style="Status.On.TLabel" if new_val else "Status.Off.TLabel",
             )
-        
+
         # Trigger immediate cycle to process the change
         self.after(50, lambda: self._run_cycle(schedule=False))
 
@@ -420,11 +492,15 @@ class TrainModelUI(tk.Tk):
     def create_announcements_panel(self, parent):
         frame = ttk.LabelFrame(parent, text="Announcements", style="Header.TLabelframe")
         frame.grid(row=2, column=1, sticky="NSEW", padx=4, pady=4)
-        self.announcement_box = tk.Text(frame, height=4, wrap="word", state='disabled', bg='white')
+        self.announcement_box = tk.Text(
+            frame, height=4, wrap="word", state="disabled", bg="white"
+        )
         self.announcement_box.pack(fill="both", expand=True, padx=6, pady=6)
 
     # Passenger logic (disembark only; CTC receives it)
-    def compute_passengers_disembarking(self, station: str, velocity_mph: float, passengers_onboard: int) -> int:
+    def compute_passengers_disembarking(
+        self, station: str, velocity_mph: float, passengers_onboard: int
+    ) -> int:
         station = (station or "").strip()
         if not station or velocity_mph >= 0.5:
             return 0
@@ -471,21 +547,25 @@ class TrainModelUI(tk.Tk):
         data.setdefault("specs", data.get("specs", self.specs))
         data.setdefault("inputs", data.get("inputs", {}))
         data.setdefault("outputs", data.get("outputs", {}))
-        
+
         # Build outputs dict from model state
         outputs = {
             "velocity_mph": self.model.velocity_mph,
             "acceleration_ftps2": self.model.acceleration_ftps2,
             "position_yds": self.model.position_yds,
             "authority_yds": self.model.authority_yds,
-            "temperature_F": self.model.temperature_F
+            "temperature_F": self.model.temperature_F,
         }
-        
+
         if self.train_id is None:
             # Re-read current inputs to preserve any failure flags that were toggled
             current_inputs = data.get("inputs", {})
             # Preserve train_model_* failure flags from current file state
-            for flag in ["train_model_engine_failure", "train_model_signal_failure", "train_model_brake_failure"]:
+            for flag in [
+                "train_model_engine_failure",
+                "train_model_signal_failure",
+                "train_model_brake_failure",
+            ]:
                 if flag in current_inputs:
                     td_inputs[flag] = current_inputs[flag]
             data["specs"] = specs
@@ -498,7 +578,11 @@ class TrainModelUI(tk.Tk):
             # Re-read current inputs to preserve any failure flags that were toggled
             current_inputs = data.get(key, {}).get("inputs", {})
             # Preserve train_model_* failure flags from current file state
-            for flag in ["train_model_engine_failure", "train_model_signal_failure", "train_model_brake_failure"]:
+            for flag in [
+                "train_model_engine_failure",
+                "train_model_signal_failure",
+                "train_model_brake_failure",
+            ]:
                 if flag in current_inputs:
                     td_inputs[flag] = current_inputs[flag]
             data[key]["specs"] = specs
@@ -523,21 +607,27 @@ class TrainModelUI(tk.Tk):
             td_inputs_check = td[f"train_{self.train_id}"].get("inputs", {})
         else:
             td_inputs_check = td.get("inputs", {})
-        
+
         # Signal pickup failure -> can't read NEW beacon data, but keeps current data
         # Only affects reading new beacons when beacon info changes
         signal_failure_active = td_inputs_check.get("train_model_signal_failure", False)
         beacon_read_blocked = False  # Track if we blocked a beacon read this cycle
-        
+
         # Merge track_in with td_inputs for beacon detection (allows Test UI to trigger beacon changes)
         # This lets us test with Test UI when Track Model isn't providing data
         beacon_source = {}
-        for k in ["speed limit", "side_door", "current station", "next station", "passengers_boarding"]:
+        for k in [
+            "speed limit",
+            "side_door",
+            "current station",
+            "next station",
+            "passengers_boarding",
+        ]:
             if k in track_in:
                 beacon_source[k] = track_in[k]
             elif k in td_inputs_check:
                 beacon_source[k] = td_inputs_check[k]
-        
+
         if signal_failure_active:
             # Check if beacon data has changed (new beacon encountered)
             beacon_changed = False
@@ -546,22 +636,42 @@ class TrainModelUI(tk.Tk):
                     if beacon_source[k] != self._last_beacon_inputs[k]:
                         beacon_changed = True
                         break
-            
+
             # If beacon changed, can't read it - use last known values and signal the block
             if beacon_changed:
-                print("[Train Model] Signal failure blocked beacon read - keeping frozen data")
+                print(
+                    "[Train Model] Signal failure blocked beacon read - keeping frozen data"
+                )
                 beacon_read_blocked = True
-                for k in ["speed limit", "side_door", "current station", "next station", "passengers_boarding"]:
+                for k in [
+                    "speed limit",
+                    "side_door",
+                    "current station",
+                    "next station",
+                    "passengers_boarding",
+                ]:
                     if k in self._last_beacon_inputs:
                         track_in[k] = self._last_beacon_inputs[k]
             else:
                 # No new beacon, update last known values with current (for first time or same beacon)
-                for k in ["speed limit", "side_door", "current station", "next station", "passengers_boarding"]:
+                for k in [
+                    "speed limit",
+                    "side_door",
+                    "current station",
+                    "next station",
+                    "passengers_boarding",
+                ]:
                     if k in beacon_source:
                         self._last_beacon_inputs[k] = beacon_source[k]
         else:
             # No signal failure - always update last known beacon values
-            for k in ["speed limit", "side_door", "current station", "next station", "passengers_boarding"]:
+            for k in [
+                "speed limit",
+                "side_door",
+                "current station",
+                "next station",
+                "passengers_boarding",
+            ]:
                 if k in beacon_source:
                     self._last_beacon_inputs[k] = beacon_source[k]
 
@@ -593,7 +703,7 @@ class TrainModelUI(tk.Tk):
             set_temperature=ctrl.get("set_temperature", 0.0),
             left_door=ctrl.get("left_door", False),
             right_door=ctrl.get("right_door", False),
-            driver_velocity=ctrl.get("driver_velocity", 0.0)
+            driver_velocity=ctrl.get("driver_velocity", 0.0),
         )
 
         # Passengers -> CTC
@@ -617,7 +727,7 @@ class TrainModelUI(tk.Tk):
                 "current_station": self._last_beacon_inputs.get("current station", ""),
                 "next_stop": self._last_beacon_inputs.get("next station", ""),
                 "station_side": self._last_beacon_inputs.get("side_door", ""),
-                "beacon_read_blocked": beacon_read_blocked  # Signal that we blocked a beacon read
+                "beacon_read_blocked": beacon_read_blocked,  # Signal that we blocked a beacon read
             }
         else:
             # Use current beacon data
@@ -627,62 +737,99 @@ class TrainModelUI(tk.Tk):
                 "current_station": merged_inputs.get("current station", ""),
                 "next_stop": merged_inputs.get("next station", ""),
                 "station_side": merged_inputs.get("side_door", ""),
-                "beacon_read_blocked": beacon_read_blocked  # Signal that we blocked a beacon read
+                "beacon_read_blocked": beacon_read_blocked,  # Signal that we blocked a beacon read
             }
         self.update_train_state(controller_updates)
 
         # UI updates
         self.info_labels["Velocity (mph)"].config(text=f"{outputs['velocity_mph']:.2f}")
-        self.info_labels["Acceleration (ft/s²)"].config(text=f"{outputs['acceleration_ftps2']:.2f}")
+        self.info_labels["Acceleration (ft/s²)"].config(
+            text=f"{outputs['acceleration_ftps2']:.2f}"
+        )
         self.info_labels["Position (yds)"].config(text=f"{outputs['position_yds']:.1f}")
-        self.info_labels["Authority Remaining (yds)"].config(text=f"{outputs['authority_yds']:.1f}")
-        self.info_labels["Train Temperature (°F)"].config(text=f"{outputs['temperature_F']:.1f}")
-        self.info_labels["Set Temperature (°F)"].config(text=f"{ctrl.get('set_temperature', 0.0):.1f}")
-        self.info_labels["Current Station"].config(text=f"{outputs['station_name'] or ''}")
+        self.info_labels["Authority Remaining (yds)"].config(
+            text=f"{outputs['authority_yds']:.1f}"
+        )
+        self.info_labels["Train Temperature (°F)"].config(
+            text=f"{outputs['temperature_F']:.1f}"
+        )
+        self.info_labels["Set Temperature (°F)"].config(
+            text=f"{ctrl.get('set_temperature', 0.0):.1f}"
+        )
+        self.info_labels["Current Station"].config(
+            text=f"{outputs['station_name'] or ''}"
+        )
         self.info_labels["Next Station"].config(text=f"{outputs['next_station'] or ''}")
-        self.info_labels["Speed Limit (mph)"].config(text=f"{outputs['speed_limit']:.0f}")
+        self.info_labels["Speed Limit (mph)"].config(
+            text=f"{outputs['speed_limit']:.0f}"
+        )
 
         self.env_labels["Left Door"].config(
-            text="Open" if outputs['left_door_open'] else "Closed",
-            style="Status.On.TLabel" if outputs['left_door_open'] else "Status.Off.TLabel"
+            text="Open" if outputs["left_door_open"] else "Closed",
+            style=(
+                "Status.On.TLabel" if outputs["left_door_open"] else "Status.Off.TLabel"
+            ),
         )
         self.env_labels["Right Door"].config(
-            text="Open" if outputs['right_door_open'] else "Closed",
-            style="Status.On.TLabel" if outputs['right_door_open'] else "Status.Off.TLabel"
+            text="Open" if outputs["right_door_open"] else "Closed",
+            style=(
+                "Status.On.TLabel"
+                if outputs["right_door_open"]
+                else "Status.Off.TLabel"
+            ),
         )
         self.env_labels["Interior Lights"].config(
             text="On" if ctrl.get("interior_lights") else "Off",
-            style="Status.On.TLabel" if ctrl.get("interior_lights") else "Status.Off.TLabel"
+            style=(
+                "Status.On.TLabel"
+                if ctrl.get("interior_lights")
+                else "Status.Off.TLabel"
+            ),
         )
         self.env_labels["Exterior Lights"].config(
             text="On" if ctrl.get("exterior_lights") else "Off",
-            style="Status.On.TLabel" if ctrl.get("exterior_lights") else "Status.Off.TLabel"
+            style=(
+                "Status.On.TLabel"
+                if ctrl.get("exterior_lights")
+                else "Status.Off.TLabel"
+            ),
         )
 
         # Failure panel statuses
         def set_flag(lbl_key, on):
             self.fail_labels[lbl_key].config(
                 text="On" if on else "Off",
-                style="Status.On.TLabel" if on else "Status.Off.TLabel"
+                style="Status.On.TLabel" if on else "Status.Off.TLabel",
             )
-        set_flag("Engine Failure", bool(merged_inputs.get("train_model_engine_failure", False)))
-        set_flag("Brake Failure", bool(merged_inputs.get("train_model_brake_failure", False)))
-        set_flag("Signal Failure", bool(merged_inputs.get("train_model_signal_failure", False)))
+
+        set_flag(
+            "Engine Failure",
+            bool(merged_inputs.get("train_model_engine_failure", False)),
+        )
+        set_flag(
+            "Brake Failure", bool(merged_inputs.get("train_model_brake_failure", False))
+        )
+        set_flag(
+            "Signal Failure",
+            bool(merged_inputs.get("train_model_signal_failure", False)),
+        )
         set_flag("Emergency Brake", bool(ctrl.get("emergency_brake", False)))
 
         # Update announcements
         try:
-            self.announcement_box.config(state='normal')
+            self.announcement_box.config(state="normal")
             self.announcement_box.delete("1.0", "end")
-            
+
             # Get announcement from controller state
-            announcement = ctrl.get('announcement', '')
+            announcement = ctrl.get("announcement", "")
             if announcement:
                 self.announcement_box.insert("1.0", announcement)
             else:
-                self.announcement_box.insert("1.0", f"Running\nDisembark: {disembarking}")
-            
-            self.announcement_box.config(state='disabled')
+                self.announcement_box.insert(
+                    "1.0", f"Running\nDisembark: {disembarking}"
+                )
+
+            self.announcement_box.config(state="disabled")
         except Exception as e:
             print(f"Error updating announcements: {e}")
 
@@ -714,8 +861,9 @@ class TrainModelUI(tk.Tk):
     def on_close(self):
         self._stop_event.set()
         self.destroy()
+
+
 # Entrypoint
 if __name__ == "__main__":
     app = TrainModelUI()
     app.mainloop()
-
