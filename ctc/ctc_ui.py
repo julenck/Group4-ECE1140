@@ -239,7 +239,7 @@ def manual_dispatch():
     arrival = manual_time_box.get()
 
     ############# write to ctc_ui_inputs.json ##############
-    with open('ctc_ui_inputs.json',"r") as f1: 
+    with open('ctc\\ctc_ui_inputs.json',"r") as f1: 
         data1 = json.load(f1)
     
     data1["Train"] = train
@@ -483,8 +483,7 @@ show_frame(auto_frame)
 auto_button.config(bg="lightgray")
 active_button = auto_button
 
-# Start event loop
-#update_ui()
+# update_ui()
 root.protocol("WM_DELETE_WINDOW", lambda: (observer.stop(), root.destroy()))
 update_active_trains_table()
 root.mainloop()
