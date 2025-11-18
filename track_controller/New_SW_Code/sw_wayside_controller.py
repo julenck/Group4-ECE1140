@@ -29,8 +29,8 @@ class sw_wayside_controller:
         self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
         self.active_plc: str = plc
-        self.ctc_comm_file: str = "track_controller\\New_SW_Code\\ctc_to_wayside.json"
-        self.track_comm_file: str = "track_to_wayside.json"
+        self.ctc_comm_file: str = "ctc_track_controller.json"
+        self.track_comm_file: str = "track_controller\\New_SW_Code\\track_to_wayside.json"
         self.block_status: list = []
         self.detected_faults: dict = {}
         self.input_faults: list = [0]*152*3
@@ -115,7 +115,7 @@ class sw_wayside_controller:
                 self.light_states[18]=signals[6]
                 self.light_states[19]=signals[7]
                 self.gate_states[1] = crossing[0]
-            #self.load_track_outputs()
+            self.load_track_outputs()
             
             if self.running:
                 threading.Timer(0.2, self.run_plc).start()
