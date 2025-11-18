@@ -1179,32 +1179,59 @@ and control Train {self.train_id}."""
         self.destroy()
 
 
-def dispatch_train_from_ctc(train_manager=None):
-    """Helper function to dispatch a train from CTC.
+def dispatch_train_from_ctc(train_manager=None, server_url=None):
+    """Helper function to dispatch a train from CTC without UI.
     
-    This function can be called from the CTC UI to show the train dispatch dialog.
+    First train dispatched will be Hardware controller (Raspberry Pi).
+    All subsequent trains will be Software controllers.
+    
+    This function is called from the CTC UI when "Dispatch Train" is pressed.
     
     Args:
-        train_manager: Optional existing TrainManager instance
+        train_manager: Optional existing TrainManager instance (creates new if None)
+        server_url: Server URL for remote mode (e.g., http://192.168.1.100:5000)
         
     Returns:
-        tuple: (train_id, controller_type) or (None, None) if cancelled
+        tuple: (train_id, controller_type) where controller_type is "hardware_remote" or "software"
     """
-    # Create a temporary root window if needed
-    root = None
-    if not tk._default_root:
-        root = tk.Tk()
-        root.withdraw()
+    # Create or use existing train manager
+    if train_manager is None:
+        train_manager = TrainManager()
     
-    # Show dispatch dialog
-    dialog = TrainDispatchDialog(train_manager=train_manager)
-    dialog.wait_window()
+    # Determine controller type based on how many trains exist
+    existing_train_count = train_manager.get_train_count()
     
-    # Clean up temporary root
-    if root:
-        root.destroy()
+    if existing_train_count == 0:
+        # First train: Hardware controller (Raspberry Pi)
+        controller_type = "hardware_remote"
+        is_remote = True
+        use_hardware = False  # Hardware UI is on Raspberry Pi, not here
+        print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (Raspberry Pi)")
+    else:
+        # Subsequent trains: Software controller
+        controller_type = "software"
+        is_remote = False
+        use_hardware = False
+        print(f"[CTC Dispatch] Dispatching train #{existing_train_count + 1} with Software Controller")
     
-    return dialog.train_id, dialog.selected_type
+    try:
+        # Add train with appropriate controller type
+        train_id = train_manager.add_train(
+            train_specs=None,  # Use default specs
+            create_uis=True,   # Create UI windows
+            use_hardware=use_hardware,
+            is_remote=is_remote,
+            server_url=server_url
+        )
+        
+        print(f"[CTC Dispatch] Train {train_id} dispatched successfully ({controller_type})")
+        return (train_id, controller_type)
+        
+    except Exception as e:
+        print(f"[CTC Dispatch] Error dispatching train: {e}")
+        import traceback
+        traceback.print_exc()
+        return (None, None)
 
 
 # Example usage
