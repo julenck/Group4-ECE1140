@@ -2,8 +2,8 @@
 
 import json
 import os
-from Green_Line_PLC_XandLup import process_states_green_xlup
-from Green_Line_PLC_XandLdown import process_states_green_xldown
+from .Green_Line_PLC_XandLup import process_states_green_xlup
+from .Green_Line_PLC_XandLdown import process_states_green_xldown
 import threading
 
 
@@ -29,7 +29,7 @@ class sw_wayside_controller:
         self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
         self.active_plc: str = plc
-        self.ctc_comm_file: str = "ctc_to_wayside.json"
+        self.ctc_comm_file: str = "track_controller\\New_SW_Code\\ctc_to_wayside.json"
         self.track_comm_file: str = "track_to_wayside.json"
         self.block_status: list = []
         self.detected_faults: dict = {}
@@ -41,6 +41,8 @@ class sw_wayside_controller:
         self.file_lock = threading.Lock()
         self.cmd_trains: dict = {}
         self.idx = 0
+        self.pos_start = 0
+        self.auth_start = 0
 
 
         self.green_order = [0,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,
@@ -70,7 +72,7 @@ class sw_wayside_controller:
             return
         #call plc function
         if self.active_plc != "":
-            self.load_inputs_track()
+            #self.load_inputs_track()
             
             if self.active_plc == "Green_Line_PLC_XandLup.py":
                 occ1 = self.occupied_blocks[0:73]
@@ -113,7 +115,7 @@ class sw_wayside_controller:
                 self.light_states[18]=signals[6]
                 self.light_states[19]=signals[7]
                 self.gate_states[1] = crossing[0]
-            self.load_track_outputs()
+            #self.load_track_outputs()
             
             if self.running:
                 threading.Timer(0.2, self.run_plc).start()
@@ -134,7 +136,9 @@ class sw_wayside_controller:
                     "pos": self.active_trains[train]["Train Position"]
 
                 }
-                    self.pos_start = self.active_trains[train]["Train Position"] 
+                    self.pos_start = self.idx
+                    self.occupied_blocks[self.idx]=0
+                    self.auth_start = self.active_trains[train]["Suggested Authority"]
                 else:
                     self.cmd_trains[train] = {
                         "cmd auth": self.active_trains[train]["Suggested Authority"],
@@ -142,6 +146,7 @@ class sw_wayside_controller:
                         "pos": 0
                     }
                     self.pos_start = 0
+                    self.auth_start = self.active_trains[train]["Suggested Authority"]
                 
                 
 
@@ -168,9 +173,7 @@ class sw_wayside_controller:
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
             self.cmd_trains[cmd_train]["cmd speed"] = speed
-            sug_auth = self.active_trains[cmd_train]["Suggested Authority"]
-
-
+            sug_auth = self.auth_start
             if (self.traveled_enough(sug_auth, auth, self.idx)):
                 self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos, self.idx)
                 self.idx += 1
@@ -217,7 +220,7 @@ class sw_wayside_controller:
 
     def traveled_enough(self, sug_auth: int, cmd_auth: int, idx: int) -> bool:
         if self.pos_start != 0:
-            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.green_order.index(self.pos_start))
+            traveled = sug_auth - cmd_auth + self.dist_to_EOB(self.pos_start)
         else:
             traveled = sug_auth - cmd_auth
         if traveled > self.dist_to_EOB(idx):
