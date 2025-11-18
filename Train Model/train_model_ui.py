@@ -1,6 +1,8 @@
 import os, json, time, tkinter as tk
 from tkinter import ttk
 import threading
+import requests
+import sys
 
 # Import core logic
 from train_model_core import (
@@ -21,10 +23,12 @@ from train_model_core import (
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 class TrainModelUI(tk.Tk):
-    def __init__(self, train_id=None):
+    def __init__(self, train_id=None, server_url=None):
         super().__init__()
         self.train_id = train_id
         title = f"Train {train_id} Model" if train_id else "Train Model"
+        if server_url:
+            title += " (Remote Mode)"
         self.title(title)
         self.geometry("820x560")
         self.minsize(760, 520)
@@ -252,6 +256,21 @@ class TrainModelUI(tk.Tk):
         return all_states.get(f"train_{self.train_id}", {})
 
     def update_train_state(self, updates: dict):
+        # Remote mode: send to server via REST API
+        if self.server_url and self.train_id is not None:
+            try:
+                response = requests.post(
+                    f"{self.server_url}/api/train/{self.train_id}/state",
+                    json=updates,
+                    timeout=2.0
+                )
+                if response.status_code != 200:
+                    print(f"[Train Model] Server update returned {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"[Train Model] Error updating state on server: {e}")
+            return
+        
+        # Local mode: write to file
         all_states = safe_read_json(TRAIN_STATES_FILE)
         if self.train_id is None:
             all_states.update(updates)
@@ -424,6 +443,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
+                "commanded_authority": remaining_authority,  # Send remaining authority
                 "current_station": self._last_beacon_inputs.get("current station", ""),
                 "next_stop": self._last_beacon_inputs.get("next station", ""),
                 "station_side": self._last_beacon_inputs.get("side_door", ""),
@@ -433,6 +453,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
+                "commanded_authority": remaining_authority,  # Send remaining authority
                 "current_station": merged_inputs.get("current station", ""),
                 "next_stop": merged_inputs.get("next station", ""),
                 "station_side": merged_inputs.get("side_door", ""),
@@ -545,5 +566,14 @@ class TrainModelUI(tk.Tk):
         self.destroy()
 
 if __name__ == "__main__":
-    app = TrainModelUI()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Train Model UI")
+    parser.add_argument("--train-id", type=int, default=None, 
+                        help="Train ID for multi-train mode (default: legacy single-train)")
+    parser.add_argument("--server", type=str, default=None,
+                        help="Server URL for remote mode (e.g., http://192.168.1.100:5000)")
+    args = parser.parse_args()
+    
+    app = TrainModelUI(train_id=args.train_id, server_url=args.server)
     app.mainloop()
