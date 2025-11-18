@@ -358,6 +358,10 @@ class LineNetwork:
                 next_block = 99
             elif current == 100 and previous == 99:
                 next_block = 85
+            elif current == 85 and previous == 100:
+                next_block = 84
+            elif current == 85 and previous == 86:
+                next_block = 84
             elif current == 150 and previous == 149:
                 next_block = 28
             elif current == 150 and previous == 28:
@@ -367,151 +371,29 @@ class LineNetwork:
                 switch_target = self.block_manager.get_switch_position(
                     self.line_name, current
                 )
-                print(
-                    f"Train {train_id} at block {current} with switch target {switch_target}"
-                )
-
                 if switch_target != "N/A" and isinstance(switch_target, int):
                     # Switch overrides hard-coded path
-                    next_block = switch_target
+                    if switch_target != previous:
+                        next_block = switch_target
+                    elif switch_target == previous:
+                        if switch_target == current - 1:
+                            next_block = current + 1
+                        elif switch_target == current + 1:
+                            next_block = current - 1
                 else:
-                    # Hard-coded path for Green Line: 0→63→100→85→77→101→150→28→13→1→57→0
-
-                    # Segment 1: 63→100 (going up)
-                    if 63 <= current < 100:
-                        if previous is not None and previous == current + 1:
-                            # Coming from above (shouldn't happen in normal flow)
-                            next_block = current + 1
-                        else:
-                            # Normal: going up
-                            next_block = current + 1
-
-                    # Transition: 100→85
-                    elif current == 100:
-                        if previous is not None and previous == 99:
-                            # Coming from 99, jump to 85
-                            next_block = 85
-                        elif previous is not None and previous == 85:
-                            # Coming from 85 (going backwards), go to 99
-                            next_block = 99
-                        else:
-                            # Default: go to 85
-                            next_block = 85
-
-                    # Segment 2: 85→77 (going down)
-                    elif 77 < current < 85:
-                        if previous is not None and previous == current - 1:
-                            # Coming from below, go up
-                            next_block = current + 1
-                        else:
-                            # Normal: going down
-                            next_block = current - 1
-
-                    # At 85 specifically
-                    elif current == 85:
-                        if previous is not None and previous == 100:
-                            # Coming from 100, go down to 84
-                            next_block = 84
-                        elif previous is not None and previous == 84:
-                            # Coming from 84 (going backwards), go to 100
-                            next_block = 100
-                        else:
-                            # Default: go down
-                            next_block = 84
-
-                    # Transition: 77→101
-                    elif current == 77:
-                        if previous is not None and previous == 78:
-                            # Coming from 78, go to 101
-                            next_block = 101
-                        elif previous is not None and previous == 101:
-                            # Coming from 101 (going backwards), go to 78
-                            next_block = 78
-                        else:
-                            # Default: go to 101
-                            next_block = 101
-
-                    # Segment 3: 101→150 (going up)
-                    elif 101 <= current < 150:
-                        if previous is not None and previous == current + 1:
-                            # Coming from above, go down
-                            next_block = current - 1
-                        else:
-                            # Normal: going up
-                            next_block = current + 1
-
-                    # Transition: 150→28
-                    elif current == 150:
-                        if previous is not None and previous == 149:
-                            # Coming from 149, go to 28
-                            next_block = 28
-                        elif previous is not None and previous == 28:
-                            # Coming from 28 (going backwards), go to 149
-                            next_block = 149
-                        else:
-                            # Default: go to 28
-                            next_block = 28
-
-                    # Segment 4: 28→13 (going down)
-                    elif 13 < current < 28:
-                        if previous is not None and previous == current - 1:
-                            # Coming from below, go up
-                            next_block = current + 1
-                        else:
-                            # Normal: going down
-                            next_block = current - 1
-
-                    # At 28 specifically
-                    elif current == 28:
-                        if previous is not None and previous == 150:
-                            # Coming from 150, go down to 27
-                            next_block = 27
-                        elif previous is not None and previous == 27:
-                            # Coming from 27 (going backwards), go to 150
-                            next_block = 150
-                        else:
-                            # Default: go down
-                            next_block = 27
-
-                    # Transition: 13→1
-                    elif current == 13:
-                        if previous is not None and previous == 14:
-                            # Coming from 14, go to 1
-                            next_block = 1
-                        elif previous is not None and previous == 1:
-                            # Coming from 1 (going backwards), go to 14
-                            next_block = 14
-                        else:
-                            # Default: go to 1
-                            next_block = 1
-
-                    # Segment 5: 1→57 (going up)
-                    elif 1 <= current < 57:
-                        if previous is not None and previous == current + 1:
-                            # Coming from above, go down
-                            next_block = current - 1
-                        else:
-                            # Normal: going up
-                            next_block = current + 1
-
-                    # Transition: 57→0 (yard)
-                    elif current == 57:
-                        if previous is not None and previous == 56:
-                            # Coming from 56, go to yard
-                            next_block = 0
-                        elif previous is not None and previous == 0:
-                            # Coming from yard (shouldn't happen normally)
-                            next_block = 56
-                        else:
-                            # Default: go to yard
-                            next_block = 0
-
+                    if previous is not None and previous == current + 1:
+                        next_block = current - 1
+                    elif previous is not None and previous == current - 1:
+                        next_block = current + 1
                     else:
                         # Should never happen with proper hard-coding
                         print(
                             f"ERROR: Green Line - No path defined for block {current}, previous {previous}"
                         )
                         next_block = current
+            print(
+                f"Train {train_id} at block {current} with next block {next_block} on Green Line."
+            )
 
         # STEP 4: RED LINE LOGIC
         elif self.line_name == "Red":
