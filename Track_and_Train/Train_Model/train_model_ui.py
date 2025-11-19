@@ -39,6 +39,7 @@ class TrainModelUI(ttk.Frame):
         super().__init__(parent)
         self.pack(fill="both", expand=True)
         self.train_id = train_id
+        self.server_url = server_url
         self.train_data_path = TRAIN_DATA_FILE
 
         style = ttk.Style(self)
