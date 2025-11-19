@@ -1,8 +1,8 @@
 import os, json, time, tkinter as tk
 from tkinter import ttk
 import threading
-import requests
 import sys
+import importlib, importlib.util
 
 # Import core logic
 from train_model_core import (
@@ -22,10 +22,17 @@ from train_model_core import (
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# Remove the direct "import requests" and use dynamic import instead
+try:
+    requests = importlib.import_module("requests") if importlib.util.find_spec("requests") else None
+except Exception:
+    requests = None
+
 class TrainModelUI(tk.Tk):
     def __init__(self, train_id=None, server_url=None):
         super().__init__()
         self.train_id = train_id
+        self.server_url = server_url  # persist for remote mode
         title = f"Train {train_id} Model" if train_id else "Train Model"
         if server_url:
             title += " (Remote Mode)"
@@ -202,7 +209,7 @@ class TrainModelUI(tk.Tk):
             else:
                 key = f"train_{self.train_id}"
                 sect = all_states.get(key, {})
-                current = bool
+                current = bool(sect.get(flag_name, False))  # FIX: read actual value
                 sect[flag_name] = not current
                 all_states[key] = sect
                 new_val = sect[flag_name]
@@ -256,8 +263,8 @@ class TrainModelUI(tk.Tk):
         return all_states.get(f"train_{self.train_id}", {})
 
     def update_train_state(self, updates: dict):
-        # Remote mode: send to server via REST API
-        if self.server_url and self.train_id is not None:
+        # Remote mode: only if requests is available
+        if self.server_url and self.train_id is not None and requests is not None:
             try:
                 response = requests.post(
                     f"{self.server_url}/api/train/{self.train_id}/state",
@@ -266,7 +273,7 @@ class TrainModelUI(tk.Tk):
                 )
                 if response.status_code != 200:
                     print(f"[Train Model] Server update returned {response.status_code}")
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 print(f"[Train Model] Error updating state on server: {e}")
             return
         
@@ -439,11 +446,13 @@ class TrainModelUI(tk.Tk):
 
         self.write_train_data(specs_for_write, merged_inputs, td_inputs)
 
+        remaining_authority = outputs["authority_yds"]  # FIX: define before use
+
         if signal_failure_active and self._last_beacon_inputs:
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
-                "commanded_authority": remaining_authority,  # Send remaining authority
+                "commanded_authority": remaining_authority,
                 "current_station": self._last_beacon_inputs.get("current station", ""),
                 "next_stop": self._last_beacon_inputs.get("next station", ""),
                 "station_side": self._last_beacon_inputs.get("side_door", ""),
@@ -453,7 +462,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
-                "commanded_authority": remaining_authority,  # Send remaining authority
+                "commanded_authority": remaining_authority,
                 "current_station": merged_inputs.get("current station", ""),
                 "next_stop": merged_inputs.get("next station", ""),
                 "station_side": merged_inputs.get("side_door", ""),
@@ -484,8 +493,9 @@ class TrainModelUI(tk.Tk):
             text=f"{outputs['station_name'] or ''}"
         )
         self.info_labels["Next Station"].config(text=f"{outputs['next_station'] or ''}")
+        # FIX: speed limit is part of merged inputs, not outputs
         self.info_labels["Speed Limit (mph)"].config(
-            text=f"{outputs['speed_limit']:.0f}"
+            text=f"{merged_inputs.get('speed limit', 0.0):.0f}"
         )
 
         def door_style(open_):
