@@ -24,21 +24,21 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # Remove the direct "import requests" and use dynamic import instead
 try:
-    requests = importlib.import_module("requests") if importlib.util.find_spec("requests") else None
+    requests = (
+        importlib.import_module("requests")
+        if importlib.util.find_spec("requests")
+        else None
+    )
 except Exception:
     requests = None
 
-class TrainModelUI(tk.Tk):
-    def __init__(self, train_id=None, server_url=None):
-        super().__init__()
+
+# NEW
+class TrainModelUI(ttk.Frame):
+    def __init__(self, parent, train_id=None, server_url=None):
+        super().__init__(parent)
+        self.pack(fill="both", expand=True)
         self.train_id = train_id
-        self.server_url = server_url  # persist for remote mode
-        title = f"Train {train_id} Model" if train_id else "Train Model"
-        if server_url:
-            title += " (Remote Mode)"
-        self.title(title)
-        self.geometry("820x560")
-        self.minsize(760, 520)
         self.train_data_path = TRAIN_DATA_FILE
 
         style = ttk.Style(self)
@@ -65,7 +65,7 @@ class TrainModelUI(tk.Tk):
         self._stop_event = threading.Event()
         self._last_mtimes = {"track": 0.0, "ctrl": 0.0, "train_data": 0.0}
         threading.Thread(target=self._watch_files, daemon=True).start()
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        # self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.columnconfigure(0, weight=1)
         left = ttk.Frame(self)
@@ -116,7 +116,9 @@ class TrainModelUI(tk.Tk):
         frame.grid(row=0, column=1, sticky="NSEW", padx=4, pady=4)
         self.env_labels = {}
         # FIX: use enumerate instead of unpacking into (i, key) from a list of strings
-        for i, key in enumerate(["Left Door", "Right Door", "Interior Lights", "Exterior Lights"]):
+        for i, key in enumerate(
+            ["Left Door", "Right Door", "Interior Lights", "Exterior Lights"]
+        ):
             ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(
                 row=i, column=0, sticky="w", padx=8, pady=2
             )
@@ -146,15 +148,15 @@ class TrainModelUI(tk.Tk):
             lbl = ttk.Label(frame, text="Off", style="Status.Off.TLabel")
             lbl.grid(row=row, column=1, sticky="w", padx=4, pady=2)
             self.fail_labels[key] = lbl
-        ttk.Button(frame, text="Toggle Engine", command=self.toggle_engine_failure).grid(
-            row=0, column=2, padx=4, pady=2
-        )
+        ttk.Button(
+            frame, text="Toggle Engine", command=self.toggle_engine_failure
+        ).grid(row=0, column=2, padx=4, pady=2)
         ttk.Button(frame, text="Toggle Brake", command=self.toggle_brake_failure).grid(
             row=1, column=2, padx=4, pady=2
         )
-        ttk.Button(frame, text="Toggle Signal", command=self.toggle_signal_failure).grid(
-            row=2, column=2, padx=4, pady=2
-        )
+        ttk.Button(
+            frame, text="Toggle Signal", command=self.toggle_signal_failure
+        ).grid(row=2, column=2, padx=4, pady=2)
         ttk.Button(
             frame, text="Toggle E‑Brake", command=self.toggle_emergency_brake
         ).grid(row=3, column=2, padx=4, pady=2)
@@ -269,14 +271,16 @@ class TrainModelUI(tk.Tk):
                 response = requests.post(
                     f"{self.server_url}/api/train/{self.train_id}/state",
                     json=updates,
-                    timeout=2.0
+                    timeout=2.0,
                 )
                 if response.status_code != 200:
-                    print(f"[Train Model] Server update returned {response.status_code}")
+                    print(
+                        f"[Train Model] Server update returned {response.status_code}"
+                    )
             except Exception as e:
                 print(f"[Train Model] Error updating state on server: {e}")
             return
-        
+
         # Local mode: write to file
         all_states = safe_read_json(TRAIN_STATES_FILE)
         if self.train_id is None:
@@ -441,7 +445,7 @@ class TrainModelUI(tk.Tk):
         update_track_motion(
             idx,  # train index derived earlier
             outputs["acceleration_ftps2"],
-            outputs["velocity_mph"]
+            outputs["velocity_mph"],
         )
 
         self.write_train_data(specs_for_write, merged_inputs, td_inputs)
@@ -575,15 +579,24 @@ class TrainModelUI(tk.Tk):
         self._stop_event.set()
         self.destroy()
 
+
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Train Model UI")
-    parser.add_argument("--train-id", type=int, default=None, 
-                        help="Train ID for multi-train mode (default: legacy single-train)")
-    parser.add_argument("--server", type=str, default=None,
-                        help="Server URL for remote mode (e.g., http://192.168.1.100:5000)")
+    parser.add_argument(
+        "--train-id",
+        type=int,
+        default=None,
+        help="Train ID for multi-train mode (default: legacy single-train)",
+    )
+    parser.add_argument(
+        "--server",
+        type=str,
+        default=None,
+        help="Server URL for remote mode (e.g., http://192.168.1.100:5000)",
+    )
     args = parser.parse_args()
-    
+
     app = TrainModelUI(train_id=args.train_id, server_url=args.server)
     app.mainloop()

@@ -10,12 +10,12 @@ import os
 import re
 
 
-class TrackModelUI(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Track Model Software Module")
-        self.geometry("1700x950")
-        self.configure(bg="white")
+# NEW
+class TrackModelUI(ttk.Frame):
+    def __init__(self, parent_left, parent_right):
+        super().__init__(parent_left)
+        self.pack(fill="both", expand=True)
+        self.parent_right = parent_right
         self.block_manager = DynamicBlockManager()
         self.line_network = None
         self.visualizer = None
