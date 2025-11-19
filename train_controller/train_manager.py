@@ -93,7 +93,8 @@ class TrainManager:
 
         # Extra paths for train_data.json and track model inputs
         self.train_data_file = os.path.join(train_model_dir, "train_data.json")
-        self.track_model_file = os.path.join(parent_dir, "Track_Model", "track_model_Train_Model.json")
+        # IMPORTANT: seed trains from the Train Model folder's track-to-train file (ignore Track_Model folder)
+        self.track_model_file = os.path.join(train_model_dir, "track_model_Train_Model.json")
         
         # Ensure state file exists
         self._initialize_state_file()
@@ -106,7 +107,7 @@ class TrainManager:
                 json.dump({}, f, indent=4)
     
     def add_train(self, train_specs: dict = None, create_uis: bool = True, 
-                  use_hardware: bool = False, is_remote: bool = False) -> int:
+                  use_hardware: bool = False, is_remote: bool = False, server_url: str = None) -> int:
         """Add a new train (TrainModel + train_controller pair with UIs).
         
         Creates a new TrainModel and train_controller instance, assigns a unique ID,
@@ -119,24 +120,32 @@ class TrainManager:
             create_uis: If True, creates UI windows for this train (default: True).
             use_hardware: If True, uses hardware controller UI instead of software (default: False).
             is_remote: If True, controller runs on Raspberry Pi (not locally).
+            server_url: Server URL for remote mode (e.g., http://192.168.1.100:5000).
         
         Returns:
             The train_id of the newly created train.
         """
         # Import TrainModel and TrainModelUI
         try:
-            from train_model_ui import TrainModel, TrainModelUI
+            # UPDATED: import TrainModel from core, UI separately
+            from train_model_core import TrainModel
+            from train_model_ui import TrainModelUI
         except ImportError:
-            # Try alternate import path
             import importlib.util
-            spec = importlib.util.spec_from_file_location(
+            core_spec = importlib.util.spec_from_file_location(
+                "train_model_core",
+                os.path.join(train_model_dir, "train_model_core.py")
+            )
+            core_module = importlib.util.module_from_spec(core_spec)
+            core_spec.loader.exec_module(core_module)
+            ui_spec = importlib.util.spec_from_file_location(
                 "train_model_ui",
                 os.path.join(train_model_dir, "train_model_ui.py")
             )
-            train_model_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(train_model_module)
-            TrainModel = train_model_module.TrainModel
-            TrainModelUI = train_model_module.TrainModelUI
+            ui_module = importlib.util.module_from_spec(ui_spec)
+            ui_spec.loader.exec_module(ui_module)
+            TrainModel = core_module.TrainModel
+            TrainModelUI = ui_module.TrainModelUI
         
         # Import appropriate controller based on hardware flag
         if use_hardware:
@@ -194,8 +203,8 @@ class TrainManager:
         controller_ui = None
         
         if create_uis:
-            # Create Train Model UI with train_id
-            model_ui = TrainModelUI(train_id=train_id)
+            # Create Train Model UI with train_id and optional server URL for remote mode
+            model_ui = TrainModelUI(train_id=train_id, server_url=server_url if is_remote else None)
             # Position window based on train_id to avoid overlap
             x_offset = 50 + (train_id - 1) * 60
             y_offset = 50 + (train_id - 1) * 60
@@ -256,16 +265,25 @@ class TrainManager:
         
         train_key = f"train_{train_id}"
 
-        # NEW: seed from Track Model so train_states matches train_data
+        # Seed from Train Model/track_model_Train_Model.json (multi-train keyed)
         track = self._safe_read_json(self.track_model_file)
-        block = track.get("block", {})
-        beacon = track.get("beacon", {})
+        block = {}
+        beacon = {}
+        if isinstance(track, dict) and track:
+            keys = sorted([k for k in track.keys() if "_train_" in k])
+            idx = max(0, train_id - 1)
+            if keys:
+                entry = track.get(keys[idx if idx < len(keys) else 0], {})
+                if isinstance(entry, dict):
+                    block = entry.get("block", {}) if isinstance(entry.get("block", {}), dict) else {}
+                    beacon = entry.get("beacon", {}) if isinstance(entry.get("beacon", {}), dict) else {}
 
-        commanded_speed = float(block.get("commanded_speed", 0.0))
-        commanded_authority = float(block.get("commanded_authority", 0.0))
-        speed_limit = float(beacon.get("speed_limit", 0.0))
-        next_stop = beacon.get("next_stop", "")
-        station_side = beacon.get("station_side", "")
+        # Map keys with spaces to controller state fields
+        commanded_speed = float(block.get("commanded speed", 0.0) or 0.0)
+        commanded_authority = float(block.get("commanded authority", 0.0) or 0.0)
+        speed_limit = float(beacon.get("speed limit", 0.0) or 0.0)
+        next_stop = beacon.get("next station", "") or ""
+        station_side = beacon.get("side_door", "") or ""
 
         # Default state for new train (matches track inputs)
         all_states[train_key] = {
@@ -276,30 +294,29 @@ class TrainManager:
             "train_velocity": 0.0,
             "next_stop": next_stop,
             "station_side": station_side,
-            "train_temperature": 0.0,
+            "train_temperature": 70.0,
             "train_model_engine_failure": False,
             "train_model_signal_failure": False,
             "train_model_brake_failure": False,
-            "train_controller_engine_failure": False,
-            "train_controller_signal_failure": False,
-            "train_controller_brake_failure": False,
             "manual_mode": False,
             "driver_velocity": 0.0,
             "service_brake": False,
             "right_door": False,
             "left_door": False,
-            "interior_lights": False,
-            "exterior_lights": False,
-            "set_temperature": 0.0,
+            "interior_lights": True,
+            "exterior_lights": True,
+            "set_temperature": 70.0,
             "temperature_up": False,
             "temperature_down": False,
             "announcement": "",
             "announce_pressed": False,
             "emergency_brake": False,
-            "kp": 0,
-            "ki": 0,
+            "kp": 1500.0,
+            "ki": 50.0,
             "engineering_panel_locked": False,
-            "power_command": 0.0
+            "power_command": 0.0,
+            "beacon_read_blocked": False,
+            "current_station": next_stop
         }
         
         # Write back to file
@@ -327,33 +344,29 @@ class TrainManager:
         track = self._safe_read_json(self.track_model_file)
         train_data = self._safe_read_json(self.train_data_file)
 
-        block = track.get("block", {})
-        beacon = track.get("beacon", {})
-        train_sec = track.get("train", {})
+        # Choose entry by sorted *_train_* keys and index
+        block = {}
+        beacon = {}
+        if isinstance(track, dict) and track:
+            keys = sorted([k for k in track.keys() if "_train_" in k])
+            idx = index if 0 <= index < len(keys) else 0
+            if keys:
+                entry = track.get(keys[idx], {})
+                if isinstance(entry, dict):
+                    block = entry.get("block", {}) if isinstance(entry.get("block", {}), dict) else {}
+                    beacon = entry.get("beacon", {}) if isinstance(entry.get("beacon", {}), dict) else {}
 
-        def pick(lst, idx, default=0):
-            try:
-                return lst[idx]
-            except Exception:
-                return default
-
-        # NEW: support scalar values and underscore keys from track JSON
-        def pick_val(val, idx, default=0.0):
-            if isinstance(val, list):
-                return pick(val, idx, default)
-            return val if val is not None else default
-
-        cmd_speed = float(pick_val(block.get("commanded_speed", 0.0), index, 0.0))
-        cmd_auth = float(pick_val(block.get("commanded_authority", 0.0), index, 0.0))
-        speed_lim = float(beacon.get("speed_limit", 0.0))
+        cmd_speed = float(block.get("commanded speed", 0.0) or 0.0)
+        cmd_auth = float(block.get("commanded authority", 0.0) or 0.0)
+        speed_lim = float(beacon.get("speed limit", 0.0) or 0.0)
         inputs = {
             "commanded speed": cmd_speed,
             "commanded authority": cmd_auth,
             "speed limit": speed_lim,
-            "current station": beacon.get("current_station", ""),
-            "next station": beacon.get("next_stop", ""),
-            "side_door": beacon.get("station_side", ""),
-            "passengers_boarding": int(pick(train_sec.get("passengers_boarding_", []) or [], index, 0)),
+            "current station": beacon.get("current station", "") or "",
+            "next station": beacon.get("next station", "") or "",
+            "side_door": beacon.get("side_door", "") or "",
+            "passengers_boarding": int(beacon.get("passengers_boarding", 0) or 0),
             # Train Model failure flags
             "train_model_engine_failure": False,
             "train_model_signal_failure": False,
@@ -389,7 +402,7 @@ class TrainManager:
                 "next_station": inputs["next station"],
                 "left_door_open": False,
                 "right_door_open": False,
-                "temperature_F": 0.0,
+                "temperature_F": 70.0,
                 "door_side": inputs["side_door"],
                 "passengers_onboard": 0,
                 "passengers_boarding": inputs["passengers_boarding"],
@@ -398,6 +411,19 @@ class TrainManager:
         }
 
         self._safe_write_json(self.train_data_file, train_data)
+
+    def _remove_train_data_entry(self, train_id: int):
+        """Delete the per-train section from Train Model/train_data.json."""
+        try:
+            data = self._safe_read_json(self.train_data_file)
+            if not isinstance(data, dict):
+                return
+            key = f"train_{train_id}"
+            if key in data:
+                del data[key]
+                self._safe_write_json(self.train_data_file, data)
+        except Exception as e:
+            print(f"Warning: failed to remove train_{train_id} from train_data.json: {e}")
 
     def _update_train_data_outputs(self, train_id: int, outputs: dict, state: dict):
         """Update the per-train outputs in Train Model/train_data.json with latest model values."""
@@ -450,14 +476,13 @@ class TrainManager:
                 train_pair.model_ui.destroy()
                 print(f"Train {train_id} Model UI closed")
             except:
-                pass  # Window may already be closed
-        
+                pass
         if train_pair.controller_ui:
             try:
                 train_pair.controller_ui.destroy()
                 print(f"Train {train_id} Controller UI closed")
             except:
-                pass  # Window may already be closed
+                pass
         
         # Remove from dictionary
         del self.trains[train_id]
@@ -465,13 +490,17 @@ class TrainManager:
         # Remove from state file
         with open(self.state_file, 'r') as f:
             all_states = json.load(f)
-        
         train_key = f"train_{train_id}"
         if train_key in all_states:
             del all_states[train_key]
-        
         with open(self.state_file, 'w') as f:
             json.dump(all_states, f, indent=4)
+
+        # Remove matching entry from Train Model/train_data.json
+        try:
+            self._remove_train_data_entry(train_id)
+        except Exception as e:
+            print(f"Warning: failed to sync train_data.json on removal for train {train_id}: {e}")
         
         print(f"Train {train_id} removed successfully")
         return True
@@ -789,12 +818,7 @@ class TrainManagerUI(tk.Tk):
                 print(f"Train {train_id} created with SOFTWARE controller")
                 
             elif controller_type == "hardware_remote":
-                train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True)
-                self.update_train_list()
-                self.update_status(f"Train {train_id} added - START CONTROLLER ON RASPBERRY PI")
-                print(f"Train {train_id} created - REMOTE hardware controller")
-                
-                # Show instructions popup
+                # Get server IP for remote mode
                 import socket
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -804,6 +828,14 @@ class TrainManagerUI(tk.Tk):
                 except:
                     server_ip = "localhost"
                 
+                server_url = f"http://{server_ip}:5000"
+                
+                train_id = self.manager.add_train(create_uis=True, use_hardware=True, is_remote=True, server_url=server_url)
+                self.update_train_list()
+                self.update_status(f"Train {train_id} added - START CONTROLLER ON RASPBERRY PI")
+                print(f"Train {train_id} created - REMOTE hardware controller")
+                
+                # Show instructions popup
                 msg = f"""Train {train_id} Model created on this server!
 
 Hardware Controller must run on Raspberry Pi.
@@ -812,7 +844,7 @@ Hardware Controller must run on Raspberry Pi.
 On Raspberry Pi, run:
 
 cd train_controller/ui
-python train_controller_hw_ui.py --train-id {train_id} --server http://{server_ip}:5000
+python train_controller_hw_ui.py --train-id {train_id} --server {server_url}
 
 ═══════════════════════════════════════
 
@@ -1147,32 +1179,59 @@ and control Train {self.train_id}."""
         self.destroy()
 
 
-def dispatch_train_from_ctc(train_manager=None):
-    """Helper function to dispatch a train from CTC.
+def dispatch_train_from_ctc(train_manager=None, server_url=None):
+    """Helper function to dispatch a train from CTC without UI.
     
-    This function can be called from the CTC UI to show the train dispatch dialog.
+    First train dispatched will be Hardware controller (Raspberry Pi).
+    All subsequent trains will be Software controllers.
+    
+    This function is called from the CTC UI when "Dispatch Train" is pressed.
     
     Args:
-        train_manager: Optional existing TrainManager instance
+        train_manager: Optional existing TrainManager instance (creates new if None)
+        server_url: Server URL for remote mode (e.g., http://192.168.1.100:5000)
         
     Returns:
-        tuple: (train_id, controller_type) or (None, None) if cancelled
+        tuple: (train_id, controller_type) where controller_type is "hardware_remote" or "software"
     """
-    # Create a temporary root window if needed
-    root = None
-    if not tk._default_root:
-        root = tk.Tk()
-        root.withdraw()
+    # Create or use existing train manager
+    if train_manager is None:
+        train_manager = TrainManager()
     
-    # Show dispatch dialog
-    dialog = TrainDispatchDialog(train_manager=train_manager)
-    dialog.wait_window()
+    # Determine controller type based on how many trains exist
+    existing_train_count = train_manager.get_train_count()
     
-    # Clean up temporary root
-    if root:
-        root.destroy()
+    if existing_train_count == 0:
+        # First train: Hardware controller (Raspberry Pi)
+        controller_type = "hardware_remote"
+        is_remote = True
+        use_hardware = False  # Hardware UI is on Raspberry Pi, not here
+        print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (Raspberry Pi)")
+    else:
+        # Subsequent trains: Software controller
+        controller_type = "software"
+        is_remote = False
+        use_hardware = False
+        print(f"[CTC Dispatch] Dispatching train #{existing_train_count + 1} with Software Controller")
     
-    return dialog.train_id, dialog.selected_type
+    try:
+        # Add train with appropriate controller type
+        train_id = train_manager.add_train(
+            train_specs=None,  # Use default specs
+            create_uis=True,   # Create UI windows
+            use_hardware=use_hardware,
+            is_remote=is_remote,
+            server_url=server_url
+        )
+        
+        print(f"[CTC Dispatch] Train {train_id} dispatched successfully ({controller_type})")
+        return (train_id, controller_type)
+        
+    except Exception as e:
+        print(f"[CTC Dispatch] Error dispatching train: {e}")
+        import traceback
+        traceback.print_exc()
+        return (None, None)
 
 
 # Example usage

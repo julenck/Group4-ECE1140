@@ -12,9 +12,9 @@
         "crew_count": 2
     },
     "inputs": {
-        "commanded speed": 40.0,
-        "commanded authority": 0.0,
-        "speed limit": 30.0,
+        "commanded speed": 40,
+        "commanded authority": 0,
+        "speed limit": 30,
         "current station": "Central Station",
         "next station": "Park Street",
         "side_door": "Right",
@@ -22,13 +22,16 @@
         "engine_failure": false,
         "signal_failure": false,
         "brake_failure": false,
-        "emergency_brake": false
+        "emergency_brake": false,
+        "train_model_engine_failure": false,
+        "train_model_signal_failure": false,
+        "train_model_brake_failure": false
     },
     "outputs": {
         "velocity_mph": 0.0,
         "acceleration_ftps2": 0.0,
         "position_yds": 0.0,
-        "authority_yds": 0.0,
+        "authority_yds": 10.0,
         "temperature_F": 70.0
     }
 }
