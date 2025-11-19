@@ -1,0 +1,9 @@
+{
+    "train_velocity": 0.0,
+    "train_temperature": 59.5,
+    "commanded_authority": 0.0,
+    "current_station": "Central Station",
+    "next_stop": "Park Street",
+    "station_side": "Right",
+    "beacon_read_blocked": false
+}
