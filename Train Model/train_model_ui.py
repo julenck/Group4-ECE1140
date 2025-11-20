@@ -26,6 +26,7 @@ class TrainModelUI(tk.Tk):
     def __init__(self, train_id=None, server_url=None):
         super().__init__()
         self.train_id = train_id
+        self.server_url = server_url
         title = f"Train {train_id} Model" if train_id else "Train Model"
         if server_url:
             title += " (Remote Mode)"
@@ -443,7 +444,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
-                "commanded_authority": remaining_authority,  # Send remaining authority
+                "commanded_authority": outputs["authority_yds"],  # Send remaining authority
                 "current_station": self._last_beacon_inputs.get("current station", ""),
                 "next_stop": self._last_beacon_inputs.get("next station", ""),
                 "station_side": self._last_beacon_inputs.get("side_door", ""),
@@ -453,7 +454,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
-                "commanded_authority": remaining_authority,  # Send remaining authority
+                "commanded_authority": outputs["authority_yds"],  # Send remaining authority
                 "current_station": merged_inputs.get("current station", ""),
                 "next_stop": merged_inputs.get("next station", ""),
                 "station_side": merged_inputs.get("side_door", ""),

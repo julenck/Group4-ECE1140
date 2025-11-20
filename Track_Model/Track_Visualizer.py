@@ -3,6 +3,7 @@ Railway Track Visualizer - VISUALIZATION ONLY
 Uses skeleton paths from TrackDiagramParser
 """
 
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pandas as pd
@@ -113,6 +114,7 @@ class RailwayDiagram:
 
         self.trains = {}
         self.train_icons = {}
+        self.train_photos = {}  # Store PhotoImage references to prevent garbage collection
 
         self.last_clicked_block = None
         self.track_data = {}
@@ -1242,13 +1244,11 @@ class RailwayDiagram:
             from PIL import Image, ImageTk
 
             # Load and resize train image - NO COLORING
-            train_image = Image.open("train.png").convert("RGBA")
+            train_image_path = os.path.join(os.path.dirname(__file__), "train.png")
+            train_image = Image.open(train_image_path).convert("RGBA")
             train_image = train_image.resize((30, 30), Image.Resampling.LANCZOS)
 
             photo = ImageTk.PhotoImage(train_image)
-
-            if not hasattr(self, "train_photos"):
-                self.train_photos = {}
             self.train_photos[train_id] = photo
 
         except Exception as e:
@@ -1282,9 +1282,10 @@ class RailwayDiagram:
             print(f"WARNING: Yard position not found for {line}! Using default.")
 
         # Draw the train icon
-        if photo:
+        if train_id in self.train_photos:
+            # Use the stored photo reference to prevent garbage collection
             icon_id = self.canvas.create_image(
-                x, y, image=photo, tags=f"train_{train_id}"
+                x, y, image=self.train_photos[train_id], tags=f"train_{train_id}"
             )
         else:
             # Fallback to star if image fails - use same color for all
@@ -1305,7 +1306,8 @@ class RailwayDiagram:
         self.canvas.tag_bind(icon_id, "<Leave>", lambda event: self.hide_train_info())
 
         print(f"Train {train_id} created at yard (block {starting_block})")
-        self.animate_train_step(train_id)
+        # Don't auto-animate - CTC will control position
+        # self.animate_train_step(train_id)
 
     def animate_train_step(self, train_id):
         """Move the specified train to its next block."""
@@ -1377,3 +1379,45 @@ class RailwayDiagram:
         if hasattr(self, "hover_label") and self.hover_label:
             self.hover_label.destroy()
             self.hover_label = None
+
+    def update_train_position(self, train_id, block_id):
+        """Update train position based on CTC data (block_id like 'G65')."""
+        if train_id not in self.trains:
+            return
+        
+        # Extract numeric block number from block_id (e.g., "G65" -> 65)
+        block_num = int(''.join(filter(str.isdigit, block_id)))
+        
+        train = self.trains[train_id]
+        line = train["line"]
+        
+        # Determine which position dictionary to use
+        if line == "Green" or line == "Green Line":
+            positions = self.all_positions_green
+        elif line == "Red" or line == "Red Line":
+            positions = self.all_positions_red
+        else:
+            return
+        
+        # Get position for the block
+        if block_num in positions:
+            x, y = positions[block_num]
+            
+            # Move the train icon to the new position
+            if train_id in self.train_icons:
+                self.canvas.coords(self.train_icons[train_id], x, y)
+            
+            # Note: previous_block and current_block are managed by track_model_UI
+            # Don't update them here to avoid conflicts
+            
+            # Highlight the current block
+            if self.current_line and self.current_line in self.track_data:
+                df = self.track_data[self.current_line]
+                for _, row in df.iterrows():
+                    if row.get("Block Number") == block_num:
+                        section = str(row.get("Section", "")).strip()
+                        block_name = f"{section}{block_num}"
+                        self.highlight_block(block_name)
+                        break
+
+

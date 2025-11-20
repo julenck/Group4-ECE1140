@@ -305,7 +305,7 @@ class sw_wayside_controller_ui(tk.Tk):
         scroller.pack(side="right", fill="y")
 
 
-        def on_scroll(self, event):
+        def on_scroll(event):
             event.widget.yview_scroll(int(-1*(event.delta/120)), "units")
         canvas.bind_all("<MouseWheel>", on_scroll)
 
@@ -758,7 +758,7 @@ class sw_wayside_controller_ui(tk.Tk):
         return switch_state, light_state, gate_state, failure
 
 
-"""
+
 def main():
     # Create first UI window (still a Tk)
     vital1 = sw_vital_check.sw_vital_check()
@@ -784,5 +784,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-"""

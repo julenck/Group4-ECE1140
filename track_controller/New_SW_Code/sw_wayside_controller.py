@@ -2,9 +2,20 @@
 
 import json
 import os
+import sys
+import time
 from .Green_Line_PLC_XandLup import process_states_green_xlup
 from .Green_Line_PLC_XandLdown import process_states_green_xldown
 import threading
+
+# Add parent directories for time_controller
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+grandparent_dir = os.path.dirname(parent_dir)
+if grandparent_dir not in sys.path:
+    sys.path.append(grandparent_dir)
+
+from time_controller import get_time_controller
 
 
 class sw_wayside_controller:
@@ -21,6 +32,10 @@ class sw_wayside_controller:
         self.speed_result: bool = False
         self.close_result: bool = False
         self.status_result: bool = False
+        
+        # Get time controller for synchronized updates
+        self.time_controller = get_time_controller()
+        
         self.active_trains: dict = {}
         self.occupied_blocks: list = [0]*152
         self.light_states: list = [0]*24
@@ -29,8 +44,8 @@ class sw_wayside_controller:
         self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
         self.active_plc: str = plc
-        self.ctc_comm_file: str = "ctc_track_controller.json"
-        self.track_comm_file: str = "track_controller\\New_SW_Code\\track_to_wayside.json"
+        self.ctc_comm_file: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "ctc_track_controller.json")
+        self.track_comm_file: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Track_Model", "track_model_Track_controller.json")
         self.block_status: list = []
         self.detected_faults: dict = {}
         self.input_faults: list = [0]*152*3
@@ -72,7 +87,8 @@ class sw_wayside_controller:
             return
         #call plc function
         if self.active_plc != "":
-            #self.load_inputs_track()
+            # Load occupancy from track model
+            self.load_inputs_track()
             
             if self.active_plc == "Green_Line_PLC_XandLup.py":
                 occ1 = self.occupied_blocks[0:73]
@@ -118,7 +134,10 @@ class sw_wayside_controller:
             self.load_track_outputs()
             
             if self.running:
-                threading.Timer(0.2, self.run_plc).start()
+                # Get synchronized interval and cap for PLC updates
+                interval_s = self.time_controller.get_update_interval_ms() / 1000.0
+                interval_s = max(0.1, min(interval_s, 1.0))  # Cap between 0.1s and 1.0s
+                threading.Timer(interval_s, self.run_plc).start()
 
 
     def run_trains(self):      
@@ -130,23 +149,60 @@ class sw_wayside_controller:
         for train in self.active_trains:
             if train not in self.cmd_trains and self.active_trains[train]["Active"]==1:
                 if self.active_trains[train]["Train Position"] != 0:
+                    train_pos = self.active_trains[train]["Train Position"]
+                    # Find the index of this position in green_order
+                    try:
+                        pos_idx = self.green_order.index(train_pos)
+                    except ValueError:
+                        pos_idx = 0  # Default to yard if position not found
+                    
                     self.cmd_trains[train] = {
-                    "cmd auth": self.active_trains[train]["Suggested Authority"],
-                    "cmd speed": self.active_trains[train]["Suggested Speed"],
-                    "pos": self.active_trains[train]["Train Position"]
-
-                }
-                    self.pos_start = self.idx
-                    self.occupied_blocks[self.idx]=0
+                        "cmd auth": self.active_trains[train]["Suggested Authority"],
+                        "cmd speed": self.active_trains[train]["Suggested Speed"],
+                        "pos": train_pos,
+                        "idx": pos_idx,  # Store index per train
+                        "pos_start": pos_idx,  # Store starting position index per train
+                        "auth_start": self.active_trains[train]["Suggested Authority"],
+                        "last_update_time": time.time(),  # Track last update for time-based movement
+                        "distance_traveled_ft": 0.0  # Accumulated distance in feet
+                    }
+                    print(f"[Wayside] Added {train} to cmd_trains: pos={train_pos}, idx={pos_idx}, auth={self.active_trains[train]['Suggested Authority']}, speed={self.active_trains[train]['Suggested Speed']}")
+                    self.idx = pos_idx
+                    self.pos_start = pos_idx
                     self.auth_start = self.active_trains[train]["Suggested Authority"]
+                    
+                    # Write initial position to track model so it knows where train starts
+                    self.write_initial_train_position_to_track(train, train_pos)
                 else:
                     self.cmd_trains[train] = {
                         "cmd auth": self.active_trains[train]["Suggested Authority"],
                         "cmd speed": self.active_trains[train]["Suggested Speed"],
-                        "pos": 0
+                        "pos": 0,
+                        "idx": 0,  # Store index per train
+                        "pos_start": 0,  # Store starting position index per train
+                        "auth_start": self.active_trains[train]["Suggested Authority"],
+                        "last_update_time": time.time(),
+                        "distance_traveled_ft": 0.0
                     }
+                    self.idx = 0
                     self.pos_start = 0
                     self.auth_start = self.active_trains[train]["Suggested Authority"]
+            elif train in self.cmd_trains and self.active_trains[train]["Active"] == 1:
+                # Update authority and speed if CTC has sent new values
+                new_auth = self.active_trains[train]["Suggested Authority"]
+                new_speed = self.active_trains[train]["Suggested Speed"]
+                current_auth = self.cmd_trains[train]["cmd auth"]
+                auth_start = self.cmd_trains[train]["auth_start"]
+                
+                # If CTC sent new authority (different from what we started with), update it
+                if new_auth != auth_start and new_auth > current_auth:
+                    print(f"[Wayside] {train} received new authority: {new_auth} (current: {current_auth}, started: {auth_start})")
+                    self.cmd_trains[train]["cmd auth"] = new_auth
+                    self.cmd_trains[train]["auth_start"] = new_auth
+                    self.cmd_trains[train]["pos_start"] = self.cmd_trains[train]["idx"]  # Reset starting position
+                
+                # Always update speed
+                self.cmd_trains[train]["cmd speed"] = new_speed
                 
                 
 
@@ -156,41 +212,68 @@ class sw_wayside_controller:
             speed = self.cmd_trains[cmd_train]["cmd speed"]
             pos = self.cmd_trains[cmd_train]["pos"]
             
+            print(f"[Wayside] {cmd_train}: pos={pos}, auth={auth}, speed={speed}")
+            
+            # Update position based on time and speed
+            current_time = time.time()
+            last_update = self.cmd_trains[cmd_train]["last_update_time"]
+            elapsed_time_hours = (current_time - last_update) / 3600.0  # Convert seconds to hours
+            
+            # Calculate distance traveled: distance = speed (mph) * time (hours) * 5280 (ft/mile)
+            if speed > 0 and auth > 0:
+                distance_traveled_ft = speed * elapsed_time_hours * 5280.0
+                self.cmd_trains[cmd_train]["distance_traveled_ft"] += distance_traveled_ft
+                
+                # Get current block length
+                current_idx = self.cmd_trains[cmd_train]["idx"]
+                block_length_ft = self.get_block_length(current_idx)
+                
+                # If we've traveled past the current block, move to next
+                if self.cmd_trains[cmd_train]["distance_traveled_ft"] >= block_length_ft:
+                    if current_idx < len(self.green_order) - 1:
+                        # Move to next block
+                        new_idx = current_idx + 1
+                        new_pos = self.green_order[new_idx]
+                        self.cmd_trains[cmd_train]["idx"] = new_idx
+                        self.cmd_trains[cmd_train]["pos"] = new_pos
+                        self.cmd_trains[cmd_train]["distance_traveled_ft"] = 0.0  # Reset distance for new block
+                        print(f"[Wayside] {cmd_train} advanced to block {new_pos}")
+                        
+                        # Update position in track model JSON
+                        self.update_train_position_in_track(cmd_train, new_pos)
+            
+            self.cmd_trains[cmd_train]["last_update_time"] = current_time
             
             auth = auth - speed
             
             if auth <= 0:
                 auth = 0
-                
-                #set train to inactive
-                with self.file_lock:
-                    with open(self.ctc_comm_file,'r') as f:
-                        data = json.load(f)
-                    with open(self.ctc_comm_file,'w') as f:
-                        data["Trains"][cmd_train]["Active"] = 0
-                        json.dump(data,f,indent=4)
-                ttr.append(cmd_train)
+                print(f"[Wayside] {cmd_train} authority depleted, train will stop until CTC sends new authority")
+                # Don't set train inactive - let it wait for CTC to send new authority
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
             self.cmd_trains[cmd_train]["cmd speed"] = speed
-            sug_auth = self.auth_start
-            if (self.traveled_enough(sug_auth, auth, self.idx)):
-                self.cmd_trains[cmd_train]["pos"] = self.get_next_block(pos, self.idx)
-                self.idx += 1
-
+            
+            # Position is now updated by track model based on commanded speed/authority
+            # We just send the position we receive from track model to CTC
 
             with self.file_lock:
-                with open(self.ctc_comm_file,'r') as f:
-                    data = json.load(f)
-                with open(self.ctc_comm_file,'w') as f:
-                    data["Trains"][cmd_train]["Train Position"] = self.cmd_trains[cmd_train]["pos"]
-                    json.dump(data,f,indent=4)
+                try:
+                    with open(self.ctc_comm_file,'r') as f:
+                        data = json.load(f)
+                    with open(self.ctc_comm_file,'w') as f:
+                        data["Trains"][cmd_train]["Train Position"] = self.cmd_trains[cmd_train]["pos"]
+                        json.dump(data,f,indent=4)
+                except (json.JSONDecodeError, FileNotFoundError):
+                    pass
 
         for tr in ttr:
             self.cmd_trains.pop(tr)
 
         if self.running:
-            threading.Timer(1.0, self.run_trains).start()
+            # Get synchronized interval
+            interval_s = self.time_controller.get_update_interval_ms() / 1000.0
+            threading.Timer(interval_s, self.run_trains).start()
 
 
     def dist_to_EOB(self, idx: int) -> int:
@@ -227,19 +310,29 @@ class sw_wayside_controller:
             return True
         else:
             return False
+    
+    def traveled_enough_per_train(self, sug_auth: int, cmd_auth: int, idx: int, pos_start: int) -> bool:
+        """Check if train has traveled enough to move to next block."""
+        if pos_start != 0:
+            traveled = sug_auth - cmd_auth + self.dist_to_EOB(pos_start)
+        else:
+            traveled = sug_auth - cmd_auth
+        
+        dist_to_eob = self.dist_to_EOB(idx)
+        result = traveled >= dist_to_eob  # Changed from > to >= to handle exact match
+        
+        print(f"[Wayside traveled_enough] sug_auth={sug_auth}, cmd_auth={cmd_auth}, idx={idx}, pos_start={pos_start}")
+        print(f"[Wayside traveled_enough] traveled={traveled}, dist_to_EOB={dist_to_eob}, result={result}")
+        
+        return result
 
     def get_next_block(self, current_block: int, block_idx: int):
-
-        self.occupied_blocks[current_block] = 0
-        
-
-        
+        # Don't modify occupancy here - track model manages it based on train position
         
         if current_block == 151:
             self.idx = 0
             return -1
         else:
-            self.occupied_blocks[self.green_order[block_idx + 1]] = 1
             return self.green_order[block_idx + 1]
 
 
@@ -270,36 +363,65 @@ class sw_wayside_controller:
 
     def load_inputs_ctc(self):
         with self.file_lock:
-            with open(self.ctc_comm_file, 'r') as f:
-                data = json.load(f)
-                self.active_trains = data.get("Trains", {})
-                self.closed_blocks = data.get("Block Closure", [])
-                self.ctc_sugg_switches = data.get("Switch Suggestion", [])
+            try:
+                with open(self.ctc_comm_file, 'r') as f:
+                    data = json.load(f)
+                    self.active_trains = data.get("Trains", {})
+                    self.closed_blocks = data.get("Block Closure", [])
+                    self.ctc_sugg_switches = data.get("Switch Suggestion", [])
+            except (json.JSONDecodeError, FileNotFoundError):
+                return
             
             
 
     def load_inputs_track(self):
         #read track to wayside json file
         with self.file_lock:
-            with open(self.track_comm_file, 'r') as f:
-                data = json.load(f)
-                #self.occupied_blocks = data.get("G-Occupancy", [0]*152)
-                self.input_faults = data.get("G-Failures", [0]*152*3)
+            try:
+                with open(self.track_comm_file, 'r') as f:
+                    data = json.load(f)
+                    self.occupied_blocks = data.get("G-Occupancy", [0]*152)
+                    self.input_faults = data.get("G-Failures", [0]*152*3)
+                    
+                    # Read train positions from track model
+                    # Track model generates positions based on commanded speed/authority
+                    train_positions = data.get("G-Train Positions", [0,0,0,0,0])
+                    
+                    # Update positions for trains in cmd_trains
+                    for i, train_name in enumerate(["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"]):
+                        if train_name in self.cmd_trains and i < len(train_positions):
+                            new_pos = train_positions[i]
+                            if new_pos > 0 and new_pos != self.cmd_trains[train_name]["pos"]:
+                                # Update position and index
+                                try:
+                                    new_idx = self.green_order.index(new_pos)
+                                    old_pos = self.cmd_trains[train_name]["pos"]
+                                    self.cmd_trains[train_name]["pos"] = new_pos
+                                    self.cmd_trains[train_name]["idx"] = new_idx
+                                    print(f"[Wayside] Track Model moved {train_name} from block {old_pos} to {new_pos}")
+                                except ValueError:
+                                    pass  # Position not in green_order
+                    
+            except (json.JSONDecodeError, FileNotFoundError):
+                # If file is empty or corrupted, skip this update cycle
+                return
         
      
     def load_track_outputs(self):
         with self.file_lock:
-            with open(self.track_comm_file, 'r') as f:
-                data = json.load(f)
+            try:
+                with open(self.track_comm_file, 'r') as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError):
+                # If file is empty or corrupted, skip this update cycle
+                return
 
-            # Update values
-
-
+            # Update switch, light, and gate states
             data["G-switches"] = self.switch_states
             data["G-lights"] = self.light_states
             data["G-gates"] = self.gate_states
 
-            data["G-Occupancy"] = self.occupied_blocks
+            # Don't overwrite occupancy - track model manages it based on train positions
 
             # for i in range (5):
                 #     try:
@@ -330,6 +452,77 @@ class sw_wayside_controller:
     def load_ctc_outputs(self):
         pass
 
+    def get_block_length(self, idx: int) -> float:
+        """Get the length of a block in feet based on its index in green_order."""
+        # Block lengths in feet (based on dist_to_EOB cumulative distances)
+        block_lengths = [100, 100, 100, 200, 200, 100, 100, 100, 100, 100, 100, 100, 100, 100, 
+                        300, 300, 300, 300, 300, 300, 300, 300, 300, 100, 86.6, 
+                        100, 75, 75, 75, 75, 75, 75, 75, 75, 
+                        75, 75, 75, 75, 300, 300, 300, 300, 300, 
+                        300, 300, 300, 300, 75, 35, 100, 100, 80, 
+                        100, 100, 90, 100, 100, 100, 100, 100, 100, 
+                        162, 100, 100, 50, 50, 40, 50, 50, 
+                        50, 50, 50, 50, 50, 50, 50, 
+                        50, 50, 50, 50, 50, 50, 50, 
+                        50, 50, 50, 50, 50, 50, 50, 
+                        50, 50, 184, 40, 35, 50, 50, 100, 
+                        200, 300, 300, 300, 300, 150, 150, 150, 
+                        150, 150, 150, 150, 150, 100, 100, 100, 
+                        100, 100, 100, 100, 100, 100, 100, 100, 
+                        100, 150, 150, 150, 150, 150, 150, 150, 
+                        150, 300, 300, 300, 300, 200, 100, 50, 
+                        50, 50, 50, 50, 50, 50, 50, 
+                        50, 50, 50, 50, 50, 50, 50, 
+                        50, 50, 50, 50, 50, 50, 50, 
+                        50, 50, 50, 50, 50, 50, 50, 
+                        50, 50, 50, 100]
+        
+        if 0 <= idx < len(block_lengths):
+            return block_lengths[idx]
+        return 100.0  # Default to 100 ft if index out of range
+    
+    def update_train_position_in_track(self, train_name: str, position: int):
+        """Update train position in track model JSON."""
+        with self.file_lock:
+            try:
+                with open(self.track_comm_file, 'r') as f:
+                    data = json.load(f)
+                
+                # Update position for this train
+                train_num = int(train_name.split()[-1]) - 1  # "Train 1" -> 0
+                if "G-Train Positions" in data and 0 <= train_num < len(data["G-Train Positions"]):
+                    data["G-Train Positions"][train_num] = position
+                    print(f"[Wayside] Updated {train_name} position in track model: {position}")
+                
+                with open(self.track_comm_file, 'w') as f:
+                    json.dump(data, f, indent=4)
+                    
+            except (json.JSONDecodeError, FileNotFoundError):
+                pass
+
+    def write_initial_train_position_to_track(self, train_name: str, position: int):
+        """Write initial train position to track model JSON so it knows where to start."""
+        with self.file_lock:
+            try:
+                with open(self.track_comm_file, 'r') as f:
+                    data = json.load(f)
+                
+                # Initialize positions array if it doesn't exist
+                if "G-Train Positions" not in data:
+                    data["G-Train Positions"] = [0, 0, 0, 0, 0]
+                
+                # Set position for this train (Train 1 = index 0, etc.)
+                train_num = int(train_name.split()[-1]) - 1  # "Train 1" -> 0
+                if 0 <= train_num < len(data["G-Train Positions"]):
+                    data["G-Train Positions"][train_num] = position
+                    print(f"[Wayside] Initialized {train_name} position in track model: {position}")
+                
+                with open(self.track_comm_file, 'w') as f:
+                    json.dump(data, f, indent=4)
+                    
+            except (json.JSONDecodeError, FileNotFoundError):
+                pass
+
 
         
 
@@ -351,19 +544,25 @@ class sw_wayside_controller:
         else:
             gate_state = "N/A"
 
-        if self.occupied_blocks[block_id] == 1:
-            occupied = True
+        # Check bounds before accessing occupied_blocks and input_faults
+        if 0 <= block_id < len(self.occupied_blocks):
+            occupied = self.occupied_blocks[block_id] == 1
         else:
             occupied = False
         
-        if self.input_faults[block_id*3] == 1:
-            failure = 1
-        elif self.input_faults[block_id*3+1] == 1:
-            failure = 2
-        elif self.input_faults[block_id*3+2] == 1:
-            failure = 3
+        # Check bounds for faults (need 3 slots per block)
+        if 0 <= block_id * 3 + 2 < len(self.input_faults):
+            if self.input_faults[block_id*3] == 1:
+                failure = 1
+            elif self.input_faults[block_id*3+1] == 1:
+                failure = 2
+            elif self.input_faults[block_id*3+2] == 1:
+                failure = 3
+            else:
+                failure = 0
         else:
             failure = 0
+            
         desired = {
             "block_id": block_id,
             "occupied": occupied,

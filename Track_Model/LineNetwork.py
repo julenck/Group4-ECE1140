@@ -10,7 +10,11 @@ from dataclasses import dataclass
 import json
 import random
 import os
+import threading
 from DynamicBlockManager import DynamicBlockManager
+
+# File lock to prevent concurrent writes to track_model_Track_controller.json
+_track_controller_lock = threading.Lock()
 
 
 def parse_branching_connections(value: str) -> List[Tuple[int, int]]:
@@ -104,21 +108,22 @@ class LineNetwork:
     ):
         """Read train control data from JSON file."""
         try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
+            with _track_controller_lock:
+                with open(json_path, "r") as f:
+                    data = json.load(f)
 
-            # Determine prefix based on line
-            prefix = self.line_name[0]  # "G" for Green, "R" for Red
+                # Determine prefix based on line
+                prefix = self.line_name[0]  # "G" for Green, "R" for Red
 
-            # Parse arrays from JSON
-            switches = data.get(f"{prefix}-switches", [])
-            gates = data.get(f"{prefix}-gates", [])
-            lights = data.get(f"{prefix}-lights", [])
+                # Parse arrays from JSON
+                switches = data.get(f"{prefix}-switches", [])
+                gates = data.get(f"{prefix}-gates", [])
+                lights = data.get(f"{prefix}-lights", [])
 
-            # Get commanded speeds and authorities from G-Train or R-Train
-            train_data = data.get(f"{prefix}-Train", {})
-            commanded_speeds = train_data.get("commanded speed", [])
-            commanded_authorities = train_data.get("commanded authority", [])
+                # Get commanded speeds and authorities from G-Train or R-Train
+                train_data = data.get(f"{prefix}-Train", {})
+                commanded_speeds = train_data.get("commanded speed", [])
+                commanded_authorities = train_data.get("commanded authority", [])
 
             # Create data dict with only switches, gates, lights
             data_dict = {
@@ -736,29 +741,54 @@ class LineNetwork:
             return
 
         try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
+            with _track_controller_lock:
+                with open(json_path, "r") as f:
+                    data = json.load(f)
 
-            prefix = self.line_name[0]
+                prefix = self.line_name[0]
 
-            occupancy_array = []
-            blocks = sorted(
-                self.block_manager.line_states.get(self.line_name, {}).keys()
-            )
+                occupancy_array = []
+                blocks = sorted(
+                    self.block_manager.line_states.get(self.line_name, {}).keys()
+                )
 
-            for block_id in blocks:
-                occupancy = self.block_manager.line_states[self.line_name][block_id][
-                    "occupancy"
-                ]
-                occupancy_array.append(1 if occupancy else 0)
+                for block_id in blocks:
+                    occupancy = self.block_manager.line_states[self.line_name][block_id][
+                        "occupancy"
+                    ]
+                    occupancy_array.append(1 if occupancy else 0)
 
-            data[f"{prefix}-Occupancy"] = occupancy_array
+                data[f"{prefix}-Occupancy"] = occupancy_array
 
-            with open(json_path, "w") as f:
-                json.dump(data, f, indent=4)
+                with open(json_path, "w") as f:
+                    json.dump(data, f, indent=4)
 
         except Exception as e:
             print(f"Error writing occupancy to JSON: {e}")
+    
+    def update_and_write_train_positions(self, json_path: str = "track_model_Track_controller.json"):
+        """Read train positions from Train Model (physics simulation handles movement)."""
+        # Track Model just reads positions from Train Model - it doesn't calculate movement
+        # The Train Model handles physics and movement based on commanded speed/authority
+        # This function just updates occupancy based on current train positions
+        try:
+            with _track_controller_lock:
+                with open(json_path, "r") as f:
+                    data = json.load(f)
+                
+                prefix = self.line_name[0]
+                
+                # Get current train positions
+                train_positions = data.get(f"{prefix}-Train Positions", [0,0,0,0,0])
+                
+                # Update occupancy for each train
+                for i, current_pos in enumerate(train_positions):
+                    if current_pos > 0:
+                        # Set occupancy for current position
+                        self.update_block_occupancy(current_pos, 0)
+                    
+        except Exception as e:
+            print(f"Error reading train positions: {e}")
 
     def write_failures_to_json(
         self, json_path: str = "track_model_Track_controller.json"
@@ -768,28 +798,29 @@ class LineNetwork:
             return
 
         try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
+            with _track_controller_lock:
+                with open(json_path, "r") as f:
+                    data = json.load(f)
 
-            prefix = self.line_name[0]
+                prefix = self.line_name[0]
 
-            failures_array = []
-            blocks = sorted(
-                self.block_manager.line_states.get(self.line_name, {}).keys()
-            )
+                failures_array = []
+                blocks = sorted(
+                    self.block_manager.line_states.get(self.line_name, {}).keys()
+                )
 
-            for block_id in blocks:
-                failures = self.block_manager.line_states[self.line_name][block_id][
-                    "failures"
-                ]
-                failures_array.append(1 if failures["power"] else 0)
-                failures_array.append(1 if failures["circuit"] else 0)
-                failures_array.append(1 if failures["broken"] else 0)
+                for block_id in blocks:
+                    failures = self.block_manager.line_states[self.line_name][block_id][
+                        "failures"
+                    ]
+                    failures_array.append(1 if failures["power"] else 0)
+                    failures_array.append(1 if failures["circuit"] else 0)
+                    failures_array.append(1 if failures["broken"] else 0)
 
-            data[f"{prefix}-Failures"] = failures_array
+                data[f"{prefix}-Failures"] = failures_array
 
-            with open(json_path, "w") as f:
-                json.dump(data, f, indent=4)
+                with open(json_path, "w") as f:
+                    json.dump(data, f, indent=4)
 
         except Exception as e:
             print(f"Error writing failures to JSON: {e}")

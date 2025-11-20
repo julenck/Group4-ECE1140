@@ -224,7 +224,7 @@ class train_controller_api:
             base_dir = os.path.dirname(os.path.dirname(__file__))  # train_controller/
             train_data_path = os.path.join(os.path.dirname(base_dir), "Train Model", "train_data.json")
 
-            print(f"[DEBUG] Reading Train Model data from: {train_data_path}")
+            # print(f"[DEBUG] Reading Train Model data from: {train_data_path}")
 
             if not os.path.exists(train_data_path):
                 print("[TrainControllerAPI] train_data.json not found in Train Model folder.")
@@ -275,7 +275,7 @@ class train_controller_api:
 
         # Update controller state
         self.receive_from_train_model(mapped_data)
-        print("[TrainControllerAPI] State successfully updated from Train Model train_data.json.")
+        # print("[TrainControllerAPI] State successfully updated from Train Model train_data.json.")
 
     def receive_from_train_model(self, data: dict) -> None:
         """Receive updates from Train Model.

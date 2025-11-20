@@ -8,6 +8,17 @@ import json
 import pandas as pd
 import os
 import re
+import sys
+
+# Change to the script's directory so file paths work correctly
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# Add parent directory for time_controller
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+from time_controller import get_time_controller
 
 
 class TrackModelUI(tk.Tk):
@@ -16,6 +27,10 @@ class TrackModelUI(tk.Tk):
         self.title("Track Model Software Module")
         self.geometry("1700x950")
         self.configure(bg="white")
+        
+        # Get time controller for synchronized updates
+        self.time_controller = get_time_controller()
+        
         self.block_manager = DynamicBlockManager()
         self.line_network = None
         self.visualizer = None
@@ -100,6 +115,11 @@ class TrackModelUI(tk.Tk):
             side=tk.RIGHT, padx=5
         )  # pack it to the right within its micro-frame
         self.block_selector.bind("<<ComboboxSelected>>", self.on_block_selected)
+
+        # Auto-load track layout file if it exists
+        default_track_file = os.path.join(os.path.dirname(__file__), "Track Layout & Vehicle Data vF5.xlsx")
+        if os.path.exists(default_track_file):
+            self.after(100, lambda: self.auto_load_track_file(default_track_file))
 
         # --- Currently Selected Block --- #
         # --- Currently Selected Block (MODIFIED TO SINGLE COLUMN) --- #
@@ -379,6 +399,69 @@ class TrackModelUI(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process Excel file:\n{e}")
 
+    def auto_load_track_file(self, file_path):
+        """Automatically load track layout file without dialog prompt."""
+        try:
+            xl = pd.ExcelFile(file_path)
+            sheet_names = xl.sheet_names
+            available_lines = [
+                name.replace(" Line", "").strip()
+                for name in sheet_names
+                if name.endswith(" Line")
+            ]
+
+            self.line_selector["values"] = available_lines
+            if available_lines:
+                self.line_selector.current(0)
+            else:
+                self.line_selector.set("")
+
+            all_lines_data = {}
+            for line in available_lines:
+                df = pd.read_excel(file_path, sheet_name=f"{line} Line")
+                df = df.fillna("N/A")
+                df["Station"] = df["Infrastructure"].apply(self.extract_station)
+                df["Crossing"] = df["Infrastructure"].apply(self.extract_crossing)
+
+                # Build branch mapping
+                branch_map = {}
+                for idx, row in df.iterrows():
+                    result = self.extract_branching(row["Infrastructure"])
+                    if result:
+                        branch_map.update(result)
+
+                # Assign branching to correct blocks
+                def assign_branching(row):
+                    block_num = row.get("Block Number")
+                    if block_num not in ["N/A", "nan"]:
+                        try:
+                            return branch_map.get(int(float(block_num)), "N/A")
+                        except:
+                            pass
+                    return "N/A"
+
+                df["Branching"] = df.apply(assign_branching, axis=1)
+
+                all_lines_data[line] = df.to_dict(orient="records")
+
+            data = {
+                "static_data": all_lines_data,
+                "block": {},
+                "environment": {},
+                "station": {},
+                "failures": {},
+                "commanded": {},
+            }
+
+            with open("track_model_static.json", "w") as f:
+                json.dump(data, f, indent=4)
+
+            self.update_visualizer_display(excel_path=file_path)
+            print(f"[Track Model] Auto-loaded track layout: {os.path.basename(file_path)}")
+
+        except Exception as e:
+            print(f"[Track Model] Failed to auto-load track file: {e}")
+
     def extract_crossing(self, value):
         text = str(value).upper()
         if "RAILWAY CROSSING" in text:
@@ -593,8 +676,16 @@ class TrackModelUI(tk.Tk):
                         text="All Systems Normal", foreground="green"
                     )
 
+        # Generate train positions based on commanded speed/authority
+        # The flow is: Wayside -> Track Model (commanded speed/auth) -> Track Model calculates position -> Wayside (position) -> CTC
+        if self.line_network:
+            self.line_network.update_and_write_train_positions()
+            self.line_network.write_occupancy_to_json()
+        
         self.check_and_start_trains()
-        self.after(500, self.load_data)
+        # Use synchronized interval from time controller
+        interval_ms = self.time_controller.get_update_interval_ms()
+        self.after(interval_ms, self.load_data)
 
     def increase_temp_immediate(self):
         selected_line = self.line_selector.get()
@@ -687,6 +778,69 @@ class TrackModelUI(tk.Tk):
         except Exception as e:
             print(f"Error getting station name: {e}")
             return "N/A"
+
+    def update_train_positions_from_ctc(self):
+        """Read train positions from CTC data and update visualization."""
+        ctc_data_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ctc", "ctc_data.json")
+        
+        if not os.path.exists(ctc_data_file):
+            return
+            
+        try:
+            with open(ctc_data_file, "r") as f:
+                ctc_data = json.load(f)
+            
+            trains = ctc_data.get("Dispatcher", {}).get("Trains", {})
+            
+            for train_name, train_info in trains.items():
+                position = train_info.get("Position", "")
+                line = train_info.get("Line", "")
+                
+                # Skip if no position or line data
+                if not position or not line:
+                    continue
+                
+                # Convert train name to ID format (e.g., "Train 1" -> "G_train_1")
+                train_number = train_name.replace("Train ", "")
+                line_prefix = "G" if line == "Green" else "R"
+                train_id = f"{line_prefix}_train_{train_number}"
+                
+                # If train doesn't exist in visualizer yet, create it
+                if train_id not in self.visualizer.trains:
+                    self.visualizer.animate_train(train_id, line)
+                    # Set initial direction: for yard exit (block 63), previous should be 0 (yard)
+                    # This tells the system the train is going forward from the yard
+                    if position == 63 and line == "Green":
+                        self.visualizer.trains[train_id]["previous_block"] = 0
+                        self.visualizer.trains[train_id]["current_block"] = position
+                
+                # Update train position only if it changed
+                if train_id in self.visualizer.trains:
+                    current = self.visualizer.trains[train_id]["current_block"]
+                    
+                    # Only update if position actually changed
+                    if current != position:
+                        # Convert block number to block_id format (e.g., 65 -> "G65")
+                        block_id = f"{line_prefix}{position}"
+                        
+                        # Update train's previous and current blocks
+                        self.visualizer.trains[train_id]["previous_block"] = current
+                        self.visualizer.trains[train_id]["current_block"] = position
+                        self.visualizer.trains[train_id]["line"] = line
+                        
+                        # Redraw the train at new position
+                        self.visualizer.update_train_position(train_id, block_id)
+                        
+                        # Update occupancy in LineNetwork if it exists
+                        if self.line_network and line == self.line_selector.get():
+                            self.line_network.update_block_occupancy(position, current)
+                            self.line_network.write_occupancy_to_json()
+                    
+        except (json.JSONDecodeError, FileNotFoundError, KeyError) as e:
+            # Silently ignore errors to avoid spam in console
+            pass
+        except Exception as e:
+            print(f"Error updating train positions from CTC: {e}")
 
     def check_and_start_trains(self):
         for train in self.block_manager.trains:

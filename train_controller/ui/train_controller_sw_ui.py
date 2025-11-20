@@ -18,6 +18,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
+# Add grandparent directory for time_controller
+grandparent_dir = os.path.dirname(parent_dir)
+if grandparent_dir not in sys.path:
+    sys.path.append(grandparent_dir)
+
+from time_controller import get_time_controller
+
 # Import API
 from api.train_controller_api import train_controller_api
 
@@ -601,8 +608,10 @@ class train_controller_ui(tk.Tk):
         self.create_control_section()    # Middle frame
         self.create_engineering_panel()  # Bottom frame
         
+        # Get time controller for synchronized updates
+        self.time_controller = get_time_controller()
+        
         # Start periodic updates
-        self.update_interval = 500  # 500ms = 0.5 seconds
         self.periodic_update()
     
     def create_speed_section(self):
@@ -966,8 +975,9 @@ class train_controller_ui(tk.Tk):
         except Exception as e:
             print(f"Update error: {e}")
         finally:
-            # Always schedule next update
-            self.after(self.update_interval, self.periodic_update)
+            # Always schedule next update with synchronized interval
+            interval_ms = self.time_controller.get_update_interval_ms()
+            self.after(interval_ms, self.periodic_update)
     
     def update_failure_indicator(self, label, system, failed):
         """Update a failure indicator label."""
@@ -1002,7 +1012,7 @@ class train_controller_ui(tk.Tk):
         # Manual mode button is ALWAYS enabled so driver can switch modes
         mode_text = "Manual Mode: ON" if manual_mode else "Automatic Mode"
         self.manual_mode_btn.configure(state='normal', text=mode_text)
-        print(f"[DEBUG update_button_enabled_states] Manual mode button set to: state='normal', text='{mode_text}'")
+        # print(f"[DEBUG update_button_enabled_states] Manual mode button set to: state='normal', text='{mode_text}'")
     
     def update_button_states(self, state):
         """Update button colors based on their states."""
@@ -1021,7 +1031,7 @@ class train_controller_ui(tk.Tk):
         bg_color = self.active_color if state['manual_mode'] else self.normal_color
         self.manual_mode_btn.configure(bg=bg_color)
         current_state = self.manual_mode_btn['state']
-        print(f"[DEBUG update_button_states] Manual mode button: bg={bg_color}, current state={current_state}")
+        # print(f"[DEBUG update_button_states] Manual mode button: bg={bg_color}, current state={current_state}")
         
         # Brake buttons - Only update colors, states are handled in update_button_enabled_states
         self.service_brake_btn.configure(bg=self.active_color if state['service_brake'] > 0 else self.normal_color)

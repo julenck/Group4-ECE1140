@@ -19,6 +19,10 @@ from tkinter import ttk
 # Add paths for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
+
+# Import time controller for synchronized timing
+sys.path.insert(0, parent_dir)
+from time_controller import get_time_controller
 sys.path.append(current_dir)
 sys.path.append(parent_dir)
 
@@ -978,8 +982,10 @@ and control Train {train_id}."""
             except Exception as e:
                 print(f"Simulation loop error: {e}")
             
-            # Schedule next update (500ms)
-            self.after(500, self.simulation_loop)
+            # Schedule next update using synchronized interval
+            time_controller = get_time_controller()
+            interval_ms = time_controller.get_update_interval_ms()
+            self.after(interval_ms, self.simulation_loop)
     
     def stop_simulation(self):
         """Stop the periodic simulation updates."""
@@ -1182,8 +1188,7 @@ and control Train {self.train_id}."""
 def dispatch_train_from_ctc(train_manager=None, server_url=None):
     """Helper function to dispatch a train from CTC without UI.
     
-    First train dispatched will be Hardware controller (Raspberry Pi).
-    All subsequent trains will be Software controllers.
+    FOR TESTING: Always dispatches Software controller trains.
     
     This function is called from the CTC UI when "Dispatch Train" is pressed.
     
@@ -1192,27 +1197,18 @@ def dispatch_train_from_ctc(train_manager=None, server_url=None):
         server_url: Server URL for remote mode (e.g., http://192.168.1.100:5000)
         
     Returns:
-        tuple: (train_id, controller_type) where controller_type is "hardware_remote" or "software"
+        tuple: (train_id, controller_type) where controller_type is "software"
     """
     # Create or use existing train manager
     if train_manager is None:
         train_manager = TrainManager()
     
-    # Determine controller type based on how many trains exist
+    # FOR TESTING: Always use software controller
     existing_train_count = train_manager.get_train_count()
-    
-    if existing_train_count == 0:
-        # First train: Hardware controller (Raspberry Pi)
-        controller_type = "hardware_remote"
-        is_remote = True
-        use_hardware = False  # Hardware UI is on Raspberry Pi, not here
-        print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (Raspberry Pi)")
-    else:
-        # Subsequent trains: Software controller
-        controller_type = "software"
-        is_remote = False
-        use_hardware = False
-        print(f"[CTC Dispatch] Dispatching train #{existing_train_count + 1} with Software Controller")
+    controller_type = "software"
+    is_remote = False
+    use_hardware = False
+    print(f"[CTC Dispatch] Dispatching train #{existing_train_count + 1} with Software Controller (TESTING MODE)")
     
     try:
         # Add train with appropriate controller type
