@@ -4,6 +4,23 @@ import threading
 import sys
 import importlib, importlib.util
 
+import os
+
+BASE_DIR = os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))
+)  # Track_and_Train
+TRACK_MODEL_DIR = os.path.join(BASE_DIR, "Track_Model")
+TRAIN_MODEL_DIR = os.path.join(BASE_DIR, "Train_Model")
+
+# Track JSONs
+STATIC_JSON_PATH = os.path.join(TRACK_MODEL_DIR, "track_model_static.json")
+CONTROLLER_JSON_PATH = os.path.join(
+    TRACK_MODEL_DIR, "track_model_Track_controller.json"
+)
+
+# Train JSONs
+TRAIN_DATA_PATH = os.path.join(TRAIN_MODEL_DIR, "train_data.json")
+
 # Import core logic
 from train_model_core import (
     TRAIN_STATES_FILE,

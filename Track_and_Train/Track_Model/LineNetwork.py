@@ -12,8 +12,17 @@ import random
 import os
 from DynamicBlockManager import DynamicBlockManager
 
-LINE_NETWORK_DIR = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.dirname(LINE_NETWORK_DIR)
+# Correct fixed paths for Track and Train JSONs
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TRACK_MODEL_DIR = os.path.join(PROJECT_ROOT, "Track_Model")
+TRAIN_MODEL_DIR = os.path.join(PROJECT_ROOT, "Train_Model")
+
+# JSON paths
+TRACK_STATIC_JSON = os.path.join(TRACK_MODEL_DIR, "track_model_static.json")
+TRACK_CONTROLLER_JSON = os.path.join(
+    TRACK_MODEL_DIR, "track_model_Track_controller.json"
+)
+TRAIN_MODEL_JSON = os.path.join(TRAIN_MODEL_DIR, "track_model_Train_Model.json")
 
 
 def parse_branching_connections(value: str) -> List[Tuple[int, int]]:
@@ -102,10 +111,7 @@ class LineNetwork:
     def __repr__(self):
         return f"LineNetwork({self.line_name}: {len(self.connections)} blocks)"
 
-    def read_train_data_from_json(
-        self,
-        json_path: str = os.path.join(PARENT_DIR, "track_model_Track_controller.json"),
-    ):
+    def read_train_data_from_json(self, json_path=TRACK_CONTROLLER_JSON):
         """Read train control data from JSON file."""
         try:
             with open(json_path, "r") as f:
@@ -142,7 +148,8 @@ class LineNetwork:
 
     def write_to_train_model_json(self, commanded_speeds, commanded_authorities):
         # Read file
-        with open("track_model_Train_Model.json", "r") as f:
+        json_path = TRAIN_MODEL_JSON
+        with open(json_path, "r") as f:
             train_model_data = json.load(f)
 
         # Extract motion and store
@@ -178,7 +185,8 @@ class LineNetwork:
             self.red_line_trains = trains
 
         # Write back
-        with open("track_model_Train_Model.json", "w") as f:
+        json_path = TRAIN_MODEL_JSON
+        with open(json_path, "w") as f:
             json.dump(train_model_data, f, indent=4)
 
     def write_to_block_manager(self, data: dict):
@@ -550,7 +558,8 @@ class LineNetwork:
     def get_station_name(self, block_num: int) -> str:
         """Get station name for a given block number from static JSON."""
         try:
-            with open("track_model_static.json", "r") as f:
+            json_path = TRACK_CONTROLLER_JSON
+            with open(json_path, "r") as f:
                 static_data = json.load(f)
 
             blocks = static_data.get("static_data", {}).get(self.line_name, [])
@@ -566,7 +575,8 @@ class LineNetwork:
         """Search forward from starting block to find next station."""
         try:
             # Load static data inside the helper
-            with open("track_model_static.json", "r") as f:
+            json_path = TRACK_CONTROLLER_JSON
+            with open(json_path, "r") as f:
                 static_data = json.load(f)
 
             blocks = static_data.get("static_data", {}).get(self.line_name, [])
@@ -623,14 +633,15 @@ class LineNetwork:
                         }
 
                         # Write to Train Model JSON
-                        with open("track_model_Train_Model.json", "r") as f:
+                        json_path = TRAIN_MODEL_JSON
+                        with open(json_path, "r") as f:
                             train_model_data = json.load(f)
 
                         train_key = f"{self.line_name[0]}_train_{train_id}"
                         if train_key in train_model_data:
                             train_model_data[train_key]["beacon"] = beacon
 
-                        with open("track_model_Train_Model.json", "w") as f:
+                        with open(json_path, "w") as f:
                             json.dump(train_model_data, f, indent=4)
 
                         print(
@@ -642,7 +653,8 @@ class LineNetwork:
             print(f"Error writing Circuit Failure beacon data to train model: {e}")
         try:
             # Read static track data
-            with open("track_model_static.json", "r") as f:
+            json_path = TRACK_CONTROLLER_JSON
+            with open(json_path, "r") as f:
                 static_data = json.load(f)
 
             blocks = static_data.get("static_data", {}).get(self.line_name, [])
@@ -695,14 +707,15 @@ class LineNetwork:
             }
 
             # Write to Train Model JSON
-            with open("track_model_Train_Model.json", "r") as f:
+            json_path = TRAIN_MODEL_JSON
+            with open(json_path, "r") as f:
                 train_model_data = json.load(f)
 
             train_key = f"{self.line_name[0]}_train_{train_id}"
             if train_key in train_model_data:
                 train_model_data[train_key]["beacon"] = beacon
 
-            with open("track_model_Train_Model.json", "w") as f:
+            with open(json_path, "w") as f:
                 json.dump(train_model_data, f, indent=4)
 
         except Exception as e:
@@ -732,10 +745,7 @@ class LineNetwork:
             except (ValueError, AttributeError):
                 continue
 
-    def write_occupancy_to_json(
-        self,
-        json_path: str = os.path.join(PARENT_DIR, "track_model_Track_controller.json"),
-    ):
+    def write_occupancy_to_json(self, json_path=TRACK_CONTROLLER_JSON):
         """Write occupancy data back to Track Controller JSON."""
         if not self.block_manager:
             return
@@ -765,10 +775,7 @@ class LineNetwork:
         except Exception as e:
             print(f"Error writing occupancy to JSON: {e}")
 
-    def write_failures_to_json(
-        self,
-        json_path: str = os.path.join(PARENT_DIR, "track_model_Track_controller.json"),
-    ):
+    def write_failures_to_json(self, json_path=TRACK_CONTROLLER_JSON):
         """Write failure data back to Track Controller JSON."""
         if not self.block_manager:
             return
@@ -803,7 +810,8 @@ class LineNetwork:
     def load_crossing_blocks_from_static(self):
         """Load crossing blocks from static JSON file."""
         try:
-            with open("track_model_static.json", "r") as f:
+            json_path = TRACK_CONTROLLER_JSON
+            with open(json_path, "r") as f:
                 static_data = json.load(f)
 
             blocks = static_data.get("static_data", {}).get(self.line_name, [])
@@ -825,7 +833,8 @@ class LineNetwork:
     def load_branch_points_from_static(self):
         """Load branch points from static JSON file."""
         try:
-            with open("track_model_static.json", "r") as f:
+            json_path = TRACK_CONTROLLER_JSON
+            with open(json_path, "r") as f:
                 static_data = json.load(f)
 
             blocks = static_data.get("static_data", {}).get(self.line_name, [])
@@ -868,7 +877,8 @@ class LineNetwork:
     def load_all_blocks_from_static(self):
         """Load all blocks from static JSON file."""
         try:
-            with open("track_model_static.json", "r") as f:
+            json_path = TRACK_CONTROLLER_JSON
+            with open(json_path, "r") as f:
                 static_data = json.load(f)
 
             blocks = static_data.get("static_data", {}).get(self.line_name, [])
