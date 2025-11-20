@@ -3,6 +3,9 @@ from tkinter import ttk
 import sys
 import os
 
+MAIN_DIR = os.path.dirname(os.path.abspath(__file__))  # combined_ui
+ROOT_DIR = os.path.dirname(MAIN_DIR)  # TRACK_AND_TRAIN
+
 # Get absolute paths
 MAIN_DIR = os.path.dirname(os.path.abspath(__file__))
 TRACK_MODEL_DIR = os.path.join(MAIN_DIR, "Track_Model")

@@ -12,6 +12,9 @@ import random
 import os
 from DynamicBlockManager import DynamicBlockManager
 
+LINE_NETWORK_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(LINE_NETWORK_DIR)
+
 
 def parse_branching_connections(value: str) -> List[Tuple[int, int]]:
     """Parse SWITCH (A-B; C-D) format into connection pairs."""
@@ -100,7 +103,8 @@ class LineNetwork:
         return f"LineNetwork({self.line_name}: {len(self.connections)} blocks)"
 
     def read_train_data_from_json(
-        self, json_path: str = "track_model_Track_controller.json"
+        self,
+        json_path: str = os.path.join(PARENT_DIR, "track_model_Track_controller.json"),
     ):
         """Read train control data from JSON file."""
         try:
@@ -729,7 +733,8 @@ class LineNetwork:
                 continue
 
     def write_occupancy_to_json(
-        self, json_path: str = "track_model_Track_controller.json"
+        self,
+        json_path: str = os.path.join(PARENT_DIR, "track_model_Track_controller.json"),
     ):
         """Write occupancy data back to Track Controller JSON."""
         if not self.block_manager:
@@ -761,7 +766,8 @@ class LineNetwork:
             print(f"Error writing occupancy to JSON: {e}")
 
     def write_failures_to_json(
-        self, json_path: str = "track_model_Track_controller.json"
+        self,
+        json_path: str = os.path.join(PARENT_DIR, "track_model_Track_controller.json"),
     ):
         """Write failure data back to Track Controller JSON."""
         if not self.block_manager:

@@ -10,6 +10,9 @@ import re
 from typing import List, Tuple, Dict
 from PIL import Image, ImageTk
 import time
+import os
+
+VISUALIZER_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Import network builder and parser
 from LineNetwork import LineNetworkBuilder
@@ -175,7 +178,7 @@ class RailwayDiagram:
         """Load Excel file without showing dialog."""
         try:
             self.track_data = parse_excel(filepath)
-            self.parser = TrackDiagramParser("track.png")
+            self.parser = TrackDiagramParser(os.path.join(VISUALIZER_DIR, "track.png"))
             self.parser.parse()
         except Exception as e:
             print(f"Error loading Excel: {e}")
