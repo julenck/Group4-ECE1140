@@ -2,8 +2,7 @@
 
 
 import track_controller.New_SW_Code.sw_wayside_controller_ui as wayside_sw
-#import track_controller.New_SW_Code.sw_wayside_controller as wayside_sw
-#import track_controller.New_SW_Code.sw_vital_check as wayside_sw_vital
+
 
 
 def main():
