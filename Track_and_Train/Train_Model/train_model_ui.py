@@ -37,7 +37,10 @@ except Exception:
 class TrainModelUI(ttk.Frame):
     def __init__(self, parent, train_id=None, server_url=None):
         super().__init__(parent)
-        self.pack(fill="both", expand=True)
+        self.grid(row=0, column=0, sticky="nsew")
+        self.config(width=450)
+        self.pack_propagate(False)
+
         self.train_id = train_id
         self.server_url = server_url
         self.train_data_path = TRAIN_DATA_FILE
@@ -66,23 +69,39 @@ class TrainModelUI(ttk.Frame):
         self._stop_event = threading.Event()
         self._last_mtimes = {"track": 0.0, "ctrl": 0.0, "train_data": 0.0}
         threading.Thread(target=self._watch_files, daemon=True).start()
-        # self.protocol("WM_DELETE_WINDOW", self.on_close)
 
+        # TrainModelUI layout: 2 rows
+        # row 0 = left column (info/env/specs/failure/control)
+        # row 1 = announcements panel (full-width)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)
         self.columnconfigure(0, weight=1)
+
+        # LEFT COLUMN
         left = ttk.Frame(self)
-        left.grid(row=0, column=0, sticky="NSEW", padx=6, pady=6)
-        left.columnconfigure(0, weight=1)
-        left.columnconfigure(1, weight=1)
+        left.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+
+        left.columnconfigure(0, weight=0)
+        left.columnconfigure(1, weight=0)
         left.rowconfigure(0, weight=1)
         left.rowconfigure(1, weight=1)
         left.rowconfigure(2, weight=1)
 
+        # Build left-side panels
         self.create_info_panel(left)
         self.create_env_panel(left)
         self.create_specs_panel(left)
         self.create_failure_panel(left)
         self.create_control_panel(left)
-        self.create_announcements_panel(left)
+
+        # --- MOVE ANNOUNCEMENTS OUT OF LEFT ---
+        bottom = ttk.Frame(self)
+        bottom.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        bottom.columnconfigure(0, weight=1)
+        bottom.config(height=120)
+        bottom.grid_propagate(False)
+
+        self.create_announcements_panel(bottom)
 
         self.update_loop()
 

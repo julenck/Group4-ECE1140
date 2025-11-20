@@ -88,7 +88,7 @@ class MainUI(tk.Tk):
             self.train_visible = False
         else:
             self.train_container.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
-            self.train_container.config(width=450)
+            self.train_container.config(width=680)
             self.train_container.grid_propagate(False)
             self.btn_train.config(text="Hide Train Model")
             self.train_visible = True
