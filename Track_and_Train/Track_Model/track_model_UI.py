@@ -10,12 +10,10 @@ import os
 import re
 
 
-# NEW
 class TrackModelUI(ttk.Frame):
-    def __init__(self, parent_left, parent_right):
-        super().__init__(parent_left)
+    def __init__(self, parent):
+        super().__init__(parent)
         self.pack(fill="both", expand=True)
-        self.parent_right = parent_right
         self.block_manager = DynamicBlockManager()
         self.line_network = None
         self.visualizer = None

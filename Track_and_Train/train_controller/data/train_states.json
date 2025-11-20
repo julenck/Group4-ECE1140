@@ -1,6 +1,6 @@
 {
     "train_velocity": 0.0,
-    "train_temperature": 59.5,
+    "train_temperature": 32.0,
     "commanded_authority": 0.0,
     "current_station": "Central Station",
     "next_stop": "Park Street",
