@@ -1,8 +1,7 @@
 {
-    "commanded_speed": 40,
-    "commanded_authority": 0,
-    "speed_limit": 30,
     "train_velocity": 0.0,
+    "train_temperature": 33.25,
+    "commanded_authority": 10.0,
     "current_station": "Glenbury",
     "next_stop": "Glenbury",
     "station_side": "Right",
