@@ -1,3 +1,8 @@
+from ctc_ui_temp import CTCUI
+
+if __name__ == "__main__":
+    ui = CTCUI()
+    ui.run()
 import tkinter as tk, json, os, threading, subprocess, sys
 from datetime import datetime
 from tkinter import filedialog, ttk 
