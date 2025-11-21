@@ -18,8 +18,11 @@ from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 # Config
 # ---------------------------------------------------------------------
 
-IN_FILE    =  "ctc_track_controller.json"         # CTC 
-TRACK_FILE =  "track_to_wayside.json"             # Track Model
+CTC_IN_FILE    =  "ctc_to_hw_wayside.json"         # CTC 
+CTC_OUT_FILE   =  "hw_wayside_to_ctc.json"         # CTC feedback
+TRACK_IN_FILE  =  "track_to_hw_wayside.json"       # Track Model
+TRACK_OUT_FILE = "hw_wayside_to_track.json"        # Track Model feedback
+
 POLL_MS = 500
 ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed 
 
@@ -45,11 +48,11 @@ def _read_ctc_json() -> dict:
         "closed_blocks": [],
     }
 
-    if not os.path.exists(IN_FILE):
+    if not os.path.exists(CTC_IN_FILE):
         return defaults
 
     try:
-        with open(IN_FILE, "r", encoding="utf-8") as f:
+        with open(CTC_IN_FILE, "r", encoding="utf-8") as f:
             raw = json.load(f) or {}
     except Exception as e:
         print(f"[WARN] JSON read failed: {e}")
@@ -107,10 +110,10 @@ def _read_ctc_json() -> dict:
 
 def _safe_read_track_json() -> dict:
     
-    if not os.path.exists(TRACK_FILE):
+    if not os.path.exists(TRACK_IN_FILE):
         return {}
     try:
-        with open(TRACK_FILE, "r", encoding="utf-8") as f:
+        with open(TRACK_IN_FILE, "r", encoding="utf-8") as f:
             return json.load(f) or {}
     except Exception as e:
         print(f"[WARN] Track file read failed: {e}")
@@ -121,7 +124,7 @@ def _atomic_merge_write_track_json(patch: dict) -> None:
     try:
         base = _safe_read_track_json()
         base.update(patch or {})
-        d = os.path.dirname(TRACK_FILE) or "."
+        d = os.path.dirname(TRACK_OUT_FILE) or "."
 
         with tempfile.NamedTemporaryFile("w", delete=False, dir=d, encoding="utf-8") as tmp:
 
@@ -130,17 +133,17 @@ def _atomic_merge_write_track_json(patch: dict) -> None:
             os.fsync(tmp.fileno())
             tmp_path = tmp.name
 
-        os.replace(tmp_path, TRACK_FILE)
+        os.replace(tmp_path, TRACK_OUT_FILE)
 
     except Exception as e:
         print(f"[WARN] Track file write failed: {e}")
 
 def _safe_read_track_json() -> dict:
     """Read the track snapshot file defensively."""
-    if not os.path.exists(TRACK_FILE):
+    if not os.path.exists(TRACK_IN_FILE):
         return {}
     try:
-        with open(TRACK_FILE, "r", encoding="utf-8") as f:
+        with open(TRACK_IN_FILE, "r", encoding="utf-8") as f:
             return json.load(f) or {}
     except Exception as e:
         print(f"[WARN] Track file read failed: {e}")
@@ -154,13 +157,13 @@ def _atomic_merge_write_track_json(patch: dict) -> None:
     try:
         base = _safe_read_track_json()
         base.update(patch or {})
-        d = os.path.dirname(TRACK_FILE) or "."
+        d = os.path.dirname(TRACK_OUT_FILE) or "."
         with tempfile.NamedTemporaryFile("w", delete=False, dir=d, encoding="utf-8") as tmp:
             json.dump(base, tmp, indent=2)
             tmp.flush()
             os.fsync(tmp.fileno())
             tmp_path = tmp.name
-        os.replace(tmp_path, TRACK_FILE)
+        os.replace(tmp_path, TRACK_OUT_FILE)
     except Exception as e:
         print(f"[WARN] Track file write failed: {e}")
 
@@ -179,14 +182,13 @@ def _write_ctc_occupancy(occupancy: List[int]) -> None:
     try:
         base: Dict = {}
 
-        if os.path.exists(IN_FILE):
-
-            with open(IN_FILE, "r", encoding="utf-8") as f:
+        if os.path.exists(CTC_IN_FILE):
+            with open(CTC_IN_FILE, "r", encoding="utf-8") as f:
                 base = json.load(f) or {}
 
         base["G-Occupancy"] = list(occupancy)
 
-        with open(IN_FILE, "w", encoding="utf-8") as f:
+        with open(CTC_OUT_FILE, "w", encoding="utf-8") as f:
             json.dump(base, f, indent=2)
 
     except Exception as e:
@@ -199,9 +201,9 @@ def _write_ctc_occupancy(occupancy: List[int]) -> None:
 def _discover_block_count() -> int:
     
     try:
-        if os.path.exists(TRACK_FILE):
+        if os.path.exists(TRACK_IN_FILE):
 
-            with open(TRACK_FILE, "r", encoding="utf-8") as f:
+            with open(TRACK_IN_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f) or {}
 
             occ = data.get("G-Occupancy") or data.get("occupied_blocks")
