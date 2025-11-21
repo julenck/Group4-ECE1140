@@ -288,8 +288,8 @@ class TrackModelUI(ttk.Frame):
             part = part.strip()
             conn_match = re.search(r"(\d+)\s*-\s*(\d+)", part)
             if conn_match:
-                all_blocks.append(int(conn_match.group(1)))
                 all_blocks.append(int(conn_match.group(2)))
+                all_blocks.append(int(conn_match.group(1)))
 
         if not all_blocks:
             return {}
@@ -334,7 +334,7 @@ class TrackModelUI(ttk.Frame):
 
             self.line_selector["values"] = available_lines
             if available_lines:
-                self.line_selector.current(0)
+                self.line_selector.current(1)
             else:
                 self.line_selector.set("")
 
@@ -392,7 +392,7 @@ class TrackModelUI(ttk.Frame):
     def extract_station(self, value):
         text = str(value).upper()
         match = re.search(r"STATION[:;]?\s*([A-Z\s]+)", text)
-        return match.group(1).strip().title() if match else "N/A"
+        return match.group(1).strip().upper() if match else "N/A"
 
     def on_line_selected(self, event=None):
         """Handle line selection and update the visualizer exactly once."""
@@ -432,7 +432,7 @@ class TrackModelUI(ttk.Frame):
             self.block_manager.initialize_blocks(selected_line, blocks)
         self.block_selector["values"] = blocks
         if blocks:
-            self.block_selector.current(0)
+            self.block_selector.current(1)
             self.on_block_selected(None)
 
     def setup_track_visualizer(self):
@@ -523,9 +523,9 @@ class TrackModelUI(ttk.Frame):
                 # Get temperature based on current line
                 selected_line = self.line_selector.get()
                 temp = (
-                    self.green_line_temp
+                    self.red_line_temp
                     if selected_line == "Green"
-                    else self.red_line_temp
+                    else self.green_line_temp
                 )
                 occupancy = block_data["occupancy"]
                 traffic_light = block_data["traffic_light"]
@@ -541,10 +541,10 @@ class TrackModelUI(ttk.Frame):
                 # Check for failures and apply overrides
                 if failures.get("power"):
                     # Power failure: lights off, gates closed, switches N/A
-                    traffic_light = "OFF"
+                    traffic_light = "ON"
                     crossing = self.get_crossing_for_block(selected_block)
                     if crossing == "Yes":
-                        gate = "Closed"
+                        gate = "Open"
                     else:
                         gate = "N/A"
                     switch_position = "N/A"
@@ -555,7 +555,7 @@ class TrackModelUI(ttk.Frame):
                 else:
                     # Normal occupancy display
                     self.dynamic_labels["Occupancy:"].set(
-                        "OCCUPIED" if occupancy else "CLEAR"
+                        "CLEAR" if occupancy else "OCCUPIED"
                     )
 
                 # Update UI with processed values
@@ -568,7 +568,7 @@ class TrackModelUI(ttk.Frame):
                 self.station_vars["Ticket Sales:"].set(ticket_sales)
 
                 self.temperature.set(str(temp))
-                heating_on = temp < 32
+                heating_on = temp > 32
                 self.heating_status.config(
                     text="ON" if heating_on else "OFF",
                     foreground="green" if heating_on else "red",
@@ -603,19 +603,19 @@ class TrackModelUI(ttk.Frame):
     def increase_temp_immediate(self):
         selected_line = self.line_selector.get()
         if selected_line == "Green":
-            self.green_line_temp += 1
+            self.green_line_temp -= 1
             self.temperature.set(str(self.green_line_temp))
         elif selected_line == "Red":
-            self.red_line_temp += 1
+            self.red_line_temp -= 1
             self.temperature.set(str(self.red_line_temp))
 
     def decrease_temp_immediate(self):
         selected_line = self.line_selector.get()
         if selected_line == "Green":
-            self.green_line_temp -= 1
+            self.green_line_temp += 1
             self.temperature.set(str(self.green_line_temp))
         elif selected_line == "Red":
-            self.red_line_temp -= 1
+            self.red_line_temp += 1
             self.temperature.set(str(self.red_line_temp))
 
     def update_failures(self):

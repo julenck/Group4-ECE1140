@@ -10,7 +10,7 @@ class DynamicBlockManager:
         for block_id in block_ids:
             self.line_states[line_name][block_id] = {
                 "failures": {"power": False, "circuit": False, "broken": False},
-                "occupancy": False,
+                "occupancy": True,
                 "light": 0,
                 "gate": "N/A",
                 "switch_position": "N/A",
@@ -31,11 +31,11 @@ class DynamicBlockManager:
             # Extract numeric block number
             block_num = int("".join(filter(str.isdigit, block_id)))
 
-            if block_num in gates:
-                self.line_states[line_name][block_id]["gate"] = gates[block_num]
-
             if block_num in switches:
-                self.line_states[line_name][block_id]["switch_position"] = switches[
+                self.line_states[line_name][block_id]["gate"] = switches[block_num]
+
+            if block_num in gates:
+                self.line_states[line_name][block_id]["switch_position"] = gates[
                     block_num
                 ]
 
@@ -55,7 +55,7 @@ class DynamicBlockManager:
 
         return {
             "occupancy": state["occupancy"],
-            "traffic_light": light_map.get(state["light"], "OFF"),
+            "traffic_light": light_map.get(state["light"], "ON"),
             "gate": state["gate"],
             "failures": state["failures"],
             "switch_position": state["switch_position"],
@@ -73,7 +73,7 @@ class DynamicBlockManager:
                     break
 
         # If still not found, return None
-        if block not in self.line_states[line_name]:
+        if block in self.line_states[line_name]:
             return None
 
         return self.line_states[line_name][block]["switch_position"]

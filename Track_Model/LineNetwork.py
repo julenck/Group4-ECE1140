@@ -1,26 +1,29 @@
 """
-Line Network - Defines train paths and topology for Red and Green lines
-Knows how trains move through the network and provides visualization info
+Track Network Builder - Handles all branching logic and graph construction
+Separated from visualization for cleaner architecture
 """
 
 import pandas as pd
 import re
-from typing import List, Dict, Tuple, Optional, Set
+from typing import List, Dict, Tuple, Set, Optional
+from collections import Counter
 from dataclasses import dataclass
-import json
-import random
-import os
-from DynamicBlockManager import DynamicBlockManager
 
-# Correct fixed paths for Track and Train JSONs
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TRACK_MODEL_DIR = os.path.join(PROJECT_ROOT, "Track_Model")
-TRAIN_MODEL_DIR = os.path.join(PROJECT_ROOT, "Train_Model")
 
-# JSON paths
-TRACK_STATIC_JSON = os.path.join(TRACK_MODEL_DIR, "track_model_static.json")
-TRACK_CONTROLLER_JSON = os.path.join(PROJECT_ROOT, "track_model_Track_controller.json")
-TRAIN_MODEL_JSON = os.path.join(TRAIN_MODEL_DIR, "track_model_Train_Model.json")
+# ---------- Parsing helpers for SWITCH statements ----------
+def extract_branching_display(value: str) -> str:
+    """Extract branching connections for display purposes."""
+    text = str(value).upper().strip()
+    if "SWITCH TO YARD" in text or "SWITCH FROM YARD" in text:
+        return "N/A"
+    if "SWITCH" not in text:
+        return "N/A"
+    m = re.search(r"\(([^)]+)\)", text)
+    if not m:
+        return "N/A"
+    inside = m.group(1)
+    connected = [c.strip() for c in re.split(r"[;,]", inside) if c.strip()]
+    return ", ".join(connected) if connected else "N/A"
 
 
 def parse_branching_connections(value: str) -> List[Tuple[int, int]]:
@@ -50,1101 +53,406 @@ def parse_branching_connections(value: str) -> List[Tuple[int, int]]:
     return connections
 
 
-@dataclass
-class Path:
-    """Represents a train path through the network."""
+# -----------------------------------------------------------
 
-    name: str
-    blocks: List[int]
+
+@dataclass
+class Loop:
+    """Represents a backward loop connection."""
+
+    from_block: int
+    to_block: int
 
     def __repr__(self):
-        return f"Path({self.name}: {len(self.blocks)} blocks)"
+        return f"Loop({self.from_block}→{self.to_block})"
+
+
+@dataclass
+class Path:
+    """Represents a track path (main or branch)."""
+
+    id: int
+    type: str  # 'main' or 'branch'
+    blocks: List[int]
+    from_block: Optional[int] = None  # Where branch splits from
+    start_block: Optional[int] = None  # First block on this path
+    connects_to_path: Optional[int] = None  # Path ID this connects to
+    connects_at_block: Optional[int] = None  # Block where connection happens
+    ordered_blocks: Optional[List[int]] = None  # BFS traversal order for visualization
+
+    def __repr__(self):
+        if self.type == "main":
+            return f"Path(Main: {len(self.blocks)} blocks)"
+        else:
+            return f"Path(Branch {self.id}: {self.from_block}→{self.start_block}, {len(self.blocks)} blocks)"
 
 
 @dataclass
 class BranchPoint:
-    """A point where track splits."""
+    """Information about a branching point."""
 
-    block: int
-    targets: List[int]
+    block_num: int
+    targets: List[int]  # Blocks this branches to
 
     def __repr__(self):
-        return f"BranchPoint(block={self.block}, targets={self.targets})"
+        return f"BranchPoint({self.block_num}→{self.targets})"
 
 
-class LineNetwork:
-    """Network for a specific line (Red or Green)."""
+class TrackNetwork:
+    """Complete track network with all paths and connections."""
 
-    def __init__(self, line_name: str, block_manager=None):
-        self.line_name = line_name.replace(" Line", "")
-        self.connections: Dict[int, List[int]] = {}  # block -> list of connected blocks
+    def __init__(self):
+        self.paths: List[Path] = []
         self.branch_points: Dict[int, BranchPoint] = {}
-        self.block_manager = block_manager
-        self.additional_connections: List[Tuple[int, int]] = (
-            []
-        )  # non-sequential to draw
-        self.skip_connections: List[Tuple[int, int]] = []  # exceptions not to draw
-        self.all_blocks = []
-        self.crossing_blocks = []
-        self.red_line_trains = []
-        self.green_line_trains = []
-        self.total_ticket_sales = 0  # Cumulative ticket sales
-        self.previous_train_motions = {}  # Track motion changes: {train_id: motion}
-        self.train_current_stations = {}
-        self.train_positions = {}
-        self.previous_position_yds = (
-            {}
-        )  # Track previous position: {train_id: position_yds}
-        self.yards_into_current_block = (
-            {}
-        )  # Track yards traveled in current block: {train_id: yards}
+        self.loops: List[Loop] = []
+        self.block_to_path: Dict[int, int] = {}  # block_num -> path_id
+        self.block_to_idx: Dict[int, int] = {}  # block_num -> dataframe index
 
-        self.read_train_data_from_json()
+    def get_path(self, path_id: int) -> Optional[Path]:
+        """Get path by ID."""
+        for path in self.paths:
+            if path.id == path_id:
+                return path
+        return None
 
-    def get_red_line_visualizer_info(
-        self,
-    ) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:
-        """Return (additional_connections, skip_connections) for red line."""
-        return (self.additional_connections, self.skip_connections)
+    def get_path_for_block(self, block_num: int) -> Optional[Path]:
+        """Get which path a block belongs to."""
+        path_id = self.block_to_path.get(block_num)
+        if path_id is not None:
+            return self.get_path(path_id)
+        return None
 
-    def get_green_line_visualizer_info(
-        self,
-    ) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:
-        """Return (additional_connections, skip_connections) for green line."""
-        return (self.additional_connections, self.skip_connections)
+    def get_main_path(self) -> Optional[Path]:
+        """Get the main path."""
+        for path in self.paths:
+            if path.type == "main":
+                return path
+        return None
+
+    def get_branch_paths(self) -> List[Path]:
+        """Get all branch paths."""
+        return [p for p in self.paths if p.type == "branch"]
 
     def __repr__(self):
-        return f"LineNetwork({self.line_name}: {len(self.connections)} blocks)"
+        return f"TrackNetwork(paths={len(self.paths)}, branches={len(self.branch_points)}, loops={len(self.loops)})"
 
-    def read_train_data_from_json(self, json_path=TRACK_CONTROLLER_JSON):
-        """Read train control data from JSON file."""
-        try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
 
-            # Determine prefix based on line
-            prefix = self.line_name[0]  # "G" for Green, "R" for Red
+class TrackNetworkBuilder:
+    """Builds track network from dataframe with SWITCH statements."""
 
-            # Parse arrays from JSON
-            switches = data.get(f"{prefix}-switches", [])
-            gates = data.get(f"{prefix}-gates", [])
-            lights = data.get(f"{prefix}-lights", [])
-
-            # Get commanded speeds and authorities from G-Train or R-Train
-            train_data = data.get(f"{prefix}-Train", {})
-            commanded_speeds = train_data.get("commanded speed", [])
-            commanded_authorities = train_data.get("commanded authority", [])
-
-            # Create data dict with only switches, gates, lights
-            data_dict = {
-                "switches": switches,
-                "gates": gates,
-                "lights": lights,
-            }
-
-            # Write parsed data to block manager
-            self.write_to_block_manager(data_dict)
-
-            # Write to Train Model JSON
-            self.write_to_train_model_json(commanded_speeds, commanded_authorities)
-
-        except Exception as e:
-            print(f"Error reading JSON: {e}")
-
-    def write_to_train_model_json(self, commanded_speeds, commanded_authorities):
-        # Read file
-        json_path = TRAIN_MODEL_JSON
-        with open(json_path, "r") as f:
-            train_model_data = json.load(f)
-
-        # Extract motion & position and store
-        trains = []
-        for i in range(len(commanded_speeds)):
-            train_key = f"{self.line_name[0]}_train_{i + 1}"
-            if train_key in train_model_data:
-                motion = train_model_data[train_key]["motion"]["current motion"]
-                pos = train_model_data[train_key]["motion"].get("position_yds", 0)
-                trains.append({"train_id": i + 1, "motion": motion})
-                self.train_positions[i + 1] = pos
-
-                # Write commanded speed/authority
-                train_model_data[train_key]["block"]["commanded speed"] = (
-                    commanded_speeds[i]
-                )
-                train_model_data[train_key]["block"]["commanded authority"] = (
-                    commanded_authorities[i]
-                )
-
-        if self.block_manager:
-            self.block_manager.trains = []
-            for t in trains:
-                self.block_manager.trains.append(
-                    {
-                        "train_id": t["train_id"],
-                        "line": self.line_name,
-                        "start": True if t["motion"] == "Moving" else False,
-                    }
-                )
-        # Store based on line
-        if self.line_name == "Green":
-            self.green_line_trains = trains
-        else:
-            self.red_line_trains = trains
-
-        # Write back
-        json_path = TRAIN_MODEL_JSON
-        with open(json_path, "w") as f:
-            json.dump(train_model_data, f, indent=4)
-
-    def write_to_block_manager(self, data: dict):
-        """Parse raw JSON data and write to block manager."""
-        if not self.block_manager:
-            return
-
-        # Load crossing blocks from static JSON
-        self.load_crossing_blocks_from_static()
-
-        # Load branch points from static JSON
-        self.load_branch_points_from_static()
-
-        self.load_all_blocks_from_static()
-
-        # Extract raw arrays
-        switches = data["switches"]
-        gates = data["gates"]
-        lights = data["lights"]
-
-        # Parse switches using existing method
-        switch_positions = self.process_switch_positions(switches)
-
-        # Parse gates: map crossing_blocks to gate array
-        gate_statuses = {}
-        for i, block_num in enumerate(self.crossing_blocks):
-            if i < len(gates):
-                gate_statuses[block_num] = "Open" if gates[i] == 0 else "Closed"
-        # Parse traffic lights for ALL blocks using existing method
-        parsed_lights = []
-        for block_num in self.all_blocks:
-            light_status = self.parse_traffic_lights(block_num, lights)
-            # Convert to int: Super Green=0, Green=1, Yellow=2, Red=3
-            if light_status == "Super Green":
-                parsed_lights.append(0)
-            elif light_status == "Green":
-                parsed_lights.append(1)
-            elif light_status == "Yellow":
-                parsed_lights.append(2)
-            elif light_status == "Red":
-                parsed_lights.append(3)
-
-        # Write to block manager
-        self.block_manager.write_inputs(
-            self.line_name,
-            switch_positions,
-            gate_statuses,
-            parsed_lights,
-        )
-
-    def process_switch_positions(self, switches: List[int]) -> Dict[int, int]:
-        switch_positions = {}
-
-        if self.line_name == "Green":
-            branch_point_keys = sorted(self.branch_points.keys())
-            # First 2 switches → first 2 branch points
-            for i in range(2):
-                if i < len(branch_point_keys) and i < len(switches):
-                    block_num = branch_point_keys[i]
-                    switch_setting = switches[i]
-                    targets = self.branch_points[block_num].targets
-
-                    # ALWAYS store the position, even if it's the default
-                    if 0 <= switch_setting < len(targets):
-                        switch_positions[block_num] = targets[switch_setting]
-
-            # Middle 2 switches → Yard (blocks 57 and 63)
-            # These switches control whether 57/63 go to yard or continue normally
-            if len(switches) > 2:
-                if switches[2] == 1:
-                    switch_positions[57] = 0  # Go to yard
-                else:
-                    switch_positions[57] = 58  # Continue normally (57→58)
-
-            if len(switches) > 3:
-                if switches[3] == 1:
-                    switch_positions[63] = 0  # Go to yard
-                else:
-                    switch_positions[63] = 64  # Continue normally (63→64)
-
-            # Last 2 switches → last 2 branch points
-            for i in range(2):
-                idx = i + 2  # branch point index
-                switch_idx = i + 4  # switches[4] and switches[5]
-                if idx < len(branch_point_keys) and switch_idx < len(switches):
-                    block_num = branch_point_keys[idx]
-                    switch_setting = switches[switch_idx]
-                    targets = self.branch_points[block_num].targets
-
-                    # ALWAYS store the position
-                    if 0 <= switch_setting < len(targets):
-                        switch_positions[block_num] = targets[switch_setting]
-
-        elif self.line_name == "Red":
-            # Add Red Line switch processing logic
-            pass
-
-        return switch_positions
-
-    def parse_traffic_lights(self, current_block: int, lights_array: List[int]) -> str:
-        """
-        Parse traffic light status for current block.
-        Returns: "Super Green", "Green", "Yellow", or "Red"
-        """
-        # Hard-coded blocks with traffic lights
-        if self.line_name == "Green":
-            traffic_light_blocks = [0, 3, 7, 29, 58, 62, 76, 86, 100, 101, 150, 151]
-        elif self.line_name == "Red":
-            traffic_light_blocks = []  # TODO: Add Red line blocks when available
-
-        # If current block doesn't have a traffic light, return Super Green
-        if current_block not in traffic_light_blocks:
-            return "Super Green"
-
-        # Find which traffic light index this is (0-11)
-        traffic_light_index = traffic_light_blocks.index(current_block)
-
-        # Calculate bit position (2 bits per light)
-        bit_index = traffic_light_index * 2
-
-        # Read 2 bits
-        if bit_index + 1 < len(lights_array):
-            bit1 = lights_array[bit_index]
-            bit2 = lights_array[bit_index + 1]
-
-            # Decode: 00=Super Green, 01=Green, 10=Yellow, 11=Red
-            if bit1 == 0 and bit2 == 0:
-                return "Super Green"
-            elif bit1 == 0 and bit2 == 1:
-                return "Green"
-            elif bit1 == 1 and bit2 == 0:
-                return "Yellow"
-            elif bit1 == 1 and bit2 == 1:
-                return "Red"
-
-        # Default to Super Green if parsing fails
-        return "Super Green"
-
-    def get_next_block(self, train_id, current, previous=None):
-        if not self.should_advance_block(train_id, current):
-            return current
-
-        # Read motion and handle stopped/undispatched (stays here)
-        motion = self._read_train_motion(train_id)
-        if motion == "Stopped":
-            return current
-        elif motion == "Undispatched":
-            return 0
-
-        # Route based on line
-        if self.line_name == "Green":
-            next_block = self._get_green_line_next_block(current, previous)
-        elif self.line_name == "Red":
-            next_block = self._get_red_line_next_block(current, previous)
-
-        self._handle_station_arrival(next_block)
-        self._finalize_block_transition(next_block, current, train_id)
-
-        return next_block
-
-    def get_station_name(self, block_num: int) -> str:
-        """Get station name for a given block number from static JSON."""
-        try:
-            json_path = TRACK_STATIC_JSON
-            with open(json_path, "r") as f:
-                static_data = json.load(f)
-
-            blocks = static_data.get("static_data", {}).get(self.line_name, [])
-            for block in blocks:
-                if block.get("Block Number") == block_num:
-                    return block.get("Station", "N/A")
-        except Exception as e:
-            print(f"Error reading station name: {e}")
-
-        return "N/A"
-
-    def find_next_station(self, starting_block_num):
-        """Search forward from starting block to find next station."""
-        try:
-            # Load static data inside the helper
-            json_path = TRACK_STATIC_JSON
-            with open(json_path, "r") as f:
-                static_data = json.load(f)
-
-            blocks = static_data.get("static_data", {}).get(self.line_name, [])
-
-            # Find starting block index
-            start_idx = None
-            for i, block in enumerate(blocks):
-                if block.get("Block Number") == starting_block_num:
-                    start_idx = i
-                    break
-
-            if start_idx is None:
-                return "N/A", "N/A"
-
-            # Search forward for next station
-            for i in range(start_idx + 1, len(blocks)):
-                station = blocks[i].get("Station", "N/A")
-                if station != "N/A":
-                    side_door = blocks[i].get("Station Side", "N/A")
-                    return station, side_door
-
-            return "N/A", "N/A"
-
-        except Exception as e:
-            print(f"Error in find_next_station: {e}")
-            return "N/A", "N/A"
-
-    def write_beacon_data_to_train_model(self, next_block: int, train_id: int):
-        """Write beacon data to Train Model JSON for a specific train."""
-        try:
-            # Check for circuit failure on this block FIRST
-            block_id = None
-            if self.block_manager:
-                # Find the block_id string for this block number
-                for bid in self.block_manager.line_states.get(self.line_name, {}):
-                    block_num_str = "".join(filter(str.isdigit, bid))
-                    if block_num_str and int(block_num_str) == next_block:
-                        block_id = bid
-                        break
-
-                # Check if circuit failure exists
-                if block_id:
-                    failures = self.block_manager.line_states[self.line_name][block_id][
-                        "failures"
-                    ]
-                    if failures.get("circuit"):
-                        # Circuit failure - write all N/A beacon
-                        beacon = {
-                            "speed limit": 0,
-                            "side_door": "N/A",
-                            "current station": "N/A",
-                            "next station": "N/A",
-                            "passengers_boarding": 0,
-                        }
-
-                        # Write to Train Model JSON
-                        json_path = TRAIN_MODEL_JSON
-                        with open(json_path, "r") as f:
-                            train_model_data = json.load(f)
-
-                        train_key = f"{self.line_name[0]}_train_{train_id}"
-                        if train_key in train_model_data:
-                            train_model_data[train_key]["beacon"] = beacon
-
-                        with open(json_path, "w") as f:
-                            json.dump(train_model_data, f, indent=4)
-
-                        print(
-                            f"Train {train_id} on line {self.line_name} at block {next_block} has a circuit failure. Beacon data set to N/A."
-                        )
-                        return  # Exit early - don't process normal beacon data
-
-        except Exception as e:
-            print(f"Error writing Circuit Failure beacon data to train model: {e}")
-        try:
-            # Read static track data
-            json_path = TRACK_STATIC_JSON
-            with open(json_path, "r") as f:
-                static_data = json.load(f)
-
-            blocks = static_data.get("static_data", {}).get(self.line_name, [])
-
-            # Find next_block in the list
-            block_data = None
-            for i, block in enumerate(blocks):
-                if block.get("Block Number") == next_block:
-                    block_data = block
-                    break
-
-            if not block_data:
-                return
-
-            # Extract beacon data
-            speed_limit = block_data.get("Speed Limit (Km/Hr)", 0)
-
-            # Current station - only update if we're AT a station
-            station_at_block = block_data.get("Station", "N/A")
-            if station_at_block != "N/A":
-                # We're at a station - update it
-                self.train_current_stations[train_id] = station_at_block
-                side_door = block_data.get("Station Side", "N/A")
-            else:
-                # Not at a station - keep previous value
-                side_door = "N/A"
-
-            # Get current station (either just set, or previous)
-            current_station = self.train_current_stations.get(train_id, "N/A")
-
-            # Get next station using helper
-            next_station, next_side_door = self.find_next_station(next_block)
-
-            # If we're not at a station, use next station's side door
-            if station_at_block == "N/A" and next_side_door != "N/A":
-                side_door = next_side_door
-
-            # Get passengers_boarding from block_manager
-            passengers_boarding = 0
-            if self.block_manager and station_at_block != "N/A":
-                passengers_boarding = self.block_manager.passengers_boarding
-
-            # Create beacon dict
-            beacon = {
-                "speed limit": speed_limit,
-                "side_door": side_door,
-                "current station": current_station,
-                "next station": next_station,
-                "passengers_boarding": passengers_boarding,
-            }
-
-            # Write to Train Model JSON
-            json_path = TRAIN_MODEL_JSON
-            with open(json_path, "r") as f:
-                train_model_data = json.load(f)
-
-            train_key = f"{self.line_name[0]}_train_{train_id}"
-            if train_key in train_model_data:
-                train_model_data[train_key]["beacon"] = beacon
-
-            with open(json_path, "w") as f:
-                json.dump(train_model_data, f, indent=4)
-
-        except Exception as e:
-            print(f"Error writing beacon data to train model: {e}")
-
-    def update_block_occupancy(
-        self, current_block: int, previous_block: Optional[int] = None
-    ):
-        """Update occupancy in block manager when train moves."""
-        if not self.block_manager:
-            return
-        # Clear all blocks first
-        for block_id in self.block_manager.line_states.get(self.line_name, {}):
-            self.block_manager.line_states[self.line_name][block_id][
-                "occupancy"
-            ] = False
-
-        # Set current block as occupied
-        for block_id in self.block_manager.line_states.get(self.line_name, {}):
-            try:
-                block_num_str = "".join(filter(str.isdigit, block_id))
-                if block_num_str and int(block_num_str) == current_block:
-                    self.block_manager.line_states[self.line_name][block_id][
-                        "occupancy"
-                    ] = True
-                    break
-            except (ValueError, AttributeError):
-                continue
-
-    def write_occupancy_to_json(self, json_path=TRACK_CONTROLLER_JSON):
-        """Write occupancy data back to Track Controller JSON."""
-        if not self.block_manager:
-            return
-
-        try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
-
-            prefix = self.line_name[0]
-
-            occupancy_array = []
-            blocks = sorted(
-                self.block_manager.line_states.get(self.line_name, {}).keys()
-            )
-
-            for block_id in blocks:
-                occupancy = self.block_manager.line_states[self.line_name][block_id][
-                    "occupancy"
-                ]
-                occupancy_array.append(1 if occupancy else 0)
-
-            data[f"{prefix}-Occupancy"] = occupancy_array
-
-            with open(json_path, "w") as f:
-                json.dump(data, f, indent=4)
-
-        except Exception as e:
-            print(f"Error writing occupancy to JSON: {e}")
-
-    def write_failures_to_json(self, json_path=TRACK_CONTROLLER_JSON):
-        """Write failure data back to Track Controller JSON."""
-        if not self.block_manager:
-            return
-
-        try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
-
-            prefix = self.line_name[0]
-
-            failures_array = []
-            blocks = sorted(
-                self.block_manager.line_states.get(self.line_name, {}).keys()
-            )
-
-            for block_id in blocks:
-                failures = self.block_manager.line_states[self.line_name][block_id][
-                    "failures"
-                ]
-                failures_array.append(1 if failures["power"] else 0)
-                failures_array.append(1 if failures["circuit"] else 0)
-                failures_array.append(1 if failures["broken"] else 0)
-
-            data[f"{prefix}-Failures"] = failures_array
-
-            with open(json_path, "w") as f:
-                json.dump(data, f, indent=4)
-
-        except Exception as e:
-            print(f"Error writing failures to JSON: {e}")
-
-    def load_crossing_blocks_from_static(self):
-        """Load crossing blocks from static JSON file."""
-        try:
-            json_path = TRACK_STATIC_JSON
-            with open(json_path, "r") as f:
-                static_data = json.load(f)
-
-            blocks = static_data.get("static_data", {}).get(self.line_name, [])
-            crossing_blocks = []
-
-            for block in blocks:
-                if block.get("Crossing") == "Yes":
-                    block_num = block.get("Block Number")
-                    if block_num not in ["N/A", "nan", None]:
-                        try:
-                            crossing_blocks.append(int(block_num))
-                        except:
-                            pass
-
-            self.crossing_blocks = sorted(crossing_blocks)
-        except Exception as e:
-            pass
-
-    def load_branch_points_from_static(self):
-        """Load branch points from static JSON file."""
-        try:
-            json_path = TRACK_STATIC_JSON
-            with open(json_path, "r") as f:
-                static_data = json.load(f)
-
-            blocks = static_data.get("static_data", {}).get(self.line_name, [])
-            switch_data = {}
-
-            for block in blocks:
-                infra_text = str(block.get("Infrastructure", "")).upper()
-                block_num = block.get("Block Number")
-
-                if block_num not in ["N/A", "nan", None]:
-                    block_num = int(block_num)
-                    branch_conns = parse_branching_connections(infra_text)
-
-                    if branch_conns:
-                        from collections import Counter
-
-                        all_blocks = []
-
-                        for from_b, to_b in branch_conns:
-                            all_blocks.append(from_b)
-                            all_blocks.append(to_b)
-
-                        block_counts = Counter(all_blocks)
-                        branch_point = None
-
-                        for blk, count in block_counts.items():
-                            if count > 1:
-                                branch_point = blk
-                                break
-
-                        if branch_point:
-                            unique_blocks = sorted(list(set(all_blocks)))
-                            targets = [b for b in unique_blocks if b != branch_point]
-                            self.branch_points[branch_point] = BranchPoint(
-                                block=branch_point, targets=targets
-                            )
-        except Exception:
-            pass
-
-    def load_all_blocks_from_static(self):
-        """Load all blocks from static JSON file."""
-        try:
-            json_path = TRACK_STATIC_JSON
-            with open(json_path, "r") as f:
-                static_data = json.load(f)
-
-            blocks = static_data.get("static_data", {}).get(self.line_name, [])
-            all_blocks = []
-
-            for block in blocks:
-                block_num = block.get("Block Number")
-                if block_num not in ["N/A", "nan", None]:
-                    try:
-                        all_blocks.append(int(block_num))
-                    except:
-                        pass
-
-            self.all_blocks = sorted(set(all_blocks))
-        except Exception:
-            pass
-
-    def should_advance_block(self, train_id: int, current_block: int) -> bool:
-        """
-        Determine if train has traveled enough yards to advance to next block.
-
-        Args:
-            train_id: Train identifier
-            current_block: Current block number
-
-        Returns:
-            True if train should advance to next block, False otherwise
-        """
-        # Initialize train state if not exists
-        if not hasattr(self, "previous_position_yds"):
-            self.previous_position_yds = {}
-        if not hasattr(self, "yards_into_current_block"):
-            self.yards_into_current_block = {}
-
-        # Initialize this train's state
-        if train_id not in self.previous_position_yds:
-            self.previous_position_yds[train_id] = 0
-        if train_id not in self.yards_into_current_block:
-            self.yards_into_current_block[train_id] = 0
-
-        # Read current position from train_positions (already populated by write_to_train_model_json)
-        current_position_yds = self.train_positions.get(train_id, 0)
-
-        # Calculate delta
-        delta = current_position_yds - self.previous_position_yds[train_id]
-
-        # Add delta to yards traveled in current block
-        self.yards_into_current_block[train_id] += delta
-
-        # Get block length from static JSON
-        try:
-            with open(TRACK_STATIC_JSON, "r") as f:
-                static_data = json.load(f)
-
-            blocks = static_data.get("static_data", {}).get(self.line_name, [])
-            block_length_yards = None
-
-            for block in blocks:
-                if block.get("Block Number") == current_block:
-                    length_m = block.get("Block Length (m)", 0)
-                    if length_m not in ["N/A", "nan", None]:
-                        # Convert meters to yards (1m = 1.09361 yards)
-                        block_length_yards = float(length_m) * 1.09361
-                    break
-
-            if block_length_yards is None:
-                # Default to allowing advance if block length unknown
-                self.previous_position_yds[train_id] = current_position_yds
-                return True
-
-            # Check if enough yards traveled to advance
-            if self.yards_into_current_block[train_id] >= block_length_yards:
-                # Subtract block length and carry overflow
-                self.yards_into_current_block[train_id] -= block_length_yards
-                self.previous_position_yds[train_id] = current_position_yds
-                return True
-            else:
-                # Not enough yards traveled, stay in current block
-                self.previous_position_yds[train_id] = current_position_yds
-                return False
-
-        except Exception as e:
-            print(f"Error in should_advance_block: {e}")
-            self.previous_position_yds[train_id] = current_position_yds
-            return True  # Default to allowing advance on error
-
-    def _handle_station_arrival(self, next_block: int) -> None:
-        """
-        Check if next_block is a station and generate passengers boarding.
-
-        Args:
-            next_block: The block number train is moving to
-        """
-        # Check if next_block is a station and generate passengers boarding
-        station_name = self.get_station_name(next_block)
-        if station_name != "N/A":
-            self.block_manager.passengers_boarding = random.randint(0, 200)
-            self.block_manager.total_ticket_sales += (
-                self.block_manager.passengers_boarding
-            )
-
-    def _finalize_block_transition(
-        self, next_block: int, current: int, train_id: int
-    ) -> None:
-        """
-        Finalize the block transition by updating occupancy, beacon data, and direction.
-
-        Args:
-            next_block: The block number train is moving to
-            current: The current block number
-            train_id: Train identifier
-        """
-        # Update occupancy in block manager
-        self.update_block_occupancy(next_block, current)
-        self.write_beacon_data_to_train_model(next_block, train_id)
-
-        # Write occupancy and failures back to Track Controller JSON
-        self.write_occupancy_to_json()
-        self.write_failures_to_json()
-
-        # Determine direction of travel
-        if next_block > current:
-            direction = "Forward"
-        elif next_block < current:
-            direction = "Backward"
-        else:
-            direction = "Stopped"
-
-        # Store direction in block_manager
-        if self.block_manager:
-            # Find the block_id for current block
-            for block_id in self.block_manager.line_states.get(self.line_name, {}):
-                block_num_str = "".join(filter(str.isdigit, block_id))
-                if block_num_str and int(block_num_str) == current:
-                    self.block_manager.line_states[self.line_name][block_id][
-                        "direction"
-                    ] = direction
-                    break
-
-    def _get_green_line_next_block(self, current: int, previous: Optional[int]) -> int:
-        """
-        Determine next block for Green Line based on current position and routing rules.
-
-        Args:
-            current: Current block number
-            previous: Previous block number (or None)
-
-        Returns:
-            Next block number
-        """
-        # Special cases first
-        if current == 0 and previous is None:
-            next_block = 63
-        elif current == 57 and previous == 56:
-            next_block = 0
-        elif current == 0 and previous == 57:
-            next_block = 0
-        elif current == 100 and previous == 85:
-            next_block = 99
-        elif current == 100 and previous == 99:
-            next_block = 85
-        elif current == 85 and previous == 100:
-            next_block = 84
-        elif current == 85 and previous == 86:
-            next_block = 84
-        elif current == 150 and previous == 149:
-            next_block = 28
-        elif current == 150 and previous == 28:
-            next_block = 149
-        else:
-            # Check switch position first
-            switch_target = self.block_manager.get_switch_position(
-                self.line_name, current
-            )
-            if switch_target != "N/A" and isinstance(switch_target, int):
-                # Switch overrides hard-coded path
-                if switch_target != previous:
-                    next_block = switch_target
-                elif switch_target == previous:
-                    if switch_target == current - 1:
-                        next_block = current + 1
-                    elif switch_target == current + 1:
-                        next_block = current - 1
-            else:
-                if previous is not None and previous == current + 1:
-                    next_block = current - 1
-                elif previous is not None and previous == current - 1:
-                    next_block = current + 1
-                else:
-                    # Should never happen with proper hard-coding
-                    print(
-                        f"ERROR: Green Line - No path defined for block {current}, previous {previous}"
-                    )
-                    next_block = current
-
-        print(f"Train at block {current} with next block {next_block} on Green Line.")
-
-        return next_block
-
-    def _get_red_line_next_block(self, current: int, previous: Optional[int]) -> int:
-        """
-        Determine next block for Red Line based on current position and routing rules.
-
-        Args:
-            current: Current block number
-            previous: Previous block number (or None)
-
-        Returns:
-            Next block number
-        """
-        # Special cases first
-        if current == 0 and previous is None:
-            next_block = 10
-        elif current == 10 and previous == 9:
-            next_block = 0
-        elif current == 0 and previous == 10:
-            next_block = 0
-        else:
-            # Check switch position first
-            switch_target = self.block_manager.get_switch_position(
-                self.line_name, current
-            )
-
-            if switch_target != "N/A" and isinstance(switch_target, int):
-                # Switch overrides hard-coded path
-                next_block = switch_target
-            else:
-                # Hard-coded path for Red Line: 0→10→66→45→16→1→10→0
-
-                # Segment 1: 10→66 (going up)
-                if 10 <= current < 66:
-                    if previous is not None and previous == current + 1:
-                        # Coming from above, go down
-                        next_block = current - 1
-                    else:
-                        # Normal: going up
-                        next_block = current + 1
-
-                # Transition: 66→45
-                elif current == 66:
-                    if previous is not None and previous == 65:
-                        # Coming from 65, go to 45
-                        next_block = 45
-                    elif previous is not None and previous == 45:
-                        # Coming from 45 (going backwards), go to 65
-                        next_block = 65
-                    else:
-                        # Default: go to 45
-                        next_block = 45
-
-                # Segment 2: 45→16 (going down)
-                elif 16 < current < 45:
-                    if previous is not None and previous == current - 1:
-                        # Coming from below, go up
-                        next_block = current + 1
-                    else:
-                        # Normal: going down
-                        next_block = current - 1
-
-                # At 45 specifically
-                elif current == 45:
-                    if previous is not None and previous == 66:
-                        # Coming from 66, go down to 44
-                        next_block = 44
-                    elif previous is not None and previous == 44:
-                        # Coming from 44 (going backwards), go to 66
-                        next_block = 66
-                    else:
-                        # Default: go down
-                        next_block = 44
-
-                # Transition: 16→1
-                elif current == 16:
-                    if previous is not None and previous == 17:
-                        # Coming from 17, go to 1
-                        next_block = 1
-                    elif previous is not None and previous == 1:
-                        # Coming from 1 (going backwards), go to 17
-                        next_block = 17
-                    else:
-                        # Default: go to 1
-                        next_block = 1
-
-                # Segment 3: 1→10 (going up)
-                elif 1 <= current < 10:
-                    if previous is not None and previous == current + 1:
-                        # Coming from above, go down
-                        next_block = current - 1
-                    else:
-                        # Normal: going up
-                        next_block = current + 1
-
-                # Transition: 10→0 (yard)
-                elif current == 10:
-                    if previous is not None and previous == 9:
-                        # Coming from 9, go to yard
-                        next_block = 0
-                    elif previous is not None and previous == 0:
-                        # Coming from yard (shouldn't happen normally)
-                        next_block = 9
-                    elif previous is not None and previous == 11:
-                        # Coming from 11 (going down), continue to 9
-                        next_block = 9
-                    else:
-                        # Default: go to yard
-                        next_block = 0
-
-                else:
-                    # Should never happen with proper hard-coding
-                    print(
-                        f"ERROR: Red Line - No path defined for block {current}, previous {previous}"
-                    )
-                    next_block = current
-
-        return next_block
-
-
-class LineNetworkBuilder:
-    """Builds network for Red and Green lines."""
-
-    def __init__(self, df: pd.DataFrame, line_name: str):
+    def __init__(self, df: pd.DataFrame):
         self.df = df
-        self.line_name = line_name
-        self.network = LineNetwork(line_name)
-        self.all_blocks = []
-        self.switch_data = {}
+        self.network = TrackNetwork()
+        self._switches = []  # Raw switch data
+        self._branch_info = []  # Processed branch information
 
-    def build(self) -> LineNetwork:
-        """Build the network."""
+    def build(self) -> TrackNetwork:
+        """Main method - build complete network and return."""
+        print("\n=== Building Track Network ===")
 
-        self._parse_blocks()
+        # Step 1: Map block numbers to dataframe indices
+        self._map_blocks()
+        print(f"✓ Mapped {len(self.network.block_to_idx)} blocks")
 
-        if self.line_name == "Red Line":
-            self._build_red_line()
-        elif self.line_name == "Green Line":
-            self._build_green_line()
+        # Step 2: Parse all SWITCH statements
+        self._parse_switches()
+        print(f"✓ Found {len(self._switches)} switches")
 
+        # Step 3: Identify branch points
+        self._identify_branch_points()
+        print(f"✓ Identified {len(self.network.branch_points)} branch points")
+
+        # Step 4: Categorize connections (loops vs branches)
+        self._categorize_connections()
+        print(f"✓ Found {len(self.network.loops)} loops")
+        print(f"✓ Found {len(self._branch_info)} forward branches")
+
+        # Step 5: Build all paths (main + branches)
+        self._build_paths_bfs()
+        print(f"✓ Created {len(self.network.paths)} paths")
+
+        # Step 6: Validation
+        self._validate_paths()
+
+        print("=== Network Build Complete ===\n")
         return self.network
 
-    def _parse_blocks(self):
-        """Get all blocks sequentially."""
+    def _map_blocks(self):
+        """Map block numbers to dataframe indices."""
         for idx, row in self.df.iterrows():
-            block_num = row.get("Block Number", "N/A")
-            if block_num != "N/A" and str(block_num) != "nan":
+            block_num_val = row.get("Block Number", "N/A")
+            if block_num_val != "N/A" and str(block_num_val) != "nan":
                 try:
-                    self.all_blocks.append(int(block_num))
+                    block_num = int(block_num_val)
+                    self.network.block_to_idx[block_num] = idx
                 except:
                     pass
-        self.all_blocks = sorted(set(self.all_blocks))
-        self.network.all_blocks = self.all_blocks
 
-    def _build_red_line(self):
-        """Build Red Line with hard-coded rules."""
-        forbidden = {(66, 67), (67, 66), (71, 72), (72, 71)}
+    def _parse_switches(self):
+        """Extract all SWITCH statements from dataframe."""
+        for idx, row in self.df.iterrows():
+            branch_conns = row.get("BranchConnections", [])
+            if len(branch_conns) >= 2:
+                self._switches.append({"row_idx": idx, "connections": branch_conns})
 
-        for block in self.all_blocks:
-            self.network.connections[block] = []
+    def _identify_branch_points(self):
+        """Find branch points (blocks that appear twice in connections)."""
+        for switch in self._switches:
+            connections = switch["connections"]
 
-        for block in self.all_blocks:
-            if block - 1 in self.all_blocks:
-                if (block - 1, block) not in forbidden:
-                    self.network.connections[block].append(block - 1)
+            # Collect all block numbers in this switch
+            all_nums = []
+            for from_b, to_b in connections:
+                all_nums.extend([from_b, to_b])
 
-            if block + 1 in self.all_blocks:
-                if (block, block + 1) not in forbidden:
-                    self.network.connections[block].append(block + 1)
+            # Count occurrences
+            num_counts = Counter(all_nums)
 
-        for block in self.switch_data:
-            branch_targets = []
-            for target in self.switch_data[block]:
-                if target != block and abs(target - block) > 1:
-                    if (block, target) not in forbidden and (
-                        target,
-                        block,
-                    ) not in forbidden:
-                        if target not in self.network.connections[block]:
-                            self.network.connections[block].append(target)
-                        if block not in self.network.connections[target]:
-                            self.network.connections[target].append(block)
+            # Branch point appears exactly twice
+            for num, count in num_counts.items():
+                if count == 2:
+                    branch_point = num
 
-                        branch_targets.append(target)
+                    # Find all targets from this branch point
+                    targets = []
+                    for from_b, to_b in connections:
+                        if from_b == branch_point:
+                            targets.append(to_b)
+                        elif to_b == branch_point:
+                            # Connection TO branch point (might be backward loop)
+                            if from_b != branch_point - 1:
+                                targets.append(from_b)
 
-                        conn = (min(block, target), max(block, target))
-                        if conn not in self.network.additional_connections:
-                            self.network.additional_connections.append(conn)
+                    # Store branch point
+                    self.network.branch_points[branch_point] = BranchPoint(
+                        block_num=branch_point, targets=list(set(targets))
+                    )
+                    break
 
-            if branch_targets:
-                self.network.branch_points[block] = BranchPoint(
-                    block=block, targets=branch_targets
+    def _categorize_connections(self):
+        """Categorize connections as loops or forward branches."""
+        for branch_point, bp_info in self.network.branch_points.items():
+            for target in bp_info.targets:
+                # Skip sequential (would happen anyway)
+                if target == branch_point + 1:
+                    continue
+
+                if target < branch_point:
+                    # BACKWARD = LOOP
+                    self.network.loops.append(
+                        Loop(from_block=branch_point, to_block=target)
+                    )
+
+                elif target > branch_point + 1:
+                    # FORWARD = Potential branch
+                    blocks_between = target - branch_point - 1
+
+                    self._branch_info.append(
+                        {
+                            "branch_point": branch_point,
+                            "target": target,
+                            "blocks_between": blocks_between,
+                            "is_large_gap": blocks_between >= 5,
+                        }
+                    )
+
+    def _build_paths_bfs(self):
+        """Build all paths - process branches from LATEST to EARLIEST."""
+        all_blocks = sorted(self.network.block_to_idx.keys())
+        if not all_blocks:
+            return
+
+        # Step 1: Collect ALL branch targets
+        branch_targets = {}  # branch_point -> target
+        branch_start_blocks = set()
+
+        for branch_point in self.network.branch_points:
+            bp = self.network.branch_points[branch_point]
+            for target in bp.targets:
+                if target > branch_point + 1:  # Forward branch only
+                    branch_targets[branch_point] = target
+                    branch_start_blocks.add(target)
+
+        # Step 2: Build ALL branches first (from LATEST to EARLIEST)
+        # Sort branch points by their TARGET block number (descending)
+        sorted_branches = sorted(
+            branch_targets.items(), key=lambda x: x[1], reverse=True
+        )
+
+        all_branch_blocks = set()
+        path_id = 1
+
+        for branch_point, target in sorted_branches:
+            # Build branch sequentially from target to END or another branch
+            branch_blocks = []
+            current = target
+
+            while current in all_blocks:
+                branch_blocks.append(current)
+                all_branch_blocks.add(current)
+
+                # Check next block
+                next_block = current + 1
+
+                # Stop if next block starts a different branch
+                if next_block in branch_start_blocks and next_block != target:
+                    break
+
+                # Stop if next block doesn't exist
+                if next_block not in all_blocks:
+                    break
+
+                current = next_block
+
+            # Determine reconnection - check where next block APPEARS
+            last_block = branch_blocks[-1]
+            next_after_branch = last_block + 1
+            connects_to = None
+            connects_at = None
+
+            # Check if next block exists anywhere (main or branches)
+            if next_after_branch in all_blocks:
+                # Find where this block appears
+                if next_after_branch in all_branch_blocks:
+                    # It's in a branch - find which one
+                    for other_path in self.network.paths:
+                        if next_after_branch in other_path.blocks:
+                            connects_at = next_after_branch
+                            connects_to = other_path.id
+                            break
+                else:
+                    # It will be in main path
+                    connects_at = next_after_branch
+                    connects_to = 0  # Will connect to main
+
+            branch_path = Path(
+                id=path_id,
+                type="branch",
+                blocks=branch_blocks,
+                from_block=branch_point,
+                start_block=target,
+                connects_to_path=connects_to,
+                connects_at_block=connects_at,
+            )
+            self.network.paths.append(branch_path)
+
+            for block in branch_blocks:
+                self.network.block_to_path[block] = path_id
+
+            reconnect_info = ""
+            if connects_at:
+                reconnect_type = "main" if connects_to == 0 else f"branch {connects_to}"
+                reconnect_info = (
+                    f" → reconnects to {reconnect_type} at block {connects_at}"
                 )
 
-        self.network.skip_connections = [(66, 67), (71, 72)]
+            print(
+                f"  Branch {path_id}: from {branch_point}→{target}, {len(branch_blocks)} blocks {branch_blocks}{reconnect_info}"
+            )
+            path_id += 1
 
-    def _build_green_line(self):
-        """Build Green Line with hard-coded rules."""
-        forbidden = {(100, 101)}
+        # Step 3: Build main path - SEQUENTIAL, but SKIP all branch blocks
+        main_blocks = []
+        current = all_blocks[0]
 
-        for block in self.all_blocks:
-            self.network.connections[block] = []
+        while current in all_blocks:
+            # SKIP if this block is in ANY branch
+            if current in all_branch_blocks:
+                current += 1
+                continue
 
-        for block in self.all_blocks:
-            if block - 1 in self.all_blocks:
-                if (block - 1, block) not in forbidden:
-                    self.network.connections[block].append(block - 1)
+            main_blocks.append(current)
+            current += 1
 
-            if block + 1 in self.all_blocks:
-                if (block, block + 1) not in forbidden:
-                    self.network.connections[block].append(block + 1)
+        # Create main path
+        ordered_blocks = list(main_blocks)
 
-        for block in self.switch_data:
-            branch_targets = []
-            for target in self.switch_data[block]:
-                if target != block and abs(target - block) > 1:
-                    if (block, target) not in forbidden and (
-                        target,
-                        block,
-                    ) not in forbidden:
-                        if target not in self.network.connections[block]:
-                            self.network.connections[block].append(target)
-                        if block not in self.network.connections[target]:
-                            self.network.connections[target].append(block)
+        # Insert branches into ordered blocks at their branch points
+        for branch_path in sorted(
+            self.network.paths, key=lambda p: p.from_block if p.from_block else 0
+        ):
+            if (
+                branch_path.type == "branch"
+                and branch_path.from_block in ordered_blocks
+            ):
+                insert_idx = ordered_blocks.index(branch_path.from_block) + 1
+                for block in branch_path.blocks:
+                    ordered_blocks.insert(insert_idx, block)
+                    insert_idx += 1
 
-                        branch_targets.append(target)
+        main_path = Path(
+            id=0, type="main", blocks=main_blocks, ordered_blocks=ordered_blocks
+        )
+        self.network.paths.insert(0, main_path)  # Insert at beginning
 
-                        conn = (min(block, target), max(block, target))
-                        if conn not in self.network.additional_connections:
-                            self.network.additional_connections.append(conn)
+        for block in main_blocks:
+            self.network.block_to_path[block] = 0
 
-            if branch_targets:
-                self.network.branch_points[block] = BranchPoint(
-                    block=block, targets=branch_targets
+        print(
+            f"  Main path: {len(main_blocks)} blocks (ends at {main_blocks[-1] if main_blocks else 'N/A'})"
+        )
+        print(f"  Total traversal order: {len(ordered_blocks)} blocks")
+
+    def _validate_paths(self):
+        """Validate the built network against all rules."""
+        all_blocks = set(self.network.block_to_idx.keys())
+
+        # Rule 1: All blocks assigned to exactly one path
+        assigned = set()
+        for path in self.network.paths:
+            for block in path.blocks:
+                if block in assigned:
+                    print(
+                        f"⚠️  VALIDATION ERROR: Block {block} appears in multiple paths!"
+                    )
+                assigned.add(block)
+
+        missing = all_blocks - assigned
+        if missing:
+            print(f"⚠️  VALIDATION ERROR: Blocks not assigned: {sorted(missing)}")
+
+        # Rule 2: Branch blocks are sequential
+        for path in self.network.paths:
+            if path.type == "branch" and len(path.blocks) > 1:
+                for i in range(len(path.blocks) - 1):
+                    if path.blocks[i + 1] != path.blocks[i] + 1:
+                        print(
+                            f"⚠️  VALIDATION ERROR: Branch {path.id} not sequential: {path.blocks}"
+                        )
+                        break
+
+        print("✓ Validation complete")
+
+    def print_network_summary(self):
+        """Print detailed network summary for debugging."""
+        print("\n" + "=" * 60)
+        print("TRACK NETWORK SUMMARY")
+        print("=" * 60)
+
+        print(f"\nTotal Blocks: {len(self.network.block_to_idx)}")
+        print(f"Branch Points: {len(self.network.branch_points)}")
+        print(f"Loops: {len(self.network.loops)}")
+        print(f"Paths: {len(self.network.paths)}")
+
+        print("\n--- Branch Points ---")
+        for bp_num, bp in self.network.branch_points.items():
+            print(f"  Block {bp_num} → {bp.targets}")
+
+        print("\n--- Loops ---")
+        for loop in self.network.loops:
+            print(f"  {loop}")
+
+        print("\n--- Paths ---")
+        for path in self.network.paths:
+            print(f"  {path}")
+            if path.connects_to_path is not None:
+                print(
+                    f"    └─ Reconnects to Path {path.connects_to_path} at block {path.connects_at_block}"
                 )
 
-        self.network.skip_connections = [(100, 101)]
+        print("\n" + "=" * 60 + "\n")
 
 
-def main():
-    """Test the network by loading data from an Excel file."""
-    excel_file_path = "Track Layout & Vehicle Data vF5.xlsx"
-
-    try:
-        df = pd.read_excel(excel_file_path, sheet_name="Green Line")
-        print(f"✓ Data loaded successfully from {excel_file_path}")
-    except FileNotFoundError:
-        print(f"❌ Error: Excel file not found at '{excel_file_path}'.")
-        return
-
-    builder = LineNetworkBuilder(df, "Green Line")
-    network = builder.build()
-
-    # Set the block manager (no parameters required)
-    network.block_manager = DynamicBlockManager()
-
-    current = 0
-    previous = None
-
-    for i in range(200):
-        next_block = network.get_next_block(1, current, previous)
-        print(f"Step {i}: Block {current} → {next_block}")
-
-        if next_block == current:
-            print("Train stopped")
-            break
-
-        previous = current
-        current = next_block
-
-
+# Example usage
 if __name__ == "__main__":
-    main()
+    pass

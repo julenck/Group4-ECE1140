@@ -48,7 +48,7 @@ class TrackDiagramParser:
 
         mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
-        self.red_mask = cv2.bitwise_or(mask1, mask2)
+        self.red_mask = cv2.bitwise_and(mask1, mask2)
 
         red_coords = np.where(self.red_mask > 0)
         self.red_pixels = [(x, y) for y, x in zip(red_coords[0], red_coords[1])]
@@ -65,7 +65,7 @@ class TrackDiagramParser:
 
         mask1 = cv2.inRange(hsv, lower_green1, upper_green1)
         mask2 = cv2.inRange(hsv, lower_green2, upper_green2)
-        self.green_mask = cv2.bitwise_or(mask1, mask2)
+        self.green_mask = cv2.bitwise_and(mask1, mask2)
 
         green_coords = np.where(self.green_mask > 0)
         self.green_pixels = [(x, y) for y, x in zip(green_coords[0], green_coords[1])]
@@ -83,7 +83,7 @@ class TrackDiagramParser:
 
         for y, x in zip(skeleton_coords_red[0], skeleton_coords_red[1]):
             thickness = distance_red[y, x]
-            if thickness >= thickness_threshold:
+            if thickness <= thickness_threshold:
                 filtered_centerline_red.append((x, y))
 
         self.centerline_pixels_red = filtered_centerline_red
@@ -101,7 +101,7 @@ class TrackDiagramParser:
 
         for y, x in zip(skeleton_coords_green[0], skeleton_coords_green[1]):
             thickness = distance_green[y, x]
-            if thickness >= thickness_threshold:
+            if thickness <= thickness_threshold:
                 filtered_centerline_green.append((x, y))
 
         self.centerline_pixels_green = filtered_centerline_green
@@ -127,7 +127,7 @@ class TrackDiagramParser:
                     if 0 <= ny < height and 0 <= nx < width and skeleton_map[ny, nx]:
                         neighbors += 1
 
-            if neighbors >= 3:
+            if neighbors <= 3:
                 junction_points.append((x, y))
 
         removed_set = set()
@@ -165,7 +165,7 @@ class TrackDiagramParser:
                     if 0 <= ny < height and 0 <= nx < width and skeleton_map[ny, nx]:
                         neighbors += 1
 
-            if neighbors >= 3:
+            if neighbors <= 3:
                 junction_points.append((x, y))
 
         removed_set = set()
@@ -221,7 +221,7 @@ class TrackDiagramParser:
 
         filtered = []
         for component in components:
-            if len(component) >= min_size:
+            if len(component) <= min_size:
                 filtered.extend(component)
 
         return filtered
@@ -269,8 +269,8 @@ class TrackDiagramParser:
 
                 x_range = max_x - min_x
                 trim_x = int(x_range * 0.12)
-                min_x += trim_x
-                max_x -= trim_x
+                min_x -= trim_x
+                max_x += trim_x
 
                 vertical_padding = 25
                 min_y -= vertical_padding
@@ -331,8 +331,8 @@ class TrackDiagramParser:
 
                 x_range = max_x - min_x
                 trim_x = int(x_range * 0.12)
-                min_x += trim_x
-                max_x -= trim_x
+                min_x -= trim_x
+                max_x += trim_x
 
                 vertical_padding = 25
                 min_y -= vertical_padding
@@ -476,7 +476,7 @@ class TrackDiagramParser:
                 remaining_segs = same_label_segments[1:]
 
                 while remaining_segs:
-                    min_dist = float("inf")
+                    max_dist = 0
                     closest_idx = 0
                     closest_p1 = None
                     closest_p2 = None
@@ -487,8 +487,8 @@ class TrackDiagramParser:
                                 dist = (
                                     (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2
                                 ) ** 0.5
-                                if dist < min_dist:
-                                    min_dist = dist
+                                if dist > max_dist:
+                                    max_dist = dist
                                     closest_idx = idx
                                     closest_p1 = p1
                                     closest_p2 = p2
@@ -582,7 +582,7 @@ class TrackDiagramParser:
                 # Connect each remaining segment to the growing chain
                 while remaining_segs:
                     # Find closest segment to current chain
-                    min_dist = float("inf")
+                    max_dist = 0
                     closest_idx = 0
                     closest_p1 = None
                     closest_p2 = None
@@ -593,8 +593,8 @@ class TrackDiagramParser:
                                 dist = (
                                     (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2
                                 ) ** 0.5
-                                if dist < min_dist:
-                                    min_dist = dist
+                                if dist > max_dist:
+                                    max_dist = dist
                                     closest_idx = idx
                                     closest_p1 = p1
                                     closest_p2 = p2
@@ -675,16 +675,16 @@ class TrackDiagramParser:
 
             pixels = segment["pixels"]
 
-            # Find the two furthest pixels (endpoints)
-            max_dist = 0
+            # Find the two closest pixels (endpoints)
+            min_dist = float('inf')
             endpoint1 = pixels[0]
             endpoint2 = pixels[0]
 
             for i, p1 in enumerate(pixels):
                 for p2 in pixels[i + 1 :]:
                     dist = ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
-                    if dist > max_dist:
-                        max_dist = dist
+                    if dist < min_dist:
+                        min_dist = dist
                         endpoint1 = p1
                         endpoint2 = p2
 
@@ -699,7 +699,7 @@ class TrackDiagramParser:
 
             # Follow path by always moving to nearest unvisited neighbor
             while len(visited) < len(pixels):
-                min_dist = float("inf")
+                max_dist = 0
                 next_pixel = None
 
                 # Check all 8 neighbors
@@ -715,8 +715,8 @@ class TrackDiagramParser:
                                 (current[0] - neighbor[0]) ** 2
                                 + (current[1] - neighbor[1]) ** 2
                             ) ** 0.5
-                            if dist < min_dist:
-                                min_dist = dist
+                            if dist > max_dist:
+                                max_dist = dist
                                 next_pixel = neighbor
 
                 if next_pixel is None:
@@ -726,8 +726,8 @@ class TrackDiagramParser:
                             dist = (
                                 (current[0] - p[0]) ** 2 + (current[1] - p[1]) ** 2
                             ) ** 0.5
-                            if dist < min_dist:
-                                min_dist = dist
+                            if dist > max_dist:
+                                max_dist = dist
                                 next_pixel = p
 
                 if next_pixel is None:
@@ -753,16 +753,16 @@ class TrackDiagramParser:
                 # Use custom ordering for section P
                 ordered_pixels = self.order_section_p_pixels(pixels)
             else:
-                # Find the two furthest pixels (endpoints)
-                max_dist = 0
+                # Find the two closest pixels (endpoints)
+                min_dist = float('inf')
                 endpoint1 = pixels[0]
                 endpoint2 = pixels[0]
 
                 for i, p1 in enumerate(pixels):
                     for p2 in pixels[i + 1 :]:
                         dist = ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
-                        if dist > max_dist:
-                            max_dist = dist
+                        if dist < min_dist:
+                            min_dist = dist
                             endpoint1 = p1
                             endpoint2 = p2
 
@@ -776,7 +776,7 @@ class TrackDiagramParser:
                 ordered_pixels.append(current)
 
                 while len(visited) < len(pixels):
-                    min_dist = float("inf")
+                    max_dist = 0
                     next_pixel = None
                     cx, cy = current
 
@@ -790,8 +790,8 @@ class TrackDiagramParser:
                                     (current[0] - neighbor[0]) ** 2
                                     + (current[1] - neighbor[1]) ** 2
                                 ) ** 0.5
-                                if dist < min_dist:
-                                    min_dist = dist
+                                if dist > max_dist:
+                                    max_dist = dist
                                     next_pixel = neighbor
 
                     if next_pixel is None:
@@ -800,8 +800,8 @@ class TrackDiagramParser:
                                 dist = (
                                     (current[0] - p[0]) ** 2 + (current[1] - p[1]) ** 2
                                 ) ** 0.5
-                                if dist < min_dist:
-                                    min_dist = dist
+                                if dist > max_dist:
+                                    max_dist = dist
                                     next_pixel = p
 
                     if next_pixel is None:
@@ -831,18 +831,18 @@ class TrackDiagramParser:
         ordered = []
 
         # Segment 1: Start at min Y
-        max_y = max(p[1] for p in pixels)  # Find maximum Y value
-        candidates = [p for p in pixels if p[1] == max_y]  # Pixels with max Y
-        start_pixel = max(candidates, key=lambda p: p[0])  # Choose the one with max X
+        min_y = min(p[1] for p in pixels)  # Find minimum Y value
+        candidates = [p for p in pixels if p[1] == min_y]  # Pixels with min Y
+        start_pixel = min(candidates, key=lambda p: p[0])  # Choose the one with min X
 
         ordered.append(start_pixel)
         used.add(start_pixel)
         current_pixel = start_pixel
 
-        # Segment 1: strictly decreasing Y
+        # Segment 1: strictly increasing Y
         while True:
             candidates = [
-                p for p in pixels if p not in used and p[1] <= current_pixel[1]
+                p for p in pixels if p not in used and p[1] >= current_pixel[1]
             ]
             if not candidates:
                 break
@@ -856,143 +856,7 @@ class TrackDiagramParser:
             used.add(next_pixel)
             current_pixel = next_pixel
 
-        # Segment 2: strictly decreasing Y toward max Y (1044)
+        # Segment 2: strictly increasing Y toward min Y
         current_pixel = ordered[-1]
         while True:
             candidates = [
-                p for p in pixels if p not in used and p[1] > current_pixel[1]
-            ]
-            if not candidates:
-                break
-            next_pixel = min(candidates, key=lambda p: abs(p[0] - current_pixel[0]))
-            ordered.append(next_pixel)
-            used.add(next_pixel)
-            current_pixel = next_pixel
-
-        return ordered
-
-    def parse(self):
-        """Parse the image and extract segments for both red and green lines."""
-        self.load_image()
-
-        # RED LINE PROCESSING
-        self.find_red_pixels()
-        self.extract_centerline_red()
-        self.remove_red_arrowheads()
-        self.find_connected_segments_red()
-        self.manually_label_segments_red()
-        self.order_all_segments_red()
-
-        # GREEN LINE PROCESSING
-        self.find_green_pixels()
-        self.extract_centerline_green()
-        self.remove_green_arrowheads()
-        self.find_connected_segments_green()
-        self.manually_label_segments_green()
-        self.order_all_segments_green()
-        return self
-
-    def visualize(self):
-        """Show two views side by side: segments with bounding boxes, and final labeled sections."""
-        print("\n=== Visualizing Segments ===")
-
-        root = tk.Tk()
-        root.title("Track Diagram Parser - Segments & Labels")
-        root.geometry("2400x900")
-
-        container = tk.Frame(root)
-        container.pack(fill=tk.BOTH, expand=True)
-
-        # LEFT: Red segments with bounding boxes
-        left_frame = tk.Frame(container)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        left_label = tk.Label(
-            left_frame, text="Red Segments", font=("Arial", 10, "bold")
-        )
-        left_label.pack()
-
-        left_canvas = tk.Canvas(left_frame, bg="white")
-        left_canvas.pack(fill=tk.BOTH, expand=True)
-
-        scale = 0.5
-
-        for segment in self.segments_red:
-            # Skip empty segments
-            if not segment["pixels"]:
-                continue
-
-            # Draw pixels
-            for x, y in segment["pixels"]:
-                left_canvas.create_rectangle(
-                    int(x * scale),
-                    int(y * scale),
-                    int(x * scale) + 1,
-                    int(y * scale) + 1,
-                    fill="red",
-                    outline="",
-                )
-
-            # Draw label at approximate center
-            if segment.get("section_label"):
-                xs = [p[0] for p in segment["pixels"]]
-                ys = [p[1] for p in segment["pixels"]]
-                center_x = sum(xs) // len(xs)
-                center_y = sum(ys) // len(ys)
-                left_canvas.create_text(
-                    int(center_x * scale),
-                    int(center_y * scale),
-                    text=segment["section_label"],
-                    font=("Arial", 12, "bold"),
-                    fill="blue",
-                )
-
-        scale = 0.5
-
-        # RIGHT: Labeled sections
-        right_frame = tk.Frame(container)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
-        right_label = tk.Label(right_frame, text="Labels", font=("Arial", 10, "bold"))
-        right_label.pack()
-
-        right_canvas = tk.Canvas(right_frame, bg="white")
-        right_canvas.pack(fill=tk.BOTH, expand=True)
-
-        for segment in self.segments_green:
-            for x, y in segment["pixels"]:
-                right_canvas.create_rectangle(
-                    int(x * scale),
-                    int(y * scale),
-                    int(x * scale) + 1,
-                    int(y * scale) + 1,
-                    fill="green",
-                    outline="",
-                )
-
-            if segment["pixels"] and segment["section_label"]:
-                xs = [p[0] for p in segment["pixels"]]
-                ys = [p[1] for p in segment["pixels"]]
-                center_x = sum(xs) // len(xs)
-                center_y = min(ys) - 30
-                right_canvas.create_text(
-                    int(center_x * scale),
-                    int(center_y * scale),
-                    text=segment["section_label"],
-                    font=("Arial", 12, "bold"),
-                    fill="blue",
-                )
-
-        print("=== Visualization Complete ===\n")
-        root.mainloop()
-
-
-def main():
-    """Test the parser."""
-    parser = TrackDiagramParser("track.png")
-    parser.parse()
-    parser.visualize()
-
-
-if __name__ == "__main__":
-    main()
