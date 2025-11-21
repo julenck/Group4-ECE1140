@@ -650,17 +650,17 @@
         0
     ],
     "G-Commanded Speed": [
-        0,
+        10,
         0,
         0,
         0,
         0
     ],
     "G-Commanded Authority": [
-        0,
+        90,
         0,
         0,
         0,
         0
     ]
-}
+}}
