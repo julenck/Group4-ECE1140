@@ -33,5 +33,45 @@
         "position_yds": 0.0,
         "authority_yds": 10.0,
         "temperature_F": 70.0
+    },
+    "train_1": {
+        "inputs": {
+            "commanded speed": 35.0,
+            "commanded authority": 10.0,
+            "speed limit": 70.0,
+            "current station": "Glenbury",
+            "next station": "Glenbury",
+            "side_door": "Right",
+            "passengers_boarding": 0,
+            "train_model_engine_failure": false,
+            "train_model_signal_failure": false,
+            "train_model_brake_failure": true,
+            "emergency_brake": false,
+            "passengers_onboard": 0
+        },
+        "outputs": {
+            "velocity_mph": 0.0,
+            "acceleration_ftps2": -3.94,
+            "position_yds": 57.72114502520629,
+            "authority_yds": 10.0,
+            "temperature_F": 70.0,
+            "station_name": "Glenbury",
+            "next_station": "Glenbury",
+            "left_door_open": false,
+            "right_door_open": false,
+            "door_side": "Right"
+        },
+        "specs": {
+            "length_ft": 66.0,
+            "width_ft": 10.0,
+            "height_ft": 11.5,
+            "mass_lbs": 90100,
+            "max_power_hp": 169,
+            "max_accel_ftps2": 1.64,
+            "service_brake_ftps2": -3.94,
+            "emergency_brake_ftps2": -8.86,
+            "capacity": 222,
+            "crew_count": 2
+        }
     }
 }

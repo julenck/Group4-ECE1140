@@ -1,115 +1,43 @@
-import tkinter as tk
-import json, os, threading, subprocess, sys
-from datetime import datetime
-from tkinter import filedialog, ttk
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-
 
 class CTCUI:
     def __init__(self):
-        # File paths
-        self.data_file = "ctc_data.json"
+        import tkinter as tk, json, os, threading, subprocess, sys
+        from datetime import datetime
+        from tkinter import filedialog, ttk
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
 
-        # Load defaults
+        self.tk = tk
+        self.ttk = ttk
+        self.filedialog = filedialog
+        self.datetime = datetime
+        self.json = json
+        self.os = os
+        self.threading = threading
+        self.subprocess = subprocess
+        self.sys = sys
+        self.Observer = Observer
+        self.FileSystemEventHandler = FileSystemEventHandler
+
+        self.data_file = 'ctc_data.json'
         self.default_data = {
             "Dispatcher": {
-                "Trains": {
-                    f"Train {i}": {
-                        "Line": "",
-                        "Suggested Speed": "",
-                        "Authority": "",
-                        "Station Destination": "",
-                        "Arrival Time": "",
-                        "Position": "",
-                        "State": "",
-                        "Current Station": ""
-                    } for i in range(1, 6)
+                "Trains":{
+                    "Train 1": {"Line": "", "Suggested Speed": "", "Authority": "", "Station Destination": "", "Arrival Time": "", "Position": "", "State": "", "Current Station": ""},
+                    "Train 2": {"Line": "", "Suggested Speed": "", "Authority": "", "Station Destination": "", "Arrival Time": "", "Position": "", "State": "", "Current Station": ""},
+                    "Train 3": {"Line": "", "Suggested Speed": "", "Authority": "", "Station Destination": "", "Arrival Time": "", "Position": "", "State": "", "Current Station": ""},
+                    "Train 4": {"Line": "", "Suggested Speed": "", "Authority": "", "Station Destination": "", "Arrival Time": "", "Position": "", "State": "", "Current Station": ""},
+                    "Train 5": {"Line": "", "Suggested Speed": "", "Authority": "", "Station Destination": "", "Arrival Time": "", "Position": "", "State": "", "Current Station": ""}
                 }
             }
         }
 
-        self._ensure_json()
-
-        # Root window
+        self.setup_json_file()
         self.root = tk.Tk()
         self.root.title("CTC User Interface")
         self.root.geometry("1500x700")
         self.root.grid_rowconfigure(3, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
-
-        # Build UI
-        self._build_datetime()
-        self._build_buttons()
-        self._build_frames()
-        self._build_manual_ui()
-        self._build_maintenance_ui()
-        self._build_auto_ui()
-        self._build_tables()
-
-        # File watcher
-        self._start_file_watcher()
-
-        # Default view
-        self.show_frame(self.auto_frame, self.auto_button)
-
-        # Window close
-        self.root.protocol("WM_DELETE_WINDOW", lambda: (self.observer.stop(), self.root.destroy()))
-
-        # Start
-        self.update_active_trains_table()
-        self.root.mainloop()
-        self.observer.join()
-
-    # ---------------- JSON HANDLING -----------------
-    def _ensure_json(self):
-        if not os.path.exists(self.data_file) or os.stat(self.data_file).st_size == 0:
-            with open(self.data_file, "w") as f:
-                json.dump(self.default_data, f, indent=4)
-        else:
-            try:
-                with open(self.data_file, "r") as f:
-                    json.load(f)
-            except json.JSONDecodeError:
-                with open(self.data_file, "w") as f:
-                    json.dump(self.default_data, f, indent=4)
-
-    def load_data(self):
-        if os.path.exists(self.data_file):
-            with open(self.data_file, "r") as f:
-                try:
-                    return json.load(f)
-                except json.JSONDecodeError:
-                    return {}
-        return {}
-
-    def save_data(self, data):
-        with open(self.data_file, "w") as f:
-            json.dump(data, f, indent=4)
-
-    # ------------------- UI SECTIONS -------------------
-    def _build_datetime(self):
-        frame = tk.Frame(self.root)
-        frame.grid(row=0, column=0, sticky="w", padx=10, pady=5)
-
-        self.date_label = tk.Label(frame, font=('Times New Roman', 15, 'bold'))
-        self.date_label.pack(side='left')
-        self.time_label = tk.Label(frame, font=('Times New Roman', 15, 'bold'))
-        self.time_label.pack(side='left')
-
-        self.update_datetime()
-
-    def update_datetime(self):
-        now = datetime.now()
-        self.date_label.config(text=now.date())
-        self.time_label.config(text=f"      {now.strftime('%H:%M:%S')}")
-        self.root.after(1000, self.update_datetime)
-
-    # ---------------- BUTTONS ----------------
-    def _build_buttons(self):
-        self.button_frame = tk.Frame(self.root)
-        self.button_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=5)
-        self.button_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
         self.button_style = {
             "width": 60,
@@ -120,75 +48,330 @@ class CTCUI:
             "font": ("Times New Roman", 15, 'bold'),
             "activebackground": "#ddd"
         }
-
-        self.auto_button = tk.Button(self.button_frame, text='Automatic', command=lambda: self.show_frame(self.auto_frame, self.auto_button), **self.button_style)
-        self.manual_button = tk.Button(self.button_frame, text='Manual', command=lambda: self.show_frame(self.manual_frame, self.manual_button), **self.button_style)
-        self.maint_button = tk.Button(self.button_frame, text='Maintenance', command=lambda: self.show_frame(self.maint_frame, self.maint_button), **self.button_style)
-
-        self.auto_button.grid(row=0, column=0, sticky='ew', padx=5)
-        self.manual_button.grid(row=0, column=1, sticky='ew', padx=5)
-        self.maint_button.grid(row=0, column=2, sticky='ew', padx=5)
-
         self.active_button = None
 
-    def show_frame(self, frame, clicked_button=None):
-        frame.tkraise()
+        self.setup_ui()
 
-        for btn in [self.auto_button, self.manual_button, self.maint_button]:
-            btn.config(bg="white", fg="black")
+        class FileChangeHandler(self.FileSystemEventHandler):
+            def on_modified(handler_self, event):
+                if event.src_path.endswith("ctc_data.json"):
+                    self.root.after(100, self.update_active_trains_table)
+        self.event_handler = FileChangeHandler()
+        self.observer = self.Observer()
+        self.observer.schedule(self.event_handler, path=self.os.path.dirname(self.data_file) or ".", recursive=False)
+        self.observer_thread = self.threading.Thread(target=self.observer.start)
+        self.observer_thread.daemon = True
+        self.observer_thread.start()
 
-        if clicked_button:
-            clicked_button.config(bg="lightgray", fg="black")
-            self.active_button = clicked_button
+        self.show_frame(self.auto_frame)
+        self.auto_button.config(bg="lightgray")
+        self.active_button = self.auto_button
 
-    # ---------------- MAIN FRAMES ----------------
-    def _build_frames(self):
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.update_active_trains_table()
+
+    def setup_json_file(self):
+        if not self.os.path.exists(self.data_file) or self.os.stat(self.data_file).st_size == 0:
+            with open(self.data_file, "w") as f:
+                self.json.dump(self.default_data, f, indent=4)
+        else:
+            try:
+                with open(self.data_file, "r") as f:
+                    self.json.load(f)
+            except self.json.JSONDecodeError:
+                with open(self.data_file, "w") as f:
+                    self.json.dump(self.default_data, f, indent=4)
+
+    def load_data(self):
+        if self.os.path.exists(self.data_file):
+            with open(self.data_file, "r") as f:
+                try:
+                    return self.json.load(f)
+                except self.json.JSONDecodeError:
+                    return {}
+        return {}
+
+    def save_data(self, data):
+        with open(self.data_file, "w") as f:
+            self.json.dump(data, f, indent=4)
+
+
+    def setup_ui(self):
+        tk = self.tk
+        ttk = self.ttk
+        # Top Row: Date/Time
+        self.datetime_frame = tk.Frame(self.root)
+        self.datetime_frame.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        self.date_label = tk.Label(self.datetime_frame, font=('Times New Roman', 15, 'bold'))
+        self.date_label.pack(side='left')
+        self.time_label = tk.Label(self.datetime_frame, font=('Times New Roman', 15, 'bold'))
+        self.time_label.pack(side='left')
+        self.update_datetime()
+
+        # Button Row
+        self.button_frame = tk.Frame(self.root)
+        self.button_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=5)
+        self.button_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        # Middle Area: Main Frame Container
         self.main_area = tk.Frame(self.root)
         self.main_area.grid(row=2, column=0, sticky='nsew', padx=10)
         self.main_area.grid_rowconfigure(0, weight=1)
         self.main_area.grid_columnconfigure(0, weight=1)
 
+        # Mode Frames (Manual, Auto, Maint)
         self.manual_frame = tk.Frame(self.main_area, bg="lightgreen")
         self.auto_frame = tk.Frame(self.main_area, bg="lightblue")
         self.maint_frame = tk.Frame(self.main_area, bg="lightyellow")
+        for frame in (self.manual_frame, self.auto_frame, self.maint_frame):
+            frame.grid(row=0, column=0, sticky="nsew")
 
-        for f in (self.manual_frame, self.auto_frame, self.maint_frame):
-            f.grid(row=0, column=0, sticky="nsew")
+        # Buttons to switch frames
+        self.auto_button = tk.Button(
+            self.button_frame,
+            text='Automatic',
+            command=lambda: self.show_frame(self.auto_frame, self.auto_button),
+            **self.button_style
+        )
+        self.auto_button.grid(row=0, column=0, sticky='ew', padx=5)
 
-    # ---------------- MANUAL UI ----------------
-    def _build_manual_ui(self):
-        pass  # (You can paste your manual UI code here, replacing references with self.)
+        self.manual_button = tk.Button(
+            self.button_frame,
+            text='Manual',
+            command=lambda: self.show_frame(self.manual_frame, self.manual_button),
+            **self.button_style
+        )
+        self.manual_button.grid(row=0, column=1, sticky='ew', padx=5)
 
-    # -------------- MAINTENANCE UI --------------
-    def _build_maintenance_ui(self):
-        pass
+        self.maint_button = tk.Button(
+            self.button_frame,
+            text='Maintenance',
+            command=lambda: self.show_frame(self.maint_frame, self.maint_button),
+            **self.button_style
+        )
+        self.maint_button.grid(row=0, column=2, sticky='ew', padx=5)
 
-    # ---------------- AUTO UI ------------------
-    def _build_auto_ui(self):
-        pass
+        # Manual Frame UI
+        label_font = ('Times New Roman', 12, 'bold')
+        input_font = ('Times New Roman', 12, 'bold')
+        self.manual_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        tk.Label(self.manual_frame, text="Select a Train to Dispatch", font=label_font, bg="lightgreen").grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        tk.Label(self.manual_frame, text="Select a Line", font=label_font, bg="lightgreen").grid(row=0, column=1, sticky='w', padx=10, pady=5)
+        tk.Label(self.manual_frame, text="Select a Destination Station", font=label_font, bg="lightgreen").grid(row=0, column=2, sticky='w', padx=10, pady=5)
+        tk.Label(self.manual_frame, text="Enter Arrival Time", font=label_font, bg="lightgreen").grid(row=0, column=3, sticky='w', padx=10, pady=5)
 
-    # ---------------- TABLES -------------------
-    def _build_tables(self):
-        pass
+        self.manual_train_box = ttk.Combobox(self.manual_frame, values=["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"], font=input_font)
+        self.manual_line_box = ttk.Combobox(self.manual_frame, values=["Green"], font=input_font)
+        self.manual_dest_box = ttk.Combobox(self.manual_frame, values=["Pioneer", "Edgebrook", "Whited", "South Bank", "Central", "Inglewood", "Overbrook", "Glenbury", "Dormont", "Mt. Lebanon", "Poplar", "Castle Shannon"], font=input_font)
+        self.manual_time_box = tk.Entry(self.manual_frame, font=input_font)
+
+        self.manual_train_box.grid(row=1, column=0, padx=5, sticky='ew')
+        self.manual_line_box.grid(row=1, column=1, padx=5, sticky='ew')
+        self.manual_dest_box.grid(row=1, column=2, padx=5, sticky='ew')
+        self.manual_time_box.grid(row=1, column=3, padx=5, sticky='ew')
+
+        self.manual_dispatch_button = tk.Button(self.manual_frame, text='DISPATCH', command=self.manual_dispatch, **self.button_style)
+        self.manual_dispatch_button.grid(row=2, column=0, columnspan=4, pady=10, padx=500, sticky='ew')
+
+        # Maintenance Frame UI
+        self.maint_frame.grid_columnconfigure((0,1,2,3),weight=1)
+        switch_frame = tk.LabelFrame(self.maint_frame,text="Set Switch Positions",bg='lightyellow',font=label_font)
+        switch_frame.grid_columnconfigure((0,1),weight=1)
+        switch_frame.grid(row=0,column=0,padx=20,pady=10,sticky='nsew')
+        tk.Label(switch_frame,text="Select a Line",font=label_font,bg="lightyellow").grid(row=0,column=0,sticky='w',padx=5,pady=5)
+        tk.Label(switch_frame,text="Select Switch",font=label_font,bg="lightyellow").grid(row=1,column=0,sticky='w',padx=5,pady=5)
+        self.maint_line_box1 = ttk.Combobox(switch_frame, values=["Red", "Green"], font=input_font)
+        self.maint_switch_box = ttk.Combobox(switch_frame, values=["1", "2", "3", "4"], font=input_font)
+        self.maint_line_box1.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
+        self.maint_switch_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
+        move_switch_button = tk.Button(switch_frame, text='Move Switch', command=self.move_switch,**self.button_style)
+        move_switch_button.grid(row=2, column=0, columnspan=2, padx=100,pady=10, sticky='ew')
+
+        block_frame = tk.LabelFrame(self.maint_frame, text="Close Block", bg="lightyellow", font=label_font)
+        block_frame.grid_columnconfigure((0,1),weight=1)
+        block_frame.grid(row=0, column=1, padx=20, pady=10, sticky='nsew')
+        tk.Label(block_frame, text="Select a Line", font=label_font, bg="lightyellow").grid(row=0, column=0, sticky='w', padx=5, pady=5)
+        tk.Label(block_frame, text="Select Block", font=label_font, bg="lightyellow").grid(row=1, column=0, sticky='w', padx=5, pady=5)
+        self.maint_line_box2 = ttk.Combobox(block_frame, values=["Red", "Green"], font=input_font)
+        self.maint_block_box = ttk.Combobox(block_frame, values=["1", "2", "3", "4"], font=input_font)
+        self.maint_line_box2.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
+        self.maint_block_box.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
+        close_block_button = tk.Button(block_frame, text='Close Block', command=self.close_block,**self.button_style)
+        close_block_button.grid(row=2, column=0, columnspan=2, padx=100,pady=10, sticky='ew')
+
+        # Auto Frame UI
+        self.auto_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        self.uploaded_file_label = tk.Label(self.auto_frame, text="", bg="lightblue", font=('Times New Roman', 12, 'italic'))
+        upload_button = tk.Button(self.auto_frame, text="Upload Schedule", command=self.upload_schedule, width=40, height=1, bg="white", relief="flat", bd=0, font=("Times New Roman", 15, "bold"))
+        upload_button.grid(row=0, column=0, columnspan=4, pady=10)
+        self.uploaded_file_label.grid(row=1, column=0, columnspan=4, pady=(0, 10))
+        run_button = tk.Button(self.auto_frame, text="Run", width=20, height=1, bg="white", relief="flat", bd=0, font=("Times New Roman", 15, "bold"))
+        run_button.grid(row=2, column=0, columnspan=4, pady=10)
+
+        # Tables Below Mode Area
+        self.bottom_frame = tk.Frame(self.root)
+        self.bottom_frame.grid(row=3, column=0, sticky='nsew', padx=10, pady=10)
+        self.root.grid_rowconfigure(3, weight=1)
+        self.bottom_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        self.active_trains_frame, self.active_trains_table = self.create_table_section(
+            self.bottom_frame,
+            "Active Trains",
+            ("Train", "Line", "Block", "State", "Speed (mph)", "Authority (yards)", "Current Station", "Destination", "Arrival Time"),
+            []
+        )
+        self.active_trains_frame.grid(row=0, column=0, columnspan=3, sticky='nsew', padx=10)
+        self.lights_frame, self.lights_table = self.create_table_section(
+            self.bottom_frame,
+            "Lights",
+            ("Line", "Block", "Status"),
+            [("Red", "A1", "Green"), ("Red", "A2", "Red")]
+        )
+        self.lights_frame.grid(row=0, column=3, columnspan=1, sticky='nsew', padx=5)
+        self.gates_frame, self.gates_table = self.create_table_section(
+            self.bottom_frame,
+            "Gates",
+            ("Line", "Block", "Status"),
+            [("Red", "A1", "Closed"), ("Red", "A2", "Closed")]
+        )
+        self.gates_frame.grid(row=0, column=4, columnspan=1, sticky='nsew', padx=5)
+        self.throughput_frame = tk.Frame(self.bottom_frame)
+        self.throughput_frame.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        self.throughput_frame.grid_columnconfigure((0, 1), weight=1)
+        tk.Label(self.throughput_frame, text=f"Red Line: 20 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
+        tk.Label(self.throughput_frame, text="Green Line: 14 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=1, sticky='w', padx=20)
+
+    def manual_dispatch(self):
+        train = self.manual_train_box.get()
+        line = self.manual_line_box.get()
+        dest = self.manual_dest_box.get()
+        arrival = self.manual_time_box.get()
+        with open('ctc_ui_inputs.json', "r") as f1:
+            data1 = self.json.load(f1)
+        data1["Train"] = train
+        data1["Line"] = line
+        data1["Station"] = dest
+        data1["Arrival Time"] = arrival
+        with open('ctc_ui_inputs.json', "w") as f1:
+            self.json.dump(data1, f1, indent=4)
+        self.update_active_trains_table()
+        python_exe = self.sys.executable
+        script_path = self.os.path.join(self.os.path.dirname(__file__), "ctc_main.py")
+        # Track subprocess so it can be terminated on close
+        if not hasattr(self, 'subprocesses'):
+            self.subprocesses = []
+        proc = self.subprocess.Popen([python_exe, script_path])
+        self.subprocesses.append(proc)
+        # ...existing code for train dispatch dialog...
+
+    def move_switch(self):
+        switch_line = self.maint_line_box1.get()
+        switch = self.maint_switch_box.get()
+        data = self.load_data()
+        maintenance_outputs = data.get("MaintenenceModeOutputs", {})
+        maintenance_outputs["Switch Line"] = switch_line
+        maintenance_outputs["Switch Position"] = switch
+        data["MaintenenceModeOutputs"] = maintenance_outputs
+        self.save_data(data)
+
+    def close_block(self):
+        block_line = self.maint_line_box2.get()
+        closed_block = self.maint_block_box.get()
+        data = self.load_data()
+        maintenance_outputs = data.get("MaintenenceModeOutputs", {})
+        maintenance_outputs["Block Line"] = block_line
+        maintenance_outputs["Closed Block"] = closed_block
+        data["MaintenenceModeOutputs"] = maintenance_outputs
+        self.save_data(data)
+
+    def upload_schedule(self):
+        file_path = self.filedialog.askopenfilename(
+            title="Select Schedule File",
+            filetypes=[
+                ("CSV Files", "*.csv"),
+                ("Excel Files", "*.xlsx"),
+                ("Text Files", "*.txt"),
+                ("All Files", "*.*")
+            ]
+        )
+        if file_path:
+            self.uploaded_file_label.config(
+                text=f"Loaded: {file_path.split('/')[-1]}",
+                fg="darkgreen"
+            )
+            print(f"Selected schedule file: {file_path}")
+
+    def create_table_section(self, parent, title, columns, data):
+        tk = self.tk
+        ttk = self.ttk
+        section = tk.Frame(parent)
+        section.grid_rowconfigure(1, weight=1)
+        section.grid_columnconfigure(0, weight=1)
+        tk.Label(section, text=title, font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w')
+        style = ttk.Style()
+        style.configure("Custom.Treeview.Heading", font=('Times New Roman', 10, 'bold'))
+        table = ttk.Treeview(section, columns=columns, show='headings', style="Custom.Treeview")
+        for col in columns:
+            table.heading(col, text=col)
+            table.column(col, anchor='center', width=80)
+        table.grid(row=1, column=0, sticky='nsew')
+        for row in data:
+            table.insert('', 'end', values=row)
+        return section, table
 
     def update_active_trains_table(self):
-        pass
+        if not self.os.path.exists(self.data_file):
+            return
+        try:
+            with open(self.data_file, "r") as f:
+                data = self.json.load(f)
+        except self.json.JSONDecodeError:
+            return
+        dispatcher_data = data.get("Dispatcher", {})
+        for row in self.active_trains_table.get_children():
+            self.active_trains_table.delete(row)
+        trains = dispatcher_data.get("Trains", {})
+        for train_name, info in trains.items():
+            self.active_trains_table.insert("", "end", values=(
+                train_name,
+                info.get("Line", ""),
+                info.get("Position"),
+                info.get("State", ""),
+                info.get("Suggested Speed", ""),
+                info.get("Authority", ""),
+                info.get("Current Station", ""),
+                info.get("Station Destination", ""),
+                info.get("Arrival Time", ""),
+            ))
+        self.root.after(1000, self.update_active_trains_table)
 
-    # ---------------- FILE WATCHER ----------------
-    def _start_file_watcher(self):
-        class Handler(FileSystemEventHandler):
-            def __init__(self, outer):
-                self.outer = outer
+    def update_datetime(self):
+        now = self.datetime.now()
+        self.date_label.config(text=now.date())
+        self.time_label.config(text=f"      {now.strftime('%H:%M:%S')}")
+        self.root.after(1000, self.update_datetime)
 
-            def on_modified(self, event):
-                if event.src_path.endswith("ctc_data.json"):
-                    self.outer.root.after(100, self.outer.update_active_trains_table)
+    def show_frame(self, frame, clicked_button=None):
+        frame.tkraise()
+        for btn in [self.auto_button, self.manual_button, self.maint_button]:
+            btn.config(bg="white", fg="black")
+        if clicked_button:
+            clicked_button.config(bg="lightgray", fg="black")
+            self.active_button = clicked_button
 
-        self.event_handler = Handler(self)
-        self.observer = Observer()
-        self.observer.schedule(self.event_handler, path=os.path.dirname(self.data_file) or ".", recursive=False)
-        threading.Thread(target=self.observer.start, daemon=True).start()
+    def run(self):
+        self.root.mainloop()
+    
+    def on_close(self):
+        self.observer.stop()
+        self.observer_thread.join()
+        # Terminate any subprocesses started
+        if hasattr(self, 'subprocesses'):
+            for proc in self.subprocesses:
+                if proc.poll() is None:
+                    proc.terminate()
+        self.root.destroy()
 
-
+# To use the class:
 if __name__ == "__main__":
-    CTCUI()
+    ui = CTCUI()
+    ui.run()

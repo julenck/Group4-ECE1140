@@ -14,7 +14,7 @@ import ctc.ctc_ui_temp as ctc_ui
 
 def run_ctc_ui(): 
     dispatcher_ui = ctc_ui.CTCUI()
-    dispatcher_ui.mainloop()
+    dispatcher_ui.run()
 
 def run_wayside_sw_ui(): 
     vital1 = wayside_sw.sw_vital_check.sw_vital_check()
