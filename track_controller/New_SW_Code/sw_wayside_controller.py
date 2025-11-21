@@ -376,7 +376,7 @@ class sw_wayside_controller:
             auth = auth - speed
             
             # Check if authority exhausted BEFORE checking handoff
-            if auth <= 0:
+            if auth <= 0: 
                 auth = 0
                 print(f"Train {cmd_train}: Authority exhausted at block {pos}, deactivating train")
                 
