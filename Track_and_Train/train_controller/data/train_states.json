@@ -1,0 +1,9 @@
+{
+    "train_velocity": 0.0,
+    "train_temperature": 33.25,
+    "commanded_authority": 10.0,
+    "current_station": "Glenbury",
+    "next_stop": "Glenbury",
+    "station_side": "Right",
+    "beacon_read_blocked": false
+}

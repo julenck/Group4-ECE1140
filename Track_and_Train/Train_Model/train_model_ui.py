@@ -1,8 +1,25 @@
 import os, json, time, tkinter as tk
 from tkinter import ttk
 import threading
-import requests
 import sys
+import importlib, importlib.util
+
+import os
+
+BASE_DIR = os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))
+)  # Track_and_Train
+TRACK_MODEL_DIR = os.path.join(BASE_DIR, "Track_Model")
+TRAIN_MODEL_DIR = os.path.join(BASE_DIR, "Train_Model")
+
+# Track JSONs
+STATIC_JSON_PATH = os.path.join(TRACK_MODEL_DIR, "track_model_static.json")
+CONTROLLER_JSON_PATH = os.path.join(
+    TRACK_MODEL_DIR, "track_model_Track_controller.json"
+)
+
+# Train JSONs
+TRAIN_DATA_PATH = os.path.join(TRAIN_MODEL_DIR, "train_data.json")
 
 # Import core logic
 from train_model_core import (
@@ -22,16 +39,27 @@ from train_model_core import (
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-class TrainModelUI(tk.Tk):
-    def __init__(self, train_id=None, server_url=None):
-        super().__init__()
+# Remove the direct "import requests" and use dynamic import instead
+try:
+    requests = (
+        importlib.import_module("requests")
+        if importlib.util.find_spec("requests")
+        else None
+    )
+except Exception:
+    requests = None
+
+
+# NEW
+class TrainModelUI(ttk.Frame):
+    def __init__(self, parent, train_id=None, server_url=None):
+        super().__init__(parent)
+        self.grid(row=0, column=0, sticky="nsew")
+        self.config(width=450)
+        self.pack_propagate(False)
+
         self.train_id = train_id
-        title = f"Train {train_id} Model" if train_id else "Train Model"
-        if server_url:
-            title += " (Remote Mode)"
-        self.title(title)
-        self.geometry("820x560")
-        self.minsize(760, 520)
+        self.server_url = server_url
         self.train_data_path = TRAIN_DATA_FILE
 
         style = ttk.Style(self)
@@ -58,23 +86,39 @@ class TrainModelUI(tk.Tk):
         self._stop_event = threading.Event()
         self._last_mtimes = {"track": 0.0, "ctrl": 0.0, "train_data": 0.0}
         threading.Thread(target=self._watch_files, daemon=True).start()
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
 
+        # TrainModelUI layout: 2 rows
+        # row 0 = left column (info/env/specs/failure/control)
+        # row 1 = announcements panel (full-width)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)
         self.columnconfigure(0, weight=1)
+
+        # LEFT COLUMN
         left = ttk.Frame(self)
-        left.grid(row=0, column=0, sticky="NSEW", padx=6, pady=6)
-        left.columnconfigure(0, weight=1)
-        left.columnconfigure(1, weight=1)
+        left.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+
+        left.columnconfigure(0, weight=0)
+        left.columnconfigure(1, weight=0)
         left.rowconfigure(0, weight=1)
         left.rowconfigure(1, weight=1)
         left.rowconfigure(2, weight=1)
 
+        # Build left-side panels
         self.create_info_panel(left)
         self.create_env_panel(left)
         self.create_specs_panel(left)
         self.create_failure_panel(left)
         self.create_control_panel(left)
-        self.create_announcements_panel(left)
+
+        # --- MOVE ANNOUNCEMENTS OUT OF LEFT ---
+        bottom = ttk.Frame(self)
+        bottom.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        bottom.columnconfigure(0, weight=1)
+        bottom.config(height=120)
+        bottom.grid_propagate(False)
+
+        self.create_announcements_panel(bottom)
 
         self.update_loop()
 
@@ -109,7 +153,9 @@ class TrainModelUI(tk.Tk):
         frame.grid(row=0, column=1, sticky="NSEW", padx=4, pady=4)
         self.env_labels = {}
         # FIX: use enumerate instead of unpacking into (i, key) from a list of strings
-        for i, key in enumerate(["Left Door", "Right Door", "Interior Lights", "Exterior Lights"]):
+        for i, key in enumerate(
+            ["Left Door", "Right Door", "Interior Lights", "Exterior Lights"]
+        ):
             ttk.Label(frame, text=key + ":", style="Data.TLabel").grid(
                 row=i, column=0, sticky="w", padx=8, pady=2
             )
@@ -139,15 +185,15 @@ class TrainModelUI(tk.Tk):
             lbl = ttk.Label(frame, text="Off", style="Status.Off.TLabel")
             lbl.grid(row=row, column=1, sticky="w", padx=4, pady=2)
             self.fail_labels[key] = lbl
-        ttk.Button(frame, text="Toggle Engine", command=self.toggle_engine_failure).grid(
-            row=0, column=2, padx=4, pady=2
-        )
+        ttk.Button(
+            frame, text="Toggle Engine", command=self.toggle_engine_failure
+        ).grid(row=0, column=2, padx=4, pady=2)
         ttk.Button(frame, text="Toggle Brake", command=self.toggle_brake_failure).grid(
             row=1, column=2, padx=4, pady=2
         )
-        ttk.Button(frame, text="Toggle Signal", command=self.toggle_signal_failure).grid(
-            row=2, column=2, padx=4, pady=2
-        )
+        ttk.Button(
+            frame, text="Toggle Signal", command=self.toggle_signal_failure
+        ).grid(row=2, column=2, padx=4, pady=2)
         ttk.Button(
             frame, text="Toggle E‑Brake", command=self.toggle_emergency_brake
         ).grid(row=3, column=2, padx=4, pady=2)
@@ -202,7 +248,7 @@ class TrainModelUI(tk.Tk):
             else:
                 key = f"train_{self.train_id}"
                 sect = all_states.get(key, {})
-                current = bool
+                current = bool(sect.get(flag_name, False))  # FIX: read actual value
                 sect[flag_name] = not current
                 all_states[key] = sect
                 new_val = sect[flag_name]
@@ -256,20 +302,22 @@ class TrainModelUI(tk.Tk):
         return all_states.get(f"train_{self.train_id}", {})
 
     def update_train_state(self, updates: dict):
-        # Remote mode: send to server via REST API
-        if self.server_url and self.train_id is not None:
+        # Remote mode: only if requests is available
+        if self.server_url and self.train_id is not None and requests is not None:
             try:
                 response = requests.post(
                     f"{self.server_url}/api/train/{self.train_id}/state",
                     json=updates,
-                    timeout=2.0
+                    timeout=2.0,
                 )
                 if response.status_code != 200:
-                    print(f"[Train Model] Server update returned {response.status_code}")
-            except requests.exceptions.RequestException as e:
+                    print(
+                        f"[Train Model] Server update returned {response.status_code}"
+                    )
+            except Exception as e:
                 print(f"[Train Model] Error updating state on server: {e}")
             return
-        
+
         # Local mode: write to file
         all_states = safe_read_json(TRAIN_STATES_FILE)
         if self.train_id is None:
@@ -434,16 +482,18 @@ class TrainModelUI(tk.Tk):
         update_track_motion(
             idx,  # train index derived earlier
             outputs["acceleration_ftps2"],
-            outputs["velocity_mph"]
+            outputs["velocity_mph"],
         )
 
         self.write_train_data(specs_for_write, merged_inputs, td_inputs)
+
+        remaining_authority = outputs["authority_yds"]  # FIX: define before use
 
         if signal_failure_active and self._last_beacon_inputs:
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
-                "commanded_authority": remaining_authority,  # Send remaining authority
+                "commanded_authority": remaining_authority,
                 "current_station": self._last_beacon_inputs.get("current station", ""),
                 "next_stop": self._last_beacon_inputs.get("next station", ""),
                 "station_side": self._last_beacon_inputs.get("side_door", ""),
@@ -453,7 +503,7 @@ class TrainModelUI(tk.Tk):
             controller_updates = {
                 "train_velocity": outputs["velocity_mph"],
                 "train_temperature": outputs["temperature_F"],
-                "commanded_authority": remaining_authority,  # Send remaining authority
+                "commanded_authority": remaining_authority,
                 "current_station": merged_inputs.get("current station", ""),
                 "next_stop": merged_inputs.get("next station", ""),
                 "station_side": merged_inputs.get("side_door", ""),
@@ -484,8 +534,9 @@ class TrainModelUI(tk.Tk):
             text=f"{outputs['station_name'] or ''}"
         )
         self.info_labels["Next Station"].config(text=f"{outputs['next_station'] or ''}")
+        # FIX: speed limit is part of merged inputs, not outputs
         self.info_labels["Speed Limit (mph)"].config(
-            text=f"{outputs['speed_limit']:.0f}"
+            text=f"{merged_inputs.get('speed limit', 0.0):.0f}"
         )
 
         def door_style(open_):
@@ -565,15 +616,24 @@ class TrainModelUI(tk.Tk):
         self._stop_event.set()
         self.destroy()
 
+
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Train Model UI")
-    parser.add_argument("--train-id", type=int, default=None, 
-                        help="Train ID for multi-train mode (default: legacy single-train)")
-    parser.add_argument("--server", type=str, default=None,
-                        help="Server URL for remote mode (e.g., http://192.168.1.100:5000)")
+    parser.add_argument(
+        "--train-id",
+        type=int,
+        default=None,
+        help="Train ID for multi-train mode (default: legacy single-train)",
+    )
+    parser.add_argument(
+        "--server",
+        type=str,
+        default=None,
+        help="Server URL for remote mode (e.g., http://192.168.1.100:5000)",
+    )
     args = parser.parse_args()
-    
+
     app = TrainModelUI(train_id=args.train_id, server_url=args.server)
     app.mainloop()

@@ -1,15 +1,22 @@
 import os, json, time, random
 
-# === File paths (shared) ===
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.dirname(BASE_DIR)
+# === FIXED ABSOLUTE PATHS (MATCHING TRACK MODEL FIX) ===
 
-# Controller state shared file (kept for train controller interaction)
-TRAIN_STATES_FILE = os.path.join(PARENT_DIR, "train_controller", "data", "train_states.json")
+# Folder containing Train_Model/
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Track_and_Train/Train_Model
+PARENT_DIR = os.path.dirname(BASE_DIR)  # Track_and_Train
+
+# Ensure train_controller folder exists
+TRAIN_CONTROLLER_DIR = os.path.join(PARENT_DIR, "train_controller", "data")
+os.makedirs(TRAIN_CONTROLLER_DIR, exist_ok=True)
+
+# Train controller shared state
+TRAIN_STATES_FILE = os.path.join(TRAIN_CONTROLLER_DIR, "train_states.json")
+
+# Train Model JSONs (stay inside Train_Model)
 TRAIN_DATA_FILE = os.path.join(BASE_DIR, "train_data.json")
+TRACK_INPUT_FILE = os.path.join(PARENT_DIR, "track_model_Train_Model.json")
 
-# Track inputs: only use the Train Model folder version (ignore Track_Model folder)
-TRACK_INPUT_FILE = os.path.join(BASE_DIR, "track_model_Train_Model.json")
 
 # === Safe IO ===
 def safe_read_json(path):
@@ -19,6 +26,7 @@ def safe_read_json(path):
             return data if isinstance(data, (dict, list)) else {}
     except Exception:
         return {}
+
 
 def safe_write_json(path, data):
     payload = json.dumps(data, indent=4)
@@ -44,6 +52,7 @@ def safe_write_json(path, data):
     with open(path, "w") as f:
         f.write(payload)
 
+
 # === Train Data shape ===
 DEFAULT_SPECS = {
     "length_ft": 66.0,
@@ -57,6 +66,7 @@ DEFAULT_SPECS = {
     "capacity": 222,
     "crew_count": 2,
 }
+
 
 def ensure_train_data(path):
     data = {}
@@ -77,6 +87,7 @@ def ensure_train_data(path):
     safe_write_json(path, data)
     return data
 
+
 # === Track input loader (multi-train aware, keys with spaces) ===
 def read_track_input(train_index: int = 0):
     t = safe_read_json(TRACK_INPUT_FILE)
@@ -92,8 +103,12 @@ def read_track_input(train_index: int = 0):
         entry = t.get(keys[idx], {})
         if not isinstance(entry, dict):
             return {}
-        block = entry.get("block", {}) if isinstance(entry.get("block", {}), dict) else {}
-        beacon = entry.get("beacon", {}) if isinstance(entry.get("beacon", {}), dict) else {}
+        block = (
+            entry.get("block", {}) if isinstance(entry.get("block", {}), dict) else {}
+        )
+        beacon = (
+            entry.get("beacon", {}) if isinstance(entry.get("beacon", {}), dict) else {}
+        )
         mapped = {
             "commanded speed": block.get("commanded speed"),
             "commanded authority": block.get("commanded authority"),
@@ -123,6 +138,7 @@ def read_track_input(train_index: int = 0):
         mapped["passengers_boarding"] = int(q[idx])
     return {k: v for k, v in mapped.items() if v is not None}
 
+
 # === Merge inputs ===
 def merge_inputs(td_inputs: dict, track_in: dict, ctrl: dict, onboard_fallback: int):
     merged = dict(td_inputs) if isinstance(td_inputs, dict) else {}
@@ -139,8 +155,11 @@ def merge_inputs(td_inputs: dict, track_in: dict, ctrl: dict, onboard_fallback: 
     merged.setdefault("train_model_brake_failure", False)
     return merged
 
+
 # === Track motion write-back ONLY (no passengers_disembarking) ===
-def update_track_motion(train_index: int, acceleration_ftps2: float, velocity_mph: float):
+def update_track_motion(
+    train_index: int, acceleration_ftps2: float, velocity_mph: float
+):
     """
     Update the current motion state inside track_model_Train_Model.json.
 
@@ -150,8 +169,9 @@ def update_track_motion(train_index: int, acceleration_ftps2: float, velocity_mp
         else                  -> "moving"
     """
     motion_state = (
-        "stopped" if velocity_mph <= 0.01 else
-        ("braking" if acceleration_ftps2 < 0 else "moving")
+        "stopped"
+        if velocity_mph <= 0.01
+        else ("braking" if acceleration_ftps2 < 0 else "moving")
     )
 
     data = safe_read_json(TRACK_INPUT_FILE)
@@ -193,6 +213,7 @@ def update_track_motion(train_index: int, acceleration_ftps2: float, velocity_mp
     entry["motion"] = motion
     data[entry_key] = entry
     safe_write_json(TRACK_INPUT_FILE, data)
+
 
 # === Core Train Model ===
 class TrainModel:
@@ -271,6 +292,7 @@ class TrainModel:
             "speed_limit": float(speed_limit or 0.0),
             "temperature_F": self.temperature_F,
         }
+
 
 def compute_passengers_disembarking(
     last_station_state: dict,

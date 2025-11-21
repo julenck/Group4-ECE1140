@@ -6,16 +6,22 @@ from LineNetwork import LineNetwork
 from PIL import Image, ImageTk
 import json
 import pandas as pd
-import os
 import re
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TRACK_MODEL_DIR = os.path.join(BASE_DIR, "Track_Model")
+
+STATIC_JSON_PATH = os.path.join(TRACK_MODEL_DIR, "track_model_static.json")
+CONTROLLER_JSON_PATH = os.path.join(
+    TRACK_MODEL_DIR, "track_model_Track_controller.json"
+)
 
 
-class TrackModelUI(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Track Model Software Module")
-        self.geometry("1700x950")
-        self.configure(bg="white")
+class TrackModelUI(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.pack(fill="both", expand=True)
         self.block_manager = DynamicBlockManager()
         self.line_network = None
         self.visualizer = None
@@ -246,11 +252,11 @@ class TrackModelUI(tk.Tk):
 
     def check_existing_static_data(self):
         """Check if static JSON file already contains data and load it."""
-        if not os.path.exists("track_model_static.json"):
+        if not os.path.exists(STATIC_JSON_PATH):
             self.after(500, self.check_existing_static_data)
             return
         try:
-            with open("track_model_static.json", "r") as f:
+            with open(STATIC_JSON_PATH, "r") as f:
                 data = json.load(f)
             static_data = data.get("static_data", {})
             if static_data:
@@ -371,7 +377,7 @@ class TrackModelUI(tk.Tk):
                 "commanded": {},
             }
 
-            with open("track_model_static.json", "w") as f:
+            with open(STATIC_JSON_PATH, "w") as f:
                 json.dump(data, f, indent=4)
 
             self.update_visualizer_display(excel_path=file_path)
@@ -393,7 +399,7 @@ class TrackModelUI(tk.Tk):
     def on_line_selected(self, event=None):
         """Handle line selection and update the visualizer exactly once."""
         selected_line = self.line_selector.get()
-        if not selected_line or not os.path.exists("track_model_static.json"):
+        if not selected_line or not os.path.exists(STATIC_JSON_PATH):
             self.block_selector["values"] = []
             return
 
@@ -413,9 +419,9 @@ class TrackModelUI(tk.Tk):
                 print(f"[Visualizer] Failed to display {selected_line}: {e}")
 
     def load_static_after_upload(self, selected_line):
-        if not os.path.exists("track_model_static.json"):
+        if not os.path.exists(STATIC_JSON_PATH):
             return
-        with open("track_model_static.json", "r") as f:
+        with open(STATIC_JSON_PATH, "r") as f:
             data = json.load(f)
         records = data.get("static_data", {}).get(selected_line, [])
         self.static_data = records
@@ -651,7 +657,7 @@ class TrackModelUI(tk.Tk):
         selected_line = self.line_selector.get()
 
         try:
-            with open("track_model_static.json", "r") as f:
+            with open(STATIC_JSON_PATH, "r") as f:
                 static_data = json.load(f)
 
             line_key = selected_line.replace(" Line", "")
@@ -703,6 +709,6 @@ if __name__ == "__main__":
     app = TrackModelUI()
     app.mainloop()
 
-    if os.path.exists("track_model_static.json"):
-        with open("track_model_static.json", "w") as f:
+    if os.path.exists(STATIC_JSON_PATH):
+        with open(STATIC_JSON_PATH, "w") as f:
             json.dump({}, f, indent=4)
