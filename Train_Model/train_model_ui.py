@@ -373,6 +373,8 @@ class TrainModelUI(ttk.Frame):
         safe_write_json(self.train_data_path, data)
 
     def update_loop(self):
+        if not self.winfo_exists():
+            return
         self._run_cycle(schedule=True)
 
     def _run_cycle(self, schedule: bool):
@@ -512,71 +514,85 @@ class TrainModelUI(ttk.Frame):
         self.update_train_state(controller_updates)
 
         self._update_ui(outputs, ctrl, merged_inputs, disembarking)
-        if schedule:
-            self.after(int(self.model.dt * 1000), self.update_loop)
+        if schedule and self.winfo_exists():
+            try:
+                self.after(int(self.model.dt * 1000), self.update_loop)
+            except tk.TclError:
+                # Widget destroyed, stop scheduling
+                pass
 
     def _update_ui(self, outputs, ctrl, merged_inputs, disembarking):
-        self.info_labels["Velocity (mph)"].config(text=f"{outputs['velocity_mph']:.2f}")
-        self.info_labels["Acceleration (ft/s²)"].config(
-            text=f"{outputs['acceleration_ftps2']:.2f}"
-        )
-        self.info_labels["Position (yds)"].config(text=f"{outputs['position_yds']:.1f}")
-        self.info_labels["Authority Remaining (yds)"].config(
-            text=f"{outputs['authority_yds']:.1f}"
-        )
-        self.info_labels["Train Temperature (°F)"].config(
-            text=f"{outputs['temperature_F']:.1f}"
-        )
-        self.info_labels["Set Temperature (°F)"].config(
-            text=f"{ctrl.get('set_temperature', 0.0):.1f}"
-        )
-        self.info_labels["Current Station"].config(
-            text=f"{outputs['station_name'] or ''}"
-        )
-        self.info_labels["Next Station"].config(text=f"{outputs['next_station'] or ''}")
-        # FIX: speed limit is part of merged inputs, not outputs
-        self.info_labels["Speed Limit (mph)"].config(
-            text=f"{merged_inputs.get('speed limit', 0.0):.0f}"
-        )
-
-        def door_style(open_):
-            return "Status.On.TLabel" if open_ else "Status.Off.TLabel"
-
-        self.env_labels["Left Door"].config(
-            text="Open" if outputs["left_door_open"] else "Closed",
-            style=door_style(outputs["left_door_open"]),
-        )
-        self.env_labels["Right Door"].config(
-            text="Open" if outputs["right_door_open"] else "Closed",
-            style=door_style(outputs["right_door_open"]),
-        )
-        self.env_labels["Interior Lights"].config(
-            text="On" if ctrl.get("interior_lights") else "Off",
-            style=door_style(ctrl.get("interior_lights")),
-        )
-        self.env_labels["Exterior Lights"].config(
-            text="On" if ctrl.get("exterior_lights") else "Off",
-            style=door_style(ctrl.get("exterior_lights")),
-        )
-
-        def set_flag(lbl_key, on):
-            self.fail_labels[lbl_key].config(
-                text="On" if on else "Off",
-                style="Status.On.TLabel" if on else "Status.Off.TLabel",
+        try:
+            self.info_labels["Velocity (mph)"].config(text=f"{outputs['velocity_mph']:.2f}")
+            self.info_labels["Acceleration (ft/s²)"].config(
+                text=f"{outputs['acceleration_ftps2']:.2f}"
             )
+            self.info_labels["Position (yds)"].config(text=f"{outputs['position_yds']:.1f}")
+            self.info_labels["Authority Remaining (yds)"].config(
+                text=f"{outputs['authority_yds']:.1f}"
+            )
+            self.info_labels["Train Temperature (°F)"].config(
+                text=f"{outputs['temperature_F']:.1f}"
+            )
+            self.info_labels["Set Temperature (°F)"].config(
+                text=f"{ctrl.get('set_temperature', 0.0):.1f}"
+            )
+            self.info_labels["Current Station"].config(
+                text=f"{outputs['station_name'] or ''}"
+            )
+            self.info_labels["Next Station"].config(text=f"{outputs['next_station'] or ''}")
+            # FIX: speed limit is part of merged inputs, not outputs
+            self.info_labels["Speed Limit (mph)"].config(
+                text=f"{merged_inputs.get('speed limit', 0.0):.0f}"
+            )
+        except tk.TclError:
+            # Widget has been destroyed, stop updating
+            return
 
-        set_flag(
-            "Engine Failure",
-            bool(merged_inputs.get("train_model_engine_failure", False)),
-        )
-        set_flag(
-            "Brake Failure", bool(merged_inputs.get("train_model_brake_failure", False))
-        )
-        set_flag(
-            "Signal Failure",
-            bool(merged_inputs.get("train_model_signal_failure", False)),
-        )
-        set_flag("Emergency Brake", bool(ctrl.get("emergency_brake", False)))
+        try:
+            def door_style(open_):
+                return "Status.On.TLabel" if open_ else "Status.Off.TLabel"
+
+            self.env_labels["Left Door"].config(
+                text="Open" if outputs["left_door_open"] else "Closed",
+                style=door_style(outputs["left_door_open"]),
+            )
+            self.env_labels["Right Door"].config(
+                text="Open" if outputs["right_door_open"] else "Closed",
+                style=door_style(outputs["right_door_open"]),
+            )
+            self.env_labels["Interior Lights"].config(
+                text="On" if ctrl.get("interior_lights") else "Off",
+                style=door_style(ctrl.get("interior_lights")),
+            )
+            self.env_labels["Exterior Lights"].config(
+                text="On" if ctrl.get("exterior_lights") else "Off",
+                style=door_style(ctrl.get("exterior_lights")),
+            )
+        except tk.TclError:
+            return
+
+        try:
+            def set_flag(lbl_key, on):
+                self.fail_labels[lbl_key].config(
+                    text="On" if on else "Off",
+                    style="Status.On.TLabel" if on else "Status.Off.TLabel",
+                )
+
+            set_flag(
+                "Engine Failure",
+                bool(merged_inputs.get("train_model_engine_failure", False)),
+            )
+            set_flag(
+                "Brake Failure", bool(merged_inputs.get("train_model_brake_failure", False))
+            )
+            set_flag(
+                "Signal Failure",
+                bool(merged_inputs.get("train_model_signal_failure", False)),
+            )
+            set_flag("Emergency Brake", bool(ctrl.get("emergency_brake", False)))
+        except tk.TclError:
+            return
 
         try:
             self.announcement_box.config(state="normal")
@@ -607,7 +623,11 @@ class TrainModelUI(ttk.Frame):
                         self._last_mtimes[key] = mt
                         changed = True
                 if changed:
-                    self.after(1, lambda: self._run_cycle(schedule=False))
+                    try:
+                        self.after(1, lambda: self._run_cycle(schedule=False))
+                    except tk.TclError:
+                        # Widget destroyed, stop trying to update
+                        break
             except Exception:
                 pass
             time.sleep(0.2)
@@ -635,5 +655,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    app = TrainModelUI(train_id=args.train_id, server_url=args.server)
-    app.mainloop()
+    # Create root window for standalone mode
+    root = tk.Tk()
+    root.title(f"Train Model - Train {args.train_id if args.train_id else 'Single'}")
+    root.geometry("1450x900")
+    
+    # Create TrainModelUI frame inside root window
+    app = TrainModelUI(root, train_id=args.train_id, server_url=args.server)
+    app.pack(fill="both", expand=True)
+    
+    root.mainloop()

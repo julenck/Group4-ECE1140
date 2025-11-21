@@ -22,8 +22,8 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(current_dir)
 sys.path.append(parent_dir)
 
-# Import TrainModel
-train_model_dir = os.path.join(parent_dir, "Train Model")
+# Import TrainModel from Train_Model folder at root
+train_model_dir = os.path.join(parent_dir, "Train_Model")
 sys.path.append(train_model_dir)
 
 # Import required classes
@@ -37,20 +37,22 @@ class TrainPair:
         train_id: Unique identifier for this train.
         model: TrainModel instance for physics simulation.
         controller: train_controller instance for control logic.
-        model_ui: TrainModelUI instance (UI window for train model).
+        model_ui: TrainModelUI frame instance.
+        model_window: tk.Toplevel window containing model_ui.
         controller_ui: train_controller_ui instance (UI window for train controller).
         is_remote_controller: True if controller runs on Raspberry Pi.
     """
     
     def __init__(self, train_id: int, model, controller=None, model_ui=None, 
-                 controller_ui=None, is_remote_controller: bool = False):
+                 model_window=None, controller_ui=None, is_remote_controller: bool = False):
         """Initialize a train pair.
         
         Args:
             train_id: Unique identifier for this train.
             model: TrainModel instance.
             controller: train_controller instance (None if remote).
-            model_ui: TrainModelUI instance (optional).
+            model_ui: TrainModelUI frame instance (optional).
+            model_window: tk.Toplevel window containing model_ui (optional).
             controller_ui: train_controller_ui instance (None if remote).
             is_remote_controller: True if controller runs on Raspberry Pi.
         """
@@ -58,6 +60,7 @@ class TrainPair:
         self.model = model
         self.controller = controller
         self.model_ui = model_ui
+        self.model_window = model_window
         self.controller_ui = controller_ui
         self.is_remote_controller = is_remote_controller
 
@@ -92,9 +95,10 @@ class TrainManager:
             self.state_file = state_file
 
         # Extra paths for train_data.json and track model inputs
-        self.train_data_file = os.path.join(train_model_dir, "train_data.json")
-        # IMPORTANT: seed trains from the Train Model folder's track-to-train file (ignore Track_Model folder)
-        self.track_model_file = os.path.join(train_model_dir, "track_model_Train_Model.json")
+        train_model_dir_actual = os.path.join(parent_dir, "Train_Model")
+        self.train_data_file = os.path.join(train_model_dir_actual, "train_data.json")
+        # IMPORTANT: seed trains from the Train_Model folder's track-to-train file
+        self.track_model_file = os.path.join(train_model_dir_actual, "track_model_Train_Model.json")
         
         # Ensure state file exists
         self._initialize_state_file()
@@ -125,27 +129,27 @@ class TrainManager:
         Returns:
             The train_id of the newly created train.
         """
-        # Import TrainModel and TrainModelUI
-        try:
-            # UPDATED: import TrainModel from core, UI separately
-            from train_model_core import TrainModel
-            from train_model_ui import TrainModelUI
-        except ImportError:
-            import importlib.util
-            core_spec = importlib.util.spec_from_file_location(
-                "train_model_core",
-                os.path.join(train_model_dir, "train_model_core.py")
-            )
-            core_module = importlib.util.module_from_spec(core_spec)
-            core_spec.loader.exec_module(core_module)
-            ui_spec = importlib.util.spec_from_file_location(
-                "train_model_ui",
-                os.path.join(train_model_dir, "train_model_ui.py")
-            )
-            ui_module = importlib.util.module_from_spec(ui_spec)
-            ui_spec.loader.exec_module(ui_module)
-            TrainModel = core_module.TrainModel
-            TrainModelUI = ui_module.TrainModelUI
+        # Import TrainModel and TrainModelUI using importlib
+        import importlib.util
+        
+        core_spec = importlib.util.spec_from_file_location(
+            "train_model_core",
+            os.path.join(train_model_dir, "train_model_core.py")
+        )
+        core_module = importlib.util.module_from_spec(core_spec)
+        sys.modules["train_model_core"] = core_module
+        core_spec.loader.exec_module(core_module)
+        
+        ui_spec = importlib.util.spec_from_file_location(
+            "train_model_ui",
+            os.path.join(train_model_dir, "train_model_ui.py")
+        )
+        ui_module = importlib.util.module_from_spec(ui_spec)
+        sys.modules["train_model_ui"] = ui_module
+        ui_spec.loader.exec_module(ui_module)
+        
+        TrainModel = core_module.TrainModel
+        TrainModelUI = ui_module.TrainModelUI
         
         # Import appropriate controller based on hardware flag
         if use_hardware:
@@ -203,15 +207,22 @@ class TrainManager:
         controller_ui = None
         
         if create_uis:
-            # Create Train Model UI with train_id and optional server URL for remote mode
-            model_ui = TrainModelUI(train_id=train_id, server_url=server_url if is_remote else None)
+            # Create Train Model UI window (TrainModelUI is a ttk.Frame, needs parent)
+            model_window = tk.Toplevel()
+            model_window.title(f"Train {train_id} - Train Model")
+            
             # Position window based on train_id to avoid overlap
             x_offset = 50 + (train_id - 1) * 60
             y_offset = 50 + (train_id - 1) * 60
-            model_ui.geometry(f"1450x900+{x_offset}+{y_offset}")
+            model_window.geometry(f"1450x900+{x_offset}+{y_offset}")
+            
+            # Create TrainModelUI frame inside the window
+            model_ui = TrainModelUI(model_window, train_id=train_id, server_url=server_url if is_remote else None)
+            model_ui.pack(fill="both", expand=True)
+            
             # Ensure the window is visible
-            model_ui.deiconify()
-            model_ui.lift()
+            model_window.deiconify()
+            model_window.lift()
             
             # Create Train Controller UI if not remote
             if not is_remote:
@@ -232,8 +243,8 @@ class TrainManager:
             
             print(f"Train {train_id} UIs created (Model: Yes, Controller: {'Remote' if is_remote else 'Yes'})")
         
-        # Create TrainPair
-        train_pair = TrainPair(train_id, model, controller, model_ui, controller_ui, is_remote_controller=is_remote)
+        # Create TrainPair (store model_window reference)
+        train_pair = TrainPair(train_id, model, controller, model_ui, model_window if create_uis else None, controller_ui, is_remote_controller=is_remote)
         
         # Store in dictionary
         self.trains[train_id] = train_pair
@@ -471,9 +482,9 @@ class TrainManager:
         
         # Close UI windows if they exist
         train_pair = self.trains[train_id]
-        if train_pair.model_ui:
+        if train_pair.model_window:
             try:
-                train_pair.model_ui.destroy()
+                train_pair.model_window.destroy()
                 print(f"Train {train_id} Model UI closed")
             except:
                 pass
