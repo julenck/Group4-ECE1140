@@ -3,7 +3,7 @@
     "commanded_authority": 0.0,
     "speed_limit": 30,
     "train_velocity": 0.0,
-    "current_station": "Central Station",
+    "current_station": "Central  Station",
     "next_stop": "Park Street",
     "station_side": "Right",
     "train_temperature": 70.0,
