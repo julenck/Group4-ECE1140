@@ -296,10 +296,20 @@ class TrainModelUI(ttk.Frame):
 
     # === Controller state IO ===
     def get_train_state(self):
+        """Read Train Controller outputs from train_states.json"""
         all_states = safe_read_json(TRAIN_STATES_FILE)
         if self.train_id is None:
+            # Legacy mode: read from outputs section at root
+            if 'outputs' in all_states:
+                return all_states['outputs']
             return all_states
-        return all_states.get(f"train_{self.train_id}", {})
+        else:
+            # Multi-train: read from outputs section of train_X
+            key = f"train_{self.train_id}"
+            section = all_states.get(key, {})
+            if 'outputs' in section:
+                return section['outputs']
+            return section
 
     def update_train_state(self, updates: dict):
         # Remote mode: only if requests is available
@@ -318,15 +328,23 @@ class TrainModelUI(ttk.Frame):
                 print(f"[Train Model] Error updating state on server: {e}")
             return
 
-        # Local mode: write to file
+        # Local mode: write to file (inputs section)
         all_states = safe_read_json(TRAIN_STATES_FILE)
         if self.train_id is None:
-            all_states.update(updates)
+            # Legacy mode: write to inputs section at root
+            if 'inputs' not in all_states:
+                all_states['inputs'] = {}
+            all_states['inputs'].update(updates)
         else:
             key = f"train_{self.train_id}"
-            cur = all_states.get(key, {})
-            cur.update(updates)
-            all_states[key] = cur
+            if key not in all_states:
+                all_states[key] = {'inputs': {}, 'outputs': {}}
+            section = all_states[key]
+            if 'inputs' not in section:
+                section['inputs'] = {}
+            # Train Model writes to inputs section (Train Controller reads from here)
+            section['inputs'].update(updates)
+            all_states[key] = section
         safe_write_json(TRAIN_STATES_FILE, all_states)
 
     def write_train_data(self, specs, outputs, td_inputs):

@@ -322,8 +322,6 @@ class TrainManager:
             "announcement": "",
             "announce_pressed": False,
             "emergency_brake": False,
-            "kp": 1500.0,
-            "ki": 50.0,
             "engineering_panel_locked": False,
             "power_command": 0.0,
             "beacon_read_blocked": False,
@@ -603,10 +601,13 @@ class TrainManager:
             if train_pair.controller is None:
                 continue
             
-            # Update controller from state (beacon, commanded speed/authority)
+            # Update controller from train_data.json (syncs to train_states.json inputs)
             train_pair.controller.update_from_train_model()
             
-            # Calculate power command
+            # Re-get state after sync to get updated train_velocity, speed_limit, etc.
+            state = self.get_train_state(train_id)
+            
+            # Calculate power command with updated state
             power = train_pair.controller.calculate_power_command(state)
             
             # Update model with inputs
@@ -625,10 +626,9 @@ class TrainManager:
                 right_door=state.get("right_door", False)
             )
             
-            # Write outputs back to state
+            # Write controller outputs to state (only power_command)
+            # Train Model writes train_velocity and train_temperature to inputs section
             self.update_train(train_id, {
-                "train_velocity": outputs['velocity_mph'],
-                "train_temperature": outputs['temperature_F'],
                 "power_command": power
             })
 

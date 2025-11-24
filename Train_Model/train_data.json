@@ -64,11 +64,11 @@
             "train_model_brake_failure": false
         },
         "outputs": {
-            "velocity_mph": 25.795919991458202,
+            "velocity_mph": 0.0,
             "acceleration_ftps2": 0.0,
-            "position_yds": 844.8184639377653,
+            "position_yds": 7370.025545534612,
             "authority_yds": 100.0,
-            "temperature_F": 68.75,
+            "temperature_F": 68.5,
             "station_name": "Central Station",
             "next_station": "Park Street",
             "left_door_open": false,
