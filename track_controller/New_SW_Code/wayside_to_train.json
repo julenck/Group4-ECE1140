@@ -1,0 +1,42 @@
+{
+    "Train 1": {
+        "Commanded Speed": 0,
+        "Commanded Authority": 0,
+        "Beacon": {
+            "Current Station": "",
+            "Next Station": ""
+        }
+    },
+    "Train 2": {
+        "Commanded Speed": 0,
+        "Commanded Authority": 0,
+        "Beacon": {
+            "Current Station": "",
+            "Next Station": ""
+        }
+    },
+    "Train 3": {
+        "Commanded Speed": 0,
+        "Commanded Authority": 0,
+        "Beacon": {
+            "Current Station": "",
+            "Next Station": ""
+        }
+    },
+    "Train 4": {
+        "Commanded Speed": 0,
+        "Commanded Authority": 0,
+        "Beacon": {
+            "Current Station": "",
+            "Next Station": ""
+        }
+    },
+    "Train 5": {
+        "Commanded Speed": 0,
+        "Commanded Authority": 0,
+        "Beacon": {
+            "Current Station": "",
+            "Next Station": ""
+        }
+    }
+}
