@@ -10,7 +10,7 @@ The module interfaces with the train_controller_api module to handle state manag
 and communication with the Train Model.
 
 Typical usage example:
-    python test_ui.py
+    python test_ui.py 
 
 Dependencies:
     - tkinter: For GUI components

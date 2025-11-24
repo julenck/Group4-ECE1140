@@ -1,7 +1,7 @@
 """Train Controller API module for state management and module communication.
 
 This module handles data persistence using JSON files and provides interfaces
-for communication between Train Controller and Train Model modules.
+for communication between Train Controller and Train Model modules. 
 """
 
 import json

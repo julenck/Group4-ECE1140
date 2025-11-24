@@ -1,4 +1,4 @@
-"""Test script to verify multi-train JSON section reading/writing."""
+"""Test script to verify multi-train JSON section reading/writing. """
 
 import sys
 import os

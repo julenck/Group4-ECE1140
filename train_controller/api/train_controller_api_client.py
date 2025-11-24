@@ -2,7 +2,7 @@
 Communicates with the central REST API server instead of local JSON files.
 
 This client is used on Raspberry Pi devices to access train state
-data from the central server over the network.
+data from the central server over the network. 
 
 Author: James Struyk, Julen Coca-Knorr
 """

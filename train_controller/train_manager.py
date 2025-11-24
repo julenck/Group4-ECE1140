@@ -6,7 +6,7 @@ This module manages multiple trains, where each train consists of:
 
 The TrainManager coordinates multiple trains, assigns unique IDs,
 and manages their state in the shared train_states.json file.
-
+ 
 Author: Julen Coca-Knorr
 """
 

@@ -1,4 +1,4 @@
-import time
+import time 
 
 try:
     from gpiozero import LED, Button # type: ignore

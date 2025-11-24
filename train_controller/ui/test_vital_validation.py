@@ -1,9 +1,9 @@
 """
 Unit tests for vital validation in train controller.
-
+ 
 Tests the vital_validator_first_check and vital_validator_second_check classes
 to ensure safety-critical controls are properly validated before being applied.
-
+ 
 Run with: python -m unittest test_vital_validation.py
 Or: python test_vital_validation.py
 """

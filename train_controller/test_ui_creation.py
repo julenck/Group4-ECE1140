@@ -1,4 +1,4 @@
-"""Test script to verify both UIs open when creating a train."""
+"""Test script to verify both UIs open when creating a train. """
 
 import sys
 import os

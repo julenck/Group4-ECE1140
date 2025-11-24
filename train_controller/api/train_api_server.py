@@ -2,7 +2,7 @@
 Manages all JSON state files and provides endpoints for clients.
 
 This server runs on the main computer and allows Raspberry Pi devices
-to access train state data over the network.
+to access train state data over the network. 
 
 Author: James Struyk, Julen Coca-Knorr
 """

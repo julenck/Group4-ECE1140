@@ -1,6 +1,6 @@
 # Train System Network Setup Guide
 
-This guide explains how to set up the train system with a central server and Raspberry Pi clients.
+This guide explains how to set up the train system with a central server and Raspberry Pi clients. 
 
 ## Architecture Overview
 

@@ -4,7 +4,7 @@
 
 ### Server (Main Computer)
 ```bash
-pip install flask flask-cors
+pip install flask flask-cors 
 ```
 
 ### Raspberry Pi

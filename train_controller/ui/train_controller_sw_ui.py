@@ -4,7 +4,7 @@ This module provides the driver interface for the Train Controller,
 implementing the same functionality as the hardware version but in software.
 Interfaces with the train_controller_api for state management and Train Model communication.
 
-Author: Julen Coca-Knorr
+Author: Julen Coca-Knorr 
 """
 
 import tkinter as tk 
