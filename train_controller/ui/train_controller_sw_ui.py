@@ -149,8 +149,8 @@ class vital_train_controls:
 		speed_error = self.driver_velocity - self.train_velocity
 		
 		# If speed error is zero or negative (train at or above target), return zero power
-		if speed_error <= 0.01:  # 0.01 MPH threshold for stability
-			return (0.0, 0.0, time.time())  # Reset accumulated error
+		if speed_error <= 0.0:  # Exact match or train too fast
+			return (0.0, 0.0, time.time())  # Reset accumulated error and return 0 power
 		
 		# Get current time
 		current_time = time.time()
@@ -203,9 +203,12 @@ class vital_validator_first_check:
 			True if validation passes, False otherwise.
 		"""
 		# Check 1: Velocity must not exceed speed limit (if speed limit is set)
+		# Allow power=0 or braking even when speeding (to slow down)
 		if v.speed_limit > 0 and v.train_velocity > v.speed_limit:
-			print(f"VALIDATION FAILED: Velocity {v.train_velocity} exceeds speed limit {v.speed_limit}")
-			return False
+			# Only reject if trying to apply MORE power when already speeding
+			if v.power_command > 0:
+				print(f"VALIDATION FAILED: Velocity {v.train_velocity} exceeds speed limit {v.speed_limit} and trying to apply power {v.power_command}")
+				return False
 		
 		# Check 2: Power command must be within valid range (0-120000W)
 		if v.power_command < 0 or v.power_command > 120000:
@@ -293,10 +296,14 @@ class train_controller:
 		self.validators = [vital_validator_first_check(), vital_validator_second_check()]
 	
 	def update_from_train_model(self) -> None:
-		"""Update beacon and commanded speed/authority from API state.
+		"""Update beacon and commanded speed/authority from Train Model.
 		
-		Call this periodically to sync with Train Model data.
+		Call this periodically to sync with Train Model data from train_data.json.
 		"""
+		# Sync from train_data.json to train_states.json inputs
+		self.api.update_from_train_data()
+		
+		# Update local beacon and commanded speed/authority from synced state
 		state = self.api.get_state()
 		self.beacon_info.update_from_state(state)
 		self.cmd_speed_auth.update_from_state(state)
@@ -341,8 +348,12 @@ class train_controller:
 			state: Current train state dictionary.
 			
 		Returns:
-			Power command in Watts (0-120000).
+			Power command in Watts (0-120000). Returns 0 if kp/ki not set or velocity exceeds speed limit.
 		"""
+		# If kp or ki are not set, train cannot move
+		if 'kp' not in state or 'ki' not in state or state['kp'] is None or state['ki'] is None:
+			return 0.0
+		
 		# Create a vital_train_controls instance with current state
 		controls = vital_train_controls(
 			kp=state['kp'],
@@ -871,12 +882,6 @@ class train_controller_ui(tk.Tk):
             # Enable/disable buttons based on mode
             self.update_button_enabled_states(manual_mode, current_state['emergency_brake'])
             
-            # Auto-release emergency brake when velocity reaches 0
-            if current_state['emergency_brake'] and current_state['train_velocity'] == 0.0:
-                print("[Train Controller] Train stopped - Releasing emergency brake")
-                self.controller.set_emergency_brake(False)
-                current_state = self.api.get_state()
-            
             # Check for critical failures that require emergency brake
             critical_failure = (current_state.get('train_controller_engine_failure', False) or 
                               current_state.get('train_controller_signal_failure', False) or 
@@ -888,19 +893,18 @@ class train_controller_ui(tk.Tk):
                 
             # Recalculate power command based on current state
             if (not current_state['emergency_brake'] and 
-                current_state['service_brake'] == 0 and 
+                not current_state['service_brake'] and 
                 not critical_failure):
                 power = self.controller.calculate_power_command(current_state)
-                if power != current_state['power_command']:
-                    # Apply power change through vital validation
-                    self.controller.vital_control_check_and_update({'power_command': power})
+                print(f"[DEBUG POWER] train_vel={current_state['train_velocity']:.2f}, driver_vel={current_state['driver_velocity']:.2f}, calculated_power={power:.2f}")
+                # Always update power command even if same to ensure it's written
+                self.controller.vital_control_check_and_update({'power_command': power})
             else:
                 # Reset accumulated error when brakes are active
                 self.controller._accumulated_error = 0
-                # No power when brakes are active or failures present
+                # Set power to 0 when brakes are active or failures present
                 self.controller.vital_control_check_and_update({
-                    'power_command': 0,
-                    'driver_velocity': 0
+                    'power_command': 0
                 })
             
             # Update current speed display

@@ -31,8 +31,8 @@ class train_controller_api:
         
         self.state_file = os.path.join(self.data_dir, "train_states.json")
         
-        # Default state template
-        self.train_states = {
+        # Default state template with inputs/outputs sections
+        self.default_inputs = {
             # Inputs FROM Train Model
             'commanded_speed': 0.0,
             'commanded_authority': 0.0,
@@ -42,77 +42,61 @@ class train_controller_api:
             'next_stop': '',
             'station_side': '',
             'train_temperature': 0.0,
-            'manual_mode': False,
-            
-            # Train Model Failure Flags (activated by Train Model)
             'train_model_engine_failure': False,
             'train_model_signal_failure': False,
             'train_model_brake_failure': False,
-            
-            # Train Controller Failure Flags (detected and activated by Train Controller)
             'train_controller_engine_failure': False,
             'train_controller_signal_failure': False,
             'train_controller_brake_failure': False,
-            
-            # Signal for Train Controller (set by Train Model when beacon read is blocked)
             'beacon_read_blocked': False,
-            
-            # Internal Train Controller State
+        }
+        
+        self.default_outputs = {
+            # Outputs TO Train Model (Train Controller commands)
+            'manual_mode': False,
             'driver_velocity': 0.0,
             'service_brake': False,
             'right_door': False,
             'left_door': False,
             'interior_lights': False,
             'exterior_lights': False,
-            'set_temperature': 70.0,  # Default to 70°F for automatic mode
+            'set_temperature': 70.0,
             'temperature_up': False,
             'temperature_down': False,
             'announcement': '',
             'announce_pressed': False,
             'emergency_brake': False,
-            'kp': 0.0,
-            'ki': 0.0,
+            'kp': None,  # Must be set through UI
+            'ki': None,  # Must be set through UI
             'engineering_panel_locked': False,
-            
-            # Outputs TO Train Model
             'power_command': 0.0,
         }
         
-        # Initialize state file if it doesn't exist or is empty/malformed
+        # Legacy flat structure for backward compatibility
+        self.train_states = {**self.default_inputs, **self.default_outputs}
+        
+        # Initialize state file - ALWAYS reset kp/ki to None on restart
+        # This ensures train won't move until values are locked through UI
         try:
-            if not os.path.exists(self.state_file) or os.path.getsize(self.state_file) == 0:
-                # Initialize default state with matched values
-                initial_state = self.train_states.copy()
-                initial_state['driver_velocity'] = initial_state['commanded_speed']
-                initial_state['set_temperature'] = initial_state['train_temperature']
-                self.save_state(initial_state)
-            else:
-                # Validate existing file
-                with open(self.state_file, 'r') as f:
-                    try:
-                        current_state = json.load(f)
-                        # Ensure all required fields are present
-                        for key in self.train_states:
-                            if key not in current_state:
-                                current_state[key] = self.train_states[key]
-                        # Always ensure driver_velocity and set_temperature match their inputs if not set
-                        if 'driver_velocity' not in current_state:
-                            current_state['driver_velocity'] = current_state['commanded_speed']
-                        if 'set_temperature' not in current_state:
-                            current_state['set_temperature'] = current_state['train_temperature']
-                        self.save_state(current_state)
-                    except json.JSONDecodeError:
-                        # File exists but is malformed, overwrite with defaults
-                        initial_state = self.train_states.copy()
-                        initial_state['driver_velocity'] = initial_state['commanded_speed']
-                        initial_state['set_temperature'] = initial_state['train_temperature']
-                        self.save_state(initial_state)
+            print(f"[API INIT] Initializing train_controller_api for train_id={train_id}")
+            # Initialize default state with matched values
+            initial_state = self.train_states.copy()
+            initial_state['driver_velocity'] = initial_state['commanded_speed']
+            initial_state['set_temperature'] = initial_state['train_temperature']
+            # Ensure kp and ki are None (must be set through UI)
+            initial_state['kp'] = None
+            initial_state['ki'] = None
+            print(f"[API INIT] Setting kp={initial_state['kp']}, ki={initial_state['ki']}")
+            self.save_state(initial_state)
+            print(f"[API INIT] State saved successfully")
         except Exception as e:
-            print(f"Error initializing state file: {e}")
+            print(f"[API INIT] Error initializing state file: {e}")
             # Ensure we have a valid state file with proper initialization
             initial_state = self.train_states.copy()
             initial_state['driver_velocity'] = initial_state['commanded_speed']
             initial_state['set_temperature'] = initial_state['train_temperature']
+            initial_state['kp'] = None
+            initial_state['ki'] = None
             self.save_state(initial_state)
 
     def update_state(self, state_dict: dict) -> None:
@@ -129,7 +113,7 @@ class train_controller_api:
         """Get current train state.
         
         Returns:
-            dict: Current state of the train. Returns default state if there are any issues.
+            dict: Current state of the train (merged inputs + outputs). Returns default state if there are any issues.
         """
         with _file_lock:
             try:
@@ -142,15 +126,35 @@ class train_controller_api:
                             if self.train_id is not None:
                                 train_key = f"train_{self.train_id}"
                                 if train_key in all_states:
-                                    return all_states[train_key]
+                                    section = all_states[train_key]
+                                    # Check if it has new inputs/outputs structure
+                                    if 'inputs' in section and 'outputs' in section:
+                                        # Merge defaults first, then inputs and outputs
+                                        result = self.train_states.copy()
+                                        result.update(section.get('inputs', {}))
+                                        result.update(section.get('outputs', {}))
+                                        return result
+                                    else:
+                                        # Old flat structure - merge with defaults
+                                        result = self.train_states.copy()
+                                        result.update(section)
+                                        return result
                                 else:
                                     # Return default state if train section doesn't exist
                                     default = self.train_states.copy()
                                     default['train_id'] = self.train_id
                                     return default
                             else:
-                                # Legacy mode: read from root level
-                                return all_states
+                                # Legacy mode: read from root level, support both old and new structure
+                                if 'inputs' in all_states and 'outputs' in all_states:
+                                    result = self.train_states.copy()
+                                    result.update(all_states.get('inputs', {}))
+                                    result.update(all_states.get('outputs', {}))
+                                    return result
+                                else:
+                                    result = self.train_states.copy()
+                                    result.update(all_states)
+                                    return result
                         except json.JSONDecodeError as e:
                             print(f"Error reading state file: {e}")
                             # Reset to default state if file is corrupted
@@ -161,13 +165,12 @@ class train_controller_api:
                 return self.train_states.copy()
 
     def save_state(self, state: dict) -> None:
-        """Save train state to file.
+        """Save train state to file with inputs/outputs structure.
         
         Args:
             state: Complete state dictionary to save
             
-        The method ensures all required fields are present in the state
-        by merging with default values for any missing fields.
+        The method separates state into inputs (from Train Model) and outputs (to Train Model).
         """
         with _file_lock:
             try:
@@ -188,25 +191,55 @@ class train_controller_api:
                     else:
                         all_states = {}
                     
-                    # IMPORTANT: Only update at root level, never nested
-                    # Remove any nested train_X keys from complete_state to prevent nesting
-                    clean_state = {}
-                    for key, value in complete_state.items():
-                        # Skip nested train_X sections and only keep actual state data
-                        if not (key.startswith('train_') and isinstance(value, dict)):
-                            clean_state[key] = value
-                        elif key == f"train_{self.train_id}":  # Keep train_id field
-                            clean_state['train_id'] = self.train_id
-                    
                     train_key = f"train_{self.train_id}"
-                    all_states[train_key] = clean_state
+                    
+                    # Create clean inputs/outputs structure (no flat duplicate fields)
+                    inputs = self.default_inputs.copy()
+                    outputs = self.default_outputs.copy()
+                    
+                    # Sort complete_state into inputs and outputs
+                    for key, value in complete_state.items():
+                        # Skip nested train_X sections and train_id
+                        if key.startswith('train_') and isinstance(value, dict):
+                            continue
+                        elif key == 'train_id':
+                            continue
+                        # Categorize into inputs or outputs
+                        elif key in self.default_inputs:
+                            inputs[key] = value
+                        elif key in self.default_outputs:
+                            outputs[key] = value
+                    
+                    # Only store inputs and outputs sections
+                    all_states[train_key] = {
+                        'inputs': inputs,
+                        'outputs': outputs
+                    }
                     
                     with open(self.state_file, 'w') as f:
                         json.dump(all_states, f, indent=4)
                 else:
-                    # Legacy mode: save to root level
+                    # Legacy mode: save with inputs/outputs structure at root
+                    if os.path.exists(self.state_file):
+                        with open(self.state_file, 'r') as f:
+                            all_states = json.load(f)
+                    else:
+                        all_states = {}
+                    
+                    if 'inputs' not in all_states:
+                        all_states['inputs'] = self.default_inputs.copy()
+                    if 'outputs' not in all_states:
+                        all_states['outputs'] = self.default_outputs.copy()
+                    
+                    # Sort complete_state into inputs and outputs
+                    for key, value in complete_state.items():
+                        if key in self.default_inputs:
+                            all_states['inputs'][key] = value
+                        elif key in self.default_outputs:
+                            all_states['outputs'][key] = value
+                    
                     with open(self.state_file, 'w') as f:
-                        json.dump(complete_state, f, indent=4)
+                        json.dump(all_states, f, indent=4)
 
             except Exception as e:
                 print(f"Error saving state: {e}")
