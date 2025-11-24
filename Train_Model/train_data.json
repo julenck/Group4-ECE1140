@@ -13,7 +13,7 @@
     },
     "inputs": {
         "commanded speed": 40,
-        "commanded authority": 0,
+        "commanded authority": 100,
         "speed limit": 30,
         "current station": "Central Station",
         "next station": "Park Street",
@@ -49,7 +49,7 @@
         },
         "inputs": {
             "commanded speed": 40,
-            "commanded authority": 0,
+            "commanded authority": 100,
             "speed limit": 30,
             "current station": "Central Station",
             "next station": "Park Street",
@@ -64,11 +64,18 @@
             "train_model_brake_failure": false
         },
         "outputs": {
-            "velocity_mph": 0.0,
+            "velocity_mph": 25.795919991458202,
             "acceleration_ftps2": 0.0,
-            "position_yds": 0.0,
-            "authority_yds": 0.0,
-            "temperature_F": 71.0
+            "position_yds": 844.8184639377653,
+            "authority_yds": 100.0,
+            "temperature_F": 68.75,
+            "station_name": "Central Station",
+            "next_station": "Park Street",
+            "left_door_open": false,
+            "right_door_open": false,
+            "door_side": "Right",
+            "commanded_speed": 40,
+            "speed_limit": 30.0
         }
     }
 }

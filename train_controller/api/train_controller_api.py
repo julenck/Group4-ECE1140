@@ -219,15 +219,15 @@ class train_controller_api:
         self.save_state(self.train_states.copy())
 
     def read_train_data_json(self) -> Optional[Dict]:
-        """Read the latest train_data.json directly from Train Model folder."""
+        """Read the latest train_data.json directly from Train_Model folder."""
         try:
             base_dir = os.path.dirname(os.path.dirname(__file__))  # train_controller/
-            train_data_path = os.path.join(os.path.dirname(base_dir), "Train Model", "train_data.json")
+            train_data_path = os.path.join(os.path.dirname(base_dir), "Train_Model", "train_data.json")
 
             print(f"[DEBUG] Reading Train Model data from: {train_data_path}")
 
             if not os.path.exists(train_data_path):
-                print("[TrainControllerAPI] train_data.json not found in Train Model folder.")
+                print("[TrainControllerAPI] train_data.json not found in Train_Model folder.")
                 return None
 
             with open(train_data_path, 'r') as f:
@@ -259,9 +259,9 @@ class train_controller_api:
             outputs = data.get("outputs", {})
 
         mapped_data = {
-            'commanded_speed': inputs.get('commanded speed', 0.0),
-            'commanded_authority': inputs.get('commanded authority', 0.0),
-            'speed_limit': inputs.get('speed limit', 0.0),
+            'commanded_speed': outputs.get('commanded_speed', 0.0),
+            'commanded_authority': outputs.get('authority_yds', 0.0),
+            'speed_limit': outputs.get('speed_limit', 0.0),
             'train_velocity': outputs.get('velocity_mph', 0.0),
             'train_temperature': outputs.get('temperature_F', 0.0),
             'train_model_engine_failure': inputs.get('train_model_engine_failure', False),

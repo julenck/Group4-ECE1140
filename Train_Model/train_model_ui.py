@@ -329,47 +329,62 @@ class TrainModelUI(ttk.Frame):
             all_states[key] = cur
         safe_write_json(TRAIN_STATES_FILE, all_states)
 
-    def write_train_data(self, specs, inputs, td_inputs):
+    def write_train_data(self, specs, outputs, td_inputs):
         data = safe_read_json(self.train_data_path)
         if not isinstance(data, dict):
             data = {}
         data.setdefault("specs", data.get("specs", self.specs))
         data.setdefault("inputs", data.get("inputs", {}))
         data.setdefault("outputs", data.get("outputs", {}))
-        outputs = {
-            "velocity_mph": self.model.velocity_mph,
-            "acceleration_ftps2": self.model.acceleration_ftps2,
-            "position_yds": self.model.position_yds,
-            "authority_yds": self.model.authority_yds,
-            "temperature_F": self.model.temperature_F,
+        
+        # Outputs = Train Model computed values (motion + temperature + doors + station)
+        outputs_to_write = {
+            "velocity_mph": outputs.get("velocity_mph", 0.0),
+            "acceleration_ftps2": outputs.get("acceleration_ftps2", 0.0),
+            "position_yds": outputs.get("position_yds", 0.0),
+            "authority_yds": outputs.get("authority_yds", 0.0),
+            "temperature_F": outputs.get("temperature_F", 70.0),
+            "station_name": outputs.get("station_name", ""),
+            "next_station": outputs.get("next_station", ""),
+            "left_door_open": outputs.get("left_door_open", False),
+            "right_door_open": outputs.get("right_door_open", False),
+            "door_side": td_inputs.get("side_door", ""),
+            "commanded_speed": td_inputs.get("commanded speed", 0.0),
+            "speed_limit": outputs.get("speed_limit", 0.0)
         }
+        
+        # Keep all inputs as-is (they update the outputs through the model)
+        filtered_inputs = dict(td_inputs) if isinstance(td_inputs, dict) else {}
+        
         if self.train_id is None:
             current_inputs = data.get("inputs", {})
+            # Preserve failure flags from current inputs
             for flag in [
                 "train_model_engine_failure",
                 "train_model_signal_failure",
                 "train_model_brake_failure",
             ]:
                 if flag in current_inputs:
-                    td_inputs[flag] = current_inputs[flag]
+                    filtered_inputs[flag] = current_inputs[flag]
             data["specs"] = specs
-            data["inputs"] = td_inputs
-            data["outputs"] = outputs
+            data["inputs"] = filtered_inputs
+            data["outputs"] = outputs_to_write
         else:
             key = f"train_{self.train_id}"
             if key not in data:
                 data[key] = {}
             current_inputs = data.get(key, {}).get("inputs", {})
+            # Preserve failure flags from current inputs
             for flag in [
                 "train_model_engine_failure",
                 "train_model_signal_failure",
                 "train_model_brake_failure",
             ]:
                 if flag in current_inputs:
-                    td_inputs[flag] = current_inputs[flag]
+                    filtered_inputs[flag] = current_inputs[flag]
             data[key]["specs"] = specs
-            data[key]["inputs"] = td_inputs
-            data[key]["outputs"] = outputs
+            data[key]["inputs"] = filtered_inputs
+            data[key]["outputs"] = outputs_to_write
         safe_write_json(self.train_data_path, data)
 
     def update_loop(self):
@@ -487,7 +502,7 @@ class TrainModelUI(ttk.Frame):
             outputs["velocity_mph"],
         )
 
-        self.write_train_data(specs_for_write, merged_inputs, td_inputs)
+        self.write_train_data(specs_for_write, outputs, td_inputs)
 
         remaining_authority = outputs["authority_yds"]  # FIX: define before use
 

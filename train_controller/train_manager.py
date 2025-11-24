@@ -632,11 +632,9 @@ class TrainManager:
                 "power_command": power
             })
 
-            # NEW: Mirror outputs into Train Model/train_data.json under train_{id}
-            try:
-                self._update_train_data_outputs(train_id, outputs, state)
-            except Exception as e:
-                print(f"Warning: failed to update train_data.json for train {train_id}: {e}")
+            # NOTE: Do NOT write to train_data.json outputs - Train Model handles that
+            # This prevents conflicts when both Train Manager and Train Model are running
+            # The Train Model is the source of truth for motion outputs
 
 
 class TrainManagerUI(tk.Tk):
