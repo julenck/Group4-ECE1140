@@ -20,6 +20,7 @@ from tkinter import filedialog
 import json
 import os
 from datetime import datetime, timezone
+from PIL import Image, ImageTk
 #from .Green_Line_PLC_XandLup import process_states_green_xlup
 #from .Green_Line_PLC_XandLdown import process_states_green_xldown
 #from track_controller.New_SW_Code import sw_wayside_controller
@@ -105,6 +106,7 @@ class sw_wayside_controller_ui(tk.Tk):
         self.build_selected_block_frame()
 
         self.update_block_labels()
+        self.update_train_data_labels()
     
 
     def on_close(self):
@@ -227,14 +229,83 @@ class sw_wayside_controller_ui(tk.Tk):
         self.selected_file_label.pack(pady=5)
 
     def build_input_frame(self):
+        # Clear frame first
+        for widget in self.input_frame.winfo_children():
+            widget.destroy()
+            
         # Define a style for the input frame widgets
         style = ttk.Style()
         style.configure("Input.TLabel", font=("Arial", 16, "bold"), background="white")
-        style.configure("smaller.TLabel", font=("Arial", 5), background="gray")
+        style.configure("TrainData.TLabel", font=("Arial", 10), background="white")
 
         # Title label
         title_label = ttk.Label(self.input_frame, text="Active Train Data", style="Input.TLabel")
         title_label.pack(pady=10)
+        
+        # Create scrollable container for train data
+        container = ttk.Frame(self.input_frame)
+        container.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        canvas = tk.Canvas(container, bg="white", height=250)
+        scroller = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        train_data_frame = ttk.Frame(canvas)
+        
+        train_data_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=train_data_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scroller.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scroller.pack(side="right", fill="y")
+        
+        # Get active train data from controller
+        train_data = self.controller.get_active_trains()
+        
+        if not train_data:
+            no_train_label = ttk.Label(train_data_frame, text="No active trains in this section", style="TrainData.TLabel")
+            no_train_label.pack(pady=20)
+        else:
+            # Create headers
+            headers_frame = ttk.Frame(train_data_frame)
+            headers_frame.pack(fill="x", padx=5, pady=5)
+            
+            ttk.Label(headers_frame, text="Train", style="TrainData.TLabel", width=10).grid(row=0, column=0, padx=5, sticky="w")
+            ttk.Label(headers_frame, text="Position", style="TrainData.TLabel", width=10).grid(row=0, column=1, padx=5, sticky="w")
+            ttk.Label(headers_frame, text="Speed (m/s)", style="TrainData.TLabel", width=12).grid(row=0, column=2, padx=5, sticky="w")
+            ttk.Label(headers_frame, text="Authority (m)", style="TrainData.TLabel", width=12).grid(row=0, column=3, padx=5, sticky="w")
+            
+            # Add separator
+            ttk.Separator(train_data_frame, orient='horizontal').pack(fill='x', pady=2)
+            
+            # Display each train's data
+            row = 1
+            self.train_data_labels = {}
+            for train_id, data in train_data.items():
+                train_frame = ttk.Frame(train_data_frame)
+                train_frame.pack(fill="x", padx=5, pady=2)
+                
+                train_label = ttk.Label(train_frame, text=train_id, style="TrainData.TLabel", width=10)
+                train_label.grid(row=0, column=0, padx=5, sticky="w")
+                
+                pos_label = ttk.Label(train_frame, text=str(data.get('pos', 'N/A')), style="TrainData.TLabel", width=10)
+                pos_label.grid(row=0, column=1, padx=5, sticky="w")
+                
+                speed_label = ttk.Label(train_frame, text=f"{data.get('cmd speed', 0):.2f}", style="TrainData.TLabel", width=12)
+                speed_label.grid(row=0, column=2, padx=5, sticky="w")
+                
+                auth_label = ttk.Label(train_frame, text=f"{data.get('cmd auth', 0):.2f}", style="TrainData.TLabel", width=12)
+                auth_label.grid(row=0, column=3, padx=5, sticky="w")
+                
+                # Store labels for updating
+                self.train_data_labels[train_id] = {
+                    "pos": pos_label,
+                    "speed": speed_label,
+                    "auth": auth_label
+                }
+                row += 1
 
         # #sub frame for train data
         # self.train_data_frame = ttk.Frame(self.input_frame)
@@ -275,6 +346,8 @@ class sw_wayside_controller_ui(tk.Tk):
         #clear frame first
         for widget in self.all_blocks_frame.winfo_children():
             widget.destroy()
+        # Clear block_labels dict since we're rebuilding all labels
+        self.block_labels = {}
         # Define a style for the all blocks frame widgets
         style = ttk.Style()
         style.configure("AllBlocks.TLabel", font=("Arial", 16, "bold"), background="white")
@@ -345,15 +418,17 @@ class sw_wayside_controller_ui(tk.Tk):
                 block_label.grid(row=1, column=1, padx=5, pady=5)
                 #get yard data
                 desired = self.controller.get_block_data(0)
-                occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired['occupied']}", style="smaller.TLabel")
+                if desired['occupied']:
+                    occupied_label.configure(background="lightgreen")
                 occupied_label.grid(row=1, column=2, padx=5, pady=5)
-                switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
+                switch_label = ttk.Label(self.scrollable_frame, text=f"{desired['switch_state']}", style="smaller.TLabel")
                 switch_label.grid(row=1, column=3, padx=5, pady=5)
-                light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                light_label = ttk.Label(self.scrollable_frame, text=f"{desired['light_state']}", style="smaller.TLabel")
                 light_label.grid(row=1, column=4, padx=5, pady=5)
-                gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"]}", style="smaller.TLabel")
+                gate_label = ttk.Label(self.scrollable_frame, text=f"{desired['gate_state']}", style="smaller.TLabel")
                 gate_label.grid(row=1, column=5, padx=5, pady=5)
-                failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")
+                failure_label = ttk.Label(self.scrollable_frame, text=f"{desired['Failure']}", style="smaller.TLabel")
                 failure_label.grid(row=1, column=6, padx=5, pady=5)
 
 
@@ -392,7 +467,9 @@ class sw_wayside_controller_ui(tk.Tk):
                     block_label.grid(row=i + 2, column=1, padx=5, pady=5)
 
                     desired = self.controller.get_block_data(block_num)
-                    occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                    occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired['occupied']}", style="smaller.TLabel")
+                    if desired['occupied']:
+                        occupied_label.configure(background="lightgreen")
                     occupied_label.grid(row=i+2, column=2, padx=5, pady=5)  
                     switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
                     switch_label.grid(row=i+2, column=3, padx=5, pady= 5)
@@ -426,7 +503,9 @@ class sw_wayside_controller_ui(tk.Tk):
                 block_label.grid(row=82, column=1, padx=5, pady=5)
 
                 desired = self.controller.get_block_data(151)
-                occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired['occupied']}", style="smaller.TLabel")
+                if desired['occupied']:
+                    occupied_label.configure(background="lightgreen")
                 occupied_label.grid(row=82, column=2, padx=5, pady=5)
                 switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
                 switch_label.grid(row=82, column=3, padx=5, pady=5)
@@ -465,7 +544,9 @@ class sw_wayside_controller_ui(tk.Tk):
                     )
                     block_label.grid(row=i + 1, column=1, padx=5, pady=5)
                     desired = self.controller.get_block_data(block_num)
-                    occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired["occupied"]}", style="smaller.TLabel")
+                    occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired['occupied']}", style="smaller.TLabel")
+                    if desired['occupied']:
+                        occupied_label.configure(background="lightgreen")
                     occupied_label.grid(row=i+1, column=2, padx=5, pady=5)  
                     switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")  
                     switch_label.grid(row=i+1, column=3, padx=5, pady= 5)
@@ -484,20 +565,37 @@ class sw_wayside_controller_ui(tk.Tk):
                         "failure": failure_label
                     }
 
-    #def update_train_data_labels(self):
-        #for train, labels in self.train_data_labels.items():
-            #data = self.controller.get_active_trains().get(train, {})
-            #if data!={}:  # Ensure data exists for the train
-                #labels["speed"].config(text=f"  Commanded Speed: {data.get('cmd speed', 'N/A')} m/s")
-                #labels["auth"].config(text=f"  Commanded Authority: {data.get('cmd auth', 'N/A')} m")
-                #labels["pos"].config(text=f"  Position: {data.get('pos', 'N/A')}")
-            
-        #self.after(200, self.update_train_data_labels)  # Update every second
+    def update_train_data_labels(self):
+        """Update train data labels with current information"""
+        train_data = self.controller.get_active_trains()
+        
+        # Update existing labels
+        for train_id, labels in list(self.train_data_labels.items()):
+            if train_id in train_data:
+                data = train_data[train_id]
+                labels["pos"].config(text=str(data.get('pos', 'N/A')))
+                labels["speed"].config(text=f"{data.get('cmd speed', 0):.2f}")
+                labels["auth"].config(text=f"{data.get('cmd auth', 0):.2f}")
+            else:
+                # Train no longer active, rebuild the frame
+                self.build_input_frame()
+                return
+        
+        # Check if new trains appeared
+        if set(train_data.keys()) != set(self.train_data_labels.keys()):
+            self.build_input_frame()
+        
+        self.after(200, self.update_train_data_labels)
 
     def update_block_labels(self):
         for block_id, labels in self.block_labels.items():
             data = self.controller.get_block_data(block_id)
             labels["occupied"].config(text=f"{data['occupied']}")
+            # Update background color based on occupancy
+            if data['occupied']:
+                labels["occupied"].configure(background="lightgreen")
+            else:
+                labels["occupied"].configure(background="white")
             labels["switch"].config(text=f"{data['switch_state']}")
             labels["light"].config(text=f"{data['light_state']}")
             labels["gate"].config(text=f"{data['gate_state']}")
@@ -531,9 +629,37 @@ class sw_wayside_controller_ui(tk.Tk):
         title_label = ttk.Label(self.map_frame, text="Track Map", style="Map.TLabel")
         title_label.pack(pady=10)
 
-        # Track map display (placeholder)
-        map_display_label = ttk.Label(self.map_frame, text="Track map will be displayed here.", style="smaller.TLabel")
-        map_display_label.pack(pady=10)
+        # Load and display track map image
+        try:
+            # Get the directory of the current file
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            image_path = os.path.join(current_dir, "track_map.png")
+            
+            # Load image
+            image = Image.open(image_path)
+            
+            # Resize image to fit in the frame (adjust size as needed)
+            # Calculate aspect ratio to maintain proportions
+            max_width = 400
+            max_height = 350
+            image.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            
+            # Convert to PhotoImage
+            photo = ImageTk.PhotoImage(image)
+            
+            # Create label to display image
+            map_label = ttk.Label(self.map_frame, image=photo)
+            map_label.image = photo  # Keep a reference to prevent garbage collection
+            map_label.pack(pady=10, padx=10)
+            
+        except FileNotFoundError:
+            # Fallback if image not found
+            map_display_label = ttk.Label(self.map_frame, text="Track map image not found.", style="smaller.TLabel")
+            map_display_label.pack(pady=10)
+        except Exception as e:
+            # Fallback for any other error
+            map_display_label = ttk.Label(self.map_frame, text=f"Error loading map: {str(e)}", style="smaller.TLabel")
+            map_display_label.pack(pady=10)
 
         
 

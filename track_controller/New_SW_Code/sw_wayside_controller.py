@@ -53,14 +53,17 @@ class sw_wayside_controller:
         self.cumulative_distance: dict = {}  # Track actual distance traveled since last reset
         
         # Define block ranges for each PLC
+        # managed_blocks: blocks this controller controls (for handoff decisions)
+        # visible_blocks: blocks this controller can see/display (extends beyond handoff boundary)
         if self.active_plc == "Green_Line_PLC_XandLup.py":
-            self.managed_blocks = set(range(0, 70)) | set(range(144, 151))  # Blocks 0-69 and 144-150 (avoid overlap with Controller 2)
-            print(f"DEBUG: Controller 1 (XandLup) managing blocks: 0-69 and 144-150 (total {len(self.managed_blocks)} blocks)")
+            self.managed_blocks = set(range(0, 70)) | set(range(144, 151))  # Blocks 0-69 and 144-150 (control boundaries)
+            self.visible_blocks = set(range(0, 74)) | set(range(144, 151))  # Can see 0-73 and 144-150
         elif self.active_plc == "Green_Line_PLC_XandLdown.py":
-            self.managed_blocks = set(range(70, 144))  # Blocks 70-143 (avoid overlap with Controller 1)
-            print(f"DEBUG: Controller 2 (XandLdown) managing blocks: 70-143 (total {len(self.managed_blocks)} blocks)")
+            self.managed_blocks = set(range(70, 144))  # Blocks 70-143 (control boundaries)
+            self.visible_blocks = set(range(70, 144))  # Can see 70-143
         else:
             self.managed_blocks = set(range(0, 152))  # All blocks if no specific PLC
+            self.visible_blocks = set(range(0, 152))
 
         # Load track data from Excel file
         self.block_graph = {}  # Maps block number to {length, forward_next, reverse_next, bidirectional}
@@ -154,9 +157,6 @@ class sw_wayside_controller:
                             self.block_lengths[block_num] = length
                         except ValueError as ve:
                             continue
-            
-            print(f"Loaded {len(self.block_graph)} blocks from track_data.csv")
-            print(f"Found {len(self.station_blocks)} station blocks: {sorted(self.station_blocks)}")
             
         except Exception as e:
             print(f"Error loading track data from CSV: {e}")
@@ -271,6 +271,18 @@ class sw_wayside_controller:
         
         self.load_inputs_ctc()
 
+        # First pass: clear occupied blocks for trains that have left our visible range
+        for train in self.active_trains:
+            train_pos = self.active_trains[train]["Train Position"]
+            # If train is outside our visible range and we have it marked as occupied somewhere, clear it
+            if train_pos not in self.visible_blocks and train_pos != 0:
+                # Check if we were tracking this train and need to clear its old position
+                if train in self.last_seen_position:
+                    last_pos = self.last_seen_position[train]
+                    if last_pos in self.visible_blocks and 0 <= last_pos < len(self.occupied_blocks):
+                        if self.occupied_blocks[last_pos] == 1:
+                            self.occupied_blocks[last_pos] = 0
+
         for train in self.active_trains:
             if train not in self.cmd_trains and self.active_trains[train]["Active"]==1:
                 train_pos = self.active_trains[train]["Train Position"]
@@ -280,17 +292,26 @@ class sw_wayside_controller:
                 current_last_pos = self.last_seen_position.get(train, 0)
                 
                 # Skip trains not in our managed section
-                # Only Controller 1 (XandLup) manages yard (block 0)
+                # Only Controller 1 (XandLup) manages yard (block 0) - ALL trains start from yard
                 if train_pos == 0 and self.active_plc != "Green_Line_PLC_XandLup.py":
                     # Controller 2 should not pick up trains from yard
                     self.last_seen_position[train] = train_pos
                     continue
+                
+                # If train is at yard (block 0), ONLY Controller 1 should activate it
+                # Controller 2 should never activate a train at block 0
+                if train_pos == 0:
+                    # Additional check: ensure we're Controller 1
+                    if self.active_plc != "Green_Line_PLC_XandLup.py":
+                        self.last_seen_position[train] = train_pos
+                        continue
                 
                 if train_pos not in self.managed_blocks and train_pos != 0:
                     # Update last seen position even if we're not managing it
                     self.last_seen_position[train] = train_pos
                     # print(f"DEBUG: {self.active_plc} skipping {train} at block {train_pos} (not in managed_blocks)")
                     continue
+                    
                 
                 if train_pos != 0:
                     # Check if this is a handoff from another controller
@@ -339,10 +360,6 @@ class sw_wayside_controller:
                             # If file not found or error, use CTC values
                             current_auth = sug_auth
                             current_speed = self.active_trains[train]["Suggested Speed"]
-                        
-                        print(f"DEBUG: {self.active_plc} Taking over {train} via handoff at block {train_pos} (from block {current_last_pos}) - continuing with {current_auth}m authority")
-                    
-                    print(f"DEBUG: {self.active_plc} Adding {train} to cmd_trains - Position: {train_pos}, Active: {self.active_trains[train]['Active']}, cmd_trains keys: {list(self.cmd_trains.keys())}")
                     
                     # Use handoff authority if this is a handoff, otherwise use suggested authority
                     if is_handoff:
@@ -365,8 +382,7 @@ class sw_wayside_controller:
                     if train_pos in self.green_order:
                         self.train_idx[train] = self.green_order.index(train_pos)
                     else:
-                        # Train not in green_order, just use position as-is
-                        print(f"Warning: Train {train} at block {train_pos} not in green_order, using position directly")
+                        # Train not in green_order, just use position as-is (happens on alternate routes)
                         self.train_idx[train] = train_pos
                     
                     # Set starting position to current index for distance calculation
@@ -392,13 +408,53 @@ class sw_wayside_controller:
                         if train_pos == 0:
                             self.cumulative_distance[train] = 0
                         else:
-                            self.cumulative_distance[train] = -self.block_lengths.get(train_pos, 0)
+                            # Determine initial direction based on which next block will be used
+                            # First, check if we already have a direction stored for this train (preserve direction)
+                            if train in self.train_direction and train in self.last_seen_position:
+                                # Train was previously active, preserve its direction
+                                initial_direction = self.train_direction[train]
+                            elif train_pos in self.block_graph:
+                                block_info = self.block_graph[train_pos]
+                                # Check if we'll use forward_next or reverse_next based on track topology
+                                initial_direction = 'forward'
+                                
+                                # Check if next block in forward direction exists and is valid
+                                forward_next = block_info['forward_next']
+                                reverse_next = block_info['reverse_next']
+                                
+                                # Simple heuristic: if forward_next is -1 or goes to lower numbered block, likely reverse
+                                if forward_next == -1 and reverse_next != -1:
+                                    initial_direction = 'reverse'
+                                elif forward_next != -1 and reverse_next != -1:
+                                    # Both directions available
+                                    # Use authority amount as hint: very long authority (>2500m) suggests continuing around the loop
+                                    if sug_auth > 2500:
+                                        # Long journey - likely continuing in current direction
+                                        # For blocks that can go both ways, check the reverse_next to determine direction
+                                        # Block 77 reverse goes to 101 (higher), forward goes to 76 (lower)
+                                        if reverse_next > train_pos:
+                                            initial_direction = 'reverse'
+                                        else:
+                                            initial_direction = 'forward'
+                                    else:
+                                        # Short journey - default to forward
+                                        initial_direction = 'forward'
+                                
+                                self.train_direction[train] = initial_direction
+                            else:
+                                self.train_direction[train] = 'forward'  # Default to forward if not in graph
+                            
+                            # Set cumulative_distance based on direction
+                            if self.train_direction[train] == 'reverse':
+                                # Reverse: train starts at beginning of station block (needs to travel full block length)
+                                self.cumulative_distance[train] = 0
+                            else:
+                                # Forward: train at end of station block (negative cumulative to account for already traveled distance)
+                                self.cumulative_distance[train] = -self.block_lengths.get(train_pos, 0)
                     
-                    # Determine initial direction based on position
-                    self.train_direction[train] = 'forward'  # Default to forward
                     self.last_seen_position[train] = train_pos
-                    print(f"Train {train} activated at block {train_pos} (idx: {self.train_idx[train]}) with {auth_to_use}m authority (original: {self.train_auth_start[train]}m)")
                 else:
+                    # Train starting from yard (block 0)
                     self.cmd_trains[train] = {
                         "cmd auth": self.active_trains[train]["Suggested Authority"],
                         "cmd speed": self.active_trains[train]["Suggested Speed"],
@@ -409,12 +465,29 @@ class sw_wayside_controller:
                     self.train_pos_start[train] = 0
                     self.train_auth_start[train] = self.active_trains[train]["Suggested Authority"]
                     self.train_direction[train] = 'forward'  # Default to forward
+                    self.cumulative_distance[train] = 0
+                    self.last_seen_position[train] = 0
+                    # Mark block 0 as occupied
+                    self.occupied_blocks[0] = 1
 
         ttr = []
+        
         for cmd_train in self.cmd_trains:
             auth = self.cmd_trains[cmd_train]["cmd auth"]
             speed = self.cmd_trains[cmd_train]["cmd speed"]
             pos = self.cmd_trains[cmd_train]["pos"]
+            
+            # Check if another controller has moved this train outside our visible range
+            # This handles the case where Controller 2 takes over and moves the train
+            if cmd_train in self.active_trains:
+                ctc_pos = self.active_trains[cmd_train]["Train Position"]
+                if ctc_pos not in self.visible_blocks and ctc_pos != 0:
+                    # Train has been moved outside our range by another controller
+                    # Clear our last known position before removing
+                    if 0 <= pos < len(self.occupied_blocks):
+                        self.occupied_blocks[pos] = 0
+                    ttr.append(cmd_train)
+                    continue
             
             # Get suggested speed from CTC and speed limit for current block
             sug_speed = self.active_trains[cmd_train]["Suggested Speed"] if cmd_train in self.active_trains else speed
@@ -462,7 +535,6 @@ class sw_wayside_controller:
                 new_sug_auth = self.active_trains[cmd_train]["Suggested Authority"]
                 # If suggested authority increased, reset tracking from current position
                 if new_sug_auth > self.train_auth_start[cmd_train]:
-                    print(f"Train {cmd_train}: Authority updated from {self.train_auth_start[cmd_train]}m to {new_sug_auth}m at block {pos}")
                     self.train_auth_start[cmd_train] = new_sug_auth
                     self.train_pos_start[cmd_train] = self.train_idx[cmd_train]
                     # Reset cumulative distance (train is at station, at end of current block)
@@ -478,30 +550,36 @@ class sw_wayside_controller:
                 auth = 0
                 self.cmd_trains[cmd_train]["cmd auth"] = 0  # Update to 0 before removing
                 self.cmd_trains[cmd_train]["cmd speed"] = 0  # Stop the train
-                print(f"Train {cmd_train}: Authority exhausted at block {pos}, deactivating train (cmd_auth set to 0)")
+                final_pos = self.cmd_trains[cmd_train]["pos"]  # Get final position from cmd_trains
 
-                
                 #set train to inactive
-                with self.file_lock:
-                    with open(self.ctc_comm_file,'r') as f:
-                        data = json.load(f)
-                    with open(self.ctc_comm_file,'w') as f:
-                        data["Trains"][cmd_train]["Active"] = 0
-                        json.dump(data,f,indent=4)
+                max_retries = 3
+                for retry in range(max_retries):
+                    try:
+                        with self.file_lock:
+                            with open(self.ctc_comm_file,'r') as f:
+                                data = json.load(f)
+                            # Update Active AND position before writing
+                            data["Trains"][cmd_train]["Active"] = 0
+                            data["Trains"][cmd_train]["Train Position"] = final_pos  # Use final_pos from cmd_trains
+                            print(f"DEBUG: Deactivating {cmd_train} at position {final_pos} - writing to CTC JSON")
+                            with open(self.ctc_comm_file,'w') as f:
+                                json.dump(data,f,indent=4)
+                        # Verify what we just wrote
+                        import datetime
+                        with open(self.ctc_comm_file,'r') as f:
+                            verify_data = json.load(f)
+                            actual_pos = verify_data["Trains"][cmd_train]["Train Position"]
+                            timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                            print(f"[{timestamp}] DEBUG: Verified CTC JSON after write - {cmd_train} position is now: {actual_pos}")
+                        break
+                    except (json.JSONDecodeError, IOError) as e:
+                        if retry < max_retries - 1:
+                            time.sleep(0.01)
+                        else:
+                            print(f"Warning: Failed to deactivate {cmd_train} after {max_retries} attempts: {e}")
                 ttr.append(cmd_train)
                 continue  # Skip rest of processing for this train
-            
-            # Check if train has left our managed section - hand off to other controller
-            # Only hand off if train still has authority (not exhausted above)
-            # Block 0 (yard) is only managed by Controller 1
-            if pos not in self.managed_blocks and pos != 0:
-                print(f"Train {cmd_train}: Leaving managed section at block {pos}, handing off to other controller (managed_blocks has {len(self.managed_blocks)} blocks)")
-                # Don't add to ttr yet - let the final load_train_outputs write the current values first
-                # Mark for later removal
-                if not hasattr(self, 'trains_to_handoff'):
-                    self.trains_to_handoff = []
-                self.trains_to_handoff.append(cmd_train)
-                continue
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
             self.cmd_trains[cmd_train]["cmd speed"] = speed
@@ -511,21 +589,39 @@ class sw_wayside_controller:
             idx = self.train_idx[cmd_train]
             
             # Check if train has traveled far enough to move to next block
-            if self.traveled_enough(sug_auth, auth, idx, cmd_train):
-                # Only move to next block if we have enough remaining authority to enter it
-                if auth > 0:
+            is_reverse = self.train_direction.get(cmd_train, 'forward') == 'reverse'
+            
+            # For reverse direction, use different threshold logic
+            if is_reverse:
+                # Reverse: Move to next block when within 2m (to ensure we show at station block)
+                # Calculate how close we are to completing the current block
+                cumulative = self.cumulative_distance.get(cmd_train, 0)
+                current_block_length = self.block_lengths.get(pos, 100)
+                traveled = sug_auth - auth
+                remaining_in_block = (cumulative + current_block_length) - traveled
+                
+                should_move = traveled > cumulative and remaining_in_block <= 2
+            else:
+                # Forward: Use normal traveled_enough logic
+                should_move = self.traveled_enough(sug_auth, auth, idx, cmd_train)
+            
+            if should_move:
+                # For forward direction, use 2m threshold to prevent overshooting
+                # For reverse direction, threshold already applied above
+                if is_reverse or auth > 2:
                     # Move to next block
                     new_pos = self.get_next_block(pos, idx, cmd_train)
                     
                     # Check if we reached end of track
                     if new_pos == -1:
                         auth = 0
-                        print(f"Train {cmd_train}: Reached end of track at block {pos}")
                         with self.file_lock:
                             with open(self.ctc_comm_file,'r') as f:
                                 data = json.load(f)
+                            # Update Active AND preserve position
+                            data["Trains"][cmd_train]["Active"] = 0
+                            data["Trains"][cmd_train]["Train Position"] = pos
                             with open(self.ctc_comm_file,'w') as f:
-                                data["Trains"][cmd_train]["Active"] = 0
                                 json.dump(data,f,indent=4)
                         ttr.append(cmd_train)
                     else:
@@ -537,16 +633,58 @@ class sw_wayside_controller:
                         if cmd_train not in self.cumulative_distance:
                             self.cumulative_distance[cmd_train] = 0
                         self.cumulative_distance[cmd_train] += self.block_lengths.get(pos, 100)
-                        print(f"Train {cmd_train}: Moved from {pos} to {new_pos}, cumulative={self.cumulative_distance[cmd_train]}m, traveled={sug_auth - auth}m, auth_remaining={auth}m")
+                        
+                        # Write the new position to CTC immediately, even if it's outside managed section
+                        # This ensures the other controller can see the train at the boundary
+                        max_retries = 3
+                        for retry in range(max_retries):
+                            try:
+                                with self.file_lock:
+                                    with open(self.ctc_comm_file,'r') as f:
+                                        data = json.load(f)
+                                    data["Trains"][cmd_train]["Train Position"] = new_pos
+                                    with open(self.ctc_comm_file,'w') as f:
+                                        json.dump(data,f,indent=4)
+                                break
+                            except (json.JSONDecodeError, IOError) as e:
+                                if retry < max_retries - 1:
+                                    time.sleep(0.01)
+                                else:
+                                    print(f"Warning: Failed to write position for {cmd_train} after {max_retries} attempts: {e}")
+                        
+                        # Check if train moved outside visible range - remove completely
+                        if new_pos not in self.visible_blocks and new_pos != 0:
+                            if not hasattr(self, 'trains_to_handoff'):
+                                self.trains_to_handoff = []
+                            self.trains_to_handoff.append(cmd_train)
+                            continue  # Skip further processing
+                        # Check if train moved into handoff zone (outside managed but still visible)
+                        elif new_pos not in self.managed_blocks and new_pos != 0:
+                            # Continue tracking but don't write position to CTC (other controller will do that)
+                            pass
                 # else: stay at current block (at the station) when authority runs out
 
-
-            with self.file_lock:
-                with open(self.ctc_comm_file,'r') as f:
-                    data = json.load(f)
-                with open(self.ctc_comm_file,'w') as f:
-                    data["Trains"][cmd_train]["Train Position"] = self.cmd_trains[cmd_train]["pos"]
-                    json.dump(data,f,indent=4)
+            # Only write train position back to CTC if train is in our managed section
+            train_current_pos = self.cmd_trains[cmd_train]["pos"]
+            if train_current_pos in self.managed_blocks or (train_current_pos == 0 and self.active_plc == "Green_Line_PLC_XandLup.py"):
+                # Retry logic to handle concurrent file access from multiple controllers
+                max_retries = 3
+                for retry in range(max_retries):
+                    try:
+                        with self.file_lock:
+                            # Read and write in same critical section to avoid race condition
+                            with open(self.ctc_comm_file,'r') as f:
+                                data = json.load(f)
+                            # Update ONLY this train's position, keep everything else from fresh read
+                            data["Trains"][cmd_train]["Train Position"] = self.cmd_trains[cmd_train]["pos"]
+                            with open(self.ctc_comm_file,'w') as f:
+                                json.dump(data,f,indent=4)
+                        break  # Success, exit retry loop
+                    except (json.JSONDecodeError, IOError) as e:
+                        if retry < max_retries - 1:
+                            time.sleep(0.01)  # Wait 10ms before retrying
+                        else:
+                            print(f"Warning: Failed to update train position for {cmd_train} after {max_retries} attempts: {e}")
 
         # Write commanded speed/authority to train communication file BEFORE cleanup
         # This ensures trains with exhausted authority write 0 to the file
@@ -554,15 +692,23 @@ class sw_wayside_controller:
         self.load_train_outputs(ttr)
         
         # Now add handoff trains to ttr for cleanup
+        # Only remove trains that are truly outside our visible range
         if hasattr(self, 'trains_to_handoff'):
             for train in self.trains_to_handoff:
-                if train not in ttr:
-                    ttr.append(train)
+                # Double-check train is actually outside visible range before removing
+                if train in self.cmd_trains:
+                    train_pos = self.cmd_trains[train]["pos"]
+                    if train_pos not in self.visible_blocks and train_pos != 0:
+                        if train not in ttr:
+                            ttr.append(train)
+                else:
+                    # Train already removed
+                    if train not in ttr:
+                        ttr.append(train)
             self.trains_to_handoff = []  # Clear for next iteration
 
         # Clean up trains that have completed
         for tr in ttr:
-            print(f"DEBUG: Removing {tr} from cmd_trains")
             if tr in self.cmd_trains:
                 self.cmd_trains.pop(tr)
             if tr in self.train_idx:
@@ -571,8 +717,9 @@ class sw_wayside_controller:
                 self.train_pos_start.pop(tr)
             if tr in self.train_auth_start:
                 self.train_auth_start.pop(tr)
-            if tr in self.train_direction:
-                self.train_direction.pop(tr)
+            # Don't remove train_direction - preserve it for reactivation
+            # if tr in self.train_direction:
+            #     self.train_direction.pop(tr)
 
         if self.running:
             threading.Timer(1.0, self.run_trains).start()
@@ -606,6 +753,22 @@ class sw_wayside_controller:
         # Move to next block only if traveled distance EXCEEDS distance needed
         return traveled > distance_needed
 
+    def get_next_block_preview(self, current_block: int, train_id: str):
+        """Preview what the next block would be without moving the train"""
+        if current_block not in self.block_graph:
+            return -1
+        
+        block_info = self.block_graph[current_block]
+        direction = self.train_direction.get(train_id, 'forward')
+        
+        # Get next block based on direction
+        if direction == 'forward':
+            next_block = block_info['forward_next']
+        else:  # reverse
+            next_block = block_info['reverse_next']
+        
+        return next_block if next_block != -1 else -1
+
     def get_next_block(self, current_block: int, block_idx: int, train_id: str):
         """Get next block based on current block and train direction"""
         self.occupied_blocks[current_block] = 0
@@ -635,7 +798,6 @@ class sw_wayside_controller:
         for from_block, to_block, new_direction in self.direction_transitions:
             if current_block == from_block and next_block == to_block:
                 self.train_direction[train_id] = new_direction
-                print(f"Train {train_id}: Direction changed to {new_direction} at transition {from_block}->{to_block}")
                 break
         
         if next_block == -1:
@@ -675,12 +837,21 @@ class sw_wayside_controller:
             return self.active_plc
 
     def load_inputs_ctc(self):
-        with self.file_lock:
-            with open(self.ctc_comm_file, 'r') as f:
-                data = json.load(f)
-                self.active_trains = data.get("Trains", {})
-                self.closed_blocks = data.get("Block Closure", [])
-                self.ctc_sugg_switches = data.get("Switch Suggestion", [])
+        max_retries = 3
+        for retry in range(max_retries):
+            try:
+                with self.file_lock:
+                    with open(self.ctc_comm_file, 'r') as f:
+                        data = json.load(f)
+                        self.active_trains = data.get("Trains", {})
+                        self.closed_blocks = data.get("Block Closure", [])
+                        self.ctc_sugg_switches = data.get("Switch Suggestion", [])
+                break  # Success
+            except (json.JSONDecodeError, IOError) as e:
+                if retry < max_retries - 1:
+                    time.sleep(0.01)
+                else:
+                    print(f"Warning: Failed to load CTC inputs after {max_retries} attempts: {e}")
             
             
 
@@ -771,7 +942,10 @@ class sw_wayside_controller:
             elif train_id in self.cmd_trains:
                 # Only update if train is in our managed section
                 train_pos = self.cmd_trains[train_id]["pos"]
-                if train_pos in self.managed_blocks or train_pos == 0:
+                # Controller 2 should NEVER write outputs for trains at block 0 (yard)
+                if train_pos == 0 and self.active_plc != "Green_Line_PLC_XandLup.py":
+                    continue  # Skip - Controller 1 handles yard
+                if train_pos in self.managed_blocks or (train_pos == 0 and self.active_plc == "Green_Line_PLC_XandLup.py"):
                     data[train_id]["Commanded Speed"] = self.cmd_trains[train_id]["cmd speed"]
                     data[train_id]["Commanded Authority"] = self.cmd_trains[train_id]["cmd auth"]
                 # else: don't update - other controller is managing this train
