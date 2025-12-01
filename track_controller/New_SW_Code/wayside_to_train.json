@@ -5,7 +5,8 @@
         "Beacon": {
             "Current Station": "",
             "Next Station": ""
-        }
+        },
+        "Train Speed": 0
     },
     "Train 2": {
         "Commanded Speed": 0,
@@ -13,7 +14,8 @@
         "Beacon": {
             "Current Station": "",
             "Next Station": ""
-        }
+        },
+        "Train Speed": 0
     },
     "Train 3": {
         "Commanded Speed": 0,
@@ -21,7 +23,8 @@
         "Beacon": {
             "Current Station": "",
             "Next Station": ""
-        }
+        },
+        "Train Speed": 0
     },
     "Train 4": {
         "Commanded Speed": 0,
@@ -29,7 +32,8 @@
         "Beacon": {
             "Current Station": "",
             "Next Station": ""
-        }
+        },
+        "Train Speed": 0
     },
     "Train 5": {
         "Commanded Speed": 0,
@@ -37,6 +41,7 @@
         "Beacon": {
             "Current Station": "",
             "Next Station": ""
-        }
+        },
+        "Train Speed": 0
     }
 }
