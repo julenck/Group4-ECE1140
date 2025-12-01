@@ -35,6 +35,7 @@ class sw_wayside_controller:
         self.active_plc: str = plc
         self.ctc_comm_file: str = "ctc_to_wayside.json"
         self.track_comm_file: str = "track_controller\\New_SW_Code\\track_to_wayside.json"
+        self.train_comm_file: str = "track_controller\\New_SW_Code\\wayside_to_train.json"
         self.block_status: list = []
         self.detected_faults: dict = {}
         self.input_faults: list = [0]*152*3
@@ -270,6 +271,9 @@ class sw_wayside_controller:
             return
         
         self.load_inputs_ctc()
+        
+        # Load actual train speeds from train_data.json
+        actual_train_speeds = self.load_train_speeds()
 
         # First pass: clear occupied blocks for trains that have left our visible range
         for train in self.active_trains:
@@ -477,6 +481,9 @@ class sw_wayside_controller:
             speed = self.cmd_trains[cmd_train]["cmd speed"]
             pos = self.cmd_trains[cmd_train]["pos"]
             
+            # Use actual train speed if available, otherwise fall back to commanded speed
+            actual_speed = actual_train_speeds.get(cmd_train, speed)
+            
             # Check if another controller has moved this train outside our visible range
             # This handles the case where Controller 2 takes over and moves the train
             if cmd_train in self.active_trains:
@@ -543,7 +550,8 @@ class sw_wayside_controller:
                     auth = new_sug_auth
                     self.cmd_trains[cmd_train]["cmd auth"] = auth
             
-            auth = auth - speed
+            # Reduce authority based on actual train speed (distance traveled per second)
+            auth = auth - actual_speed
             
             # Check if authority exhausted BEFORE checking handoff
             if auth <= 0: 
@@ -836,6 +844,34 @@ class sw_wayside_controller:
         else:
             return self.active_plc
 
+    def load_train_speeds(self):
+        """Load actual train speeds from Train_Model/train_data.json"""
+        train_speeds = {}
+        try:
+            # Path to train_data.json
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            train_data_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), 'Train_Model', 'train_data.json')
+            
+            if os.path.exists(train_data_path):
+                with open(train_data_path, 'r') as f:
+                    train_data = json.load(f)
+                    
+                # Read speeds for each train
+                for i in range(1, 6):
+                    train_key = f"train_{i}"
+                    train_name = f"Train {i}"
+                    
+                    if train_key in train_data:
+                        outputs = train_data[train_key].get("outputs", {})
+                        # Convert mph to m/s (multiply by 0.44704)
+                        velocity_mph = outputs.get("velocity_mph", 0.0)
+                        velocity_ms = velocity_mph * 0.44704
+                        train_speeds[train_name] = velocity_ms
+        except Exception as e:
+            pass  # Silently fail, will use commanded speed as fallback
+        
+        return train_speeds
+    
     def load_inputs_ctc(self):
         max_retries = 3
         for retry in range(max_retries):
@@ -924,12 +960,15 @@ class sw_wayside_controller:
         except:
             # If file doesn't exist or is corrupted, create fresh structure
             data = {
-                "Train 1": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}},
-                "Train 2": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}},
-                "Train 3": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}},
-                "Train 4": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}},
-                "Train 5": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}}
+                "Train 1": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 2": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 3": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 4": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 5": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
             }
+        
+        # Load actual train speeds to write to output file
+        actual_train_speeds = self.load_train_speeds()
 
         # Update commanded speed and authority only for trains in our managed blocks
         train_ids = ["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"]
@@ -939,6 +978,7 @@ class sw_wayside_controller:
             if train_id in trains_to_remove:
                 data[train_id]["Commanded Speed"] = 0
                 data[train_id]["Commanded Authority"] = 0
+                data[train_id]["Train Speed"] = 0
             elif train_id in self.cmd_trains:
                 # Only update if train is in our managed section
                 train_pos = self.cmd_trains[train_id]["pos"]
@@ -948,6 +988,8 @@ class sw_wayside_controller:
                 if train_pos in self.managed_blocks or (train_pos == 0 and self.active_plc == "Green_Line_PLC_XandLup.py"):
                     data[train_id]["Commanded Speed"] = self.cmd_trains[train_id]["cmd speed"]
                     data[train_id]["Commanded Authority"] = self.cmd_trains[train_id]["cmd auth"]
+                    # Write actual train speed from train_data.json
+                    data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0)
                 # else: don't update - other controller is managing this train
 
         with open('wayside_to_train.json', 'w') as f:
