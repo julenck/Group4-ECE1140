@@ -986,10 +986,15 @@ class sw_wayside_controller:
                 if train_pos == 0 and self.active_plc != "Green_Line_PLC_XandLup.py":
                     continue  # Skip - Controller 1 handles yard
                 if train_pos in self.managed_blocks or (train_pos == 0 and self.active_plc == "Green_Line_PLC_XandLup.py"):
-                    data[train_id]["Commanded Speed"] = self.cmd_trains[train_id]["cmd speed"]
-                    data[train_id]["Commanded Authority"] = self.cmd_trains[train_id]["cmd auth"]
-                    # Write actual train speed from train_data.json
-                    data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0)
+                    # Convert m/s to mph (multiply by 2.23694)
+                    cmd_speed_mph = self.cmd_trains[train_id]["cmd speed"] * 2.23694
+                    # Convert meters to yards (multiply by 1.09361)
+                    cmd_auth_yds = self.cmd_trains[train_id]["cmd auth"] * 1.09361
+                    
+                    data[train_id]["Commanded Speed"] = cmd_speed_mph
+                    data[train_id]["Commanded Authority"] = cmd_auth_yds
+                    # Write actual train speed from train_data.json (also convert to mph)
+                    data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0) * 2.23694
                 # else: don't update - other controller is managing this train
 
         with open('wayside_to_train.json', 'w') as f:
