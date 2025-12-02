@@ -5,8 +5,8 @@ import os
 import time
 #from .Green_Line_PLC_XandLup import process_states_green_xlup
 #from .Green_Line_PLC_XandLdown import process_states_green_xldown
-from Green_Line_PLC_XandLup import process_states_green_xlup
-from Green_Line_PLC_XandLdown import process_states_green_xldown
+from track_controller.New_SW_Code.Green_Line_PLC_XandLup import process_states_green_xlup
+from track_controller.New_SW_Code.Green_Line_PLC_XandLdown import process_states_green_xldown
 import threading
 import csv
 

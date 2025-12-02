@@ -245,22 +245,29 @@ class CTCUI:
         line = self.manual_line_box.get()
         dest = self.manual_dest_box.get()
         arrival = self.manual_time_box.get()
-        with open('ctc_ui_inputs.json', "r") as f1:
+        with open('ctc\\ctc_ui_inputs.json', "r") as f1:
             data1 = self.json.load(f1)
         data1["Train"] = train
         data1["Line"] = line
         data1["Station"] = dest
         data1["Arrival Time"] = arrival
-        with open('ctc_ui_inputs.json', "w") as f1:
+        with open('ctc\\ctc_ui_inputs.json', "w") as f1:
             self.json.dump(data1, f1, indent=4)
         self.update_active_trains_table()
-        python_exe = self.sys.executable
-        script_path = self.os.path.join(self.os.path.dirname(__file__), "ctc_main.py")
-        # Track subprocess so it can be terminated on close
-        if not hasattr(self, 'subprocesses'):
-            self.subprocesses = []
-        proc = self.subprocess.Popen([python_exe, script_path])
-        self.subprocesses.append(proc)
+        # Instead of launching a subprocess, call the in-process dispatch function
+        try:
+            import ctc.ctc_main_temp as ctc_main_temp
+        except Exception as e:
+            print(f"Failed to import ctc_main_temp.dispatch_train: {e}")
+        else:
+            # Run dispatch in a background thread so the UI stays responsive
+            if not hasattr(self, 'dispatch_threads'):
+                self.dispatch_threads = []
+            t = self.threading.Thread(target=ctc_main_temp.dispatch_train,
+                                      args=(train, line, dest, arrival),
+                                      daemon=True)
+            t.start()
+            self.dispatch_threads.append(t)
         # ...existing code for train dispatch dialog...
 
     def move_switch(self):

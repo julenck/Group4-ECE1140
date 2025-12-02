@@ -1,9 +1,9 @@
 
 import json, time, os
 from datetime import datetime
-from ctc_main_helper_functions import JSONFileWatcher
+from .ctc_main_helper_functions import JSONFileWatcher
 from watchdog.observers import Observer
-from track.map import route_lookup_via_station, route_lookup_via_id
+from .track.map import route_lookup_via_station, route_lookup_via_id
 
 def track_update_handler(new_data, train, data_file_ctc_data):
     try:
@@ -23,6 +23,92 @@ def dispatch_train(train, line, station, arrival_time_str,
                    data_file_ctc_data='ctc_data.json',
                    data_file_track_cont='../ctc_track_controller.json',
                    dwell_time_s=10):
+    # Resolve file paths relative to the ctc package base directory when not absolute
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    if not os.path.isabs(data_file_ctc_data):
+        # ensure ctc_data lives in the project base dir
+        data_file_ctc_data = os.path.join(BASE_DIR, os.path.basename(data_file_ctc_data))
+    if not os.path.isabs(data_file_track_cont):
+        # avoid honoring leading '..' in the default path; place track controller file in project base dir
+        data_file_track_cont = os.path.join(BASE_DIR, os.path.basename(data_file_track_cont))
+
+    # normalize to absolute paths and report locations for debugging
+    data_file_ctc_data = os.path.abspath(data_file_ctc_data)
+    data_file_track_cont = os.path.abspath(data_file_track_cont)
+    print(f"CTC data file -> {data_file_ctc_data}")
+    print(f"Track controller file -> {data_file_track_cont}")
+
+    # Ensure the track controller file exists (create minimal structure if missing)
+    if not os.path.exists(data_file_track_cont):
+        try:
+            with open(data_file_track_cont, 'w') as f:
+                json.dump({"Trains": {}}, f, indent=4)
+        except Exception:
+            # If we cannot create the file, let the watcher raise a clear error
+            pass
+
+    # Ensure the ctc data file exists with minimal structure so UI updates succeed
+    if not os.path.exists(data_file_ctc_data):
+        try:
+            with open(data_file_ctc_data, 'w') as f:
+                json.dump({"Dispatcher": {"Trains": {}}}, f, indent=4)
+        except Exception:
+            pass
+
+    # Ensure both files contain default train entries expected by the UI/dispatcher
+    def _ensure_train_entries():
+        trains = [f"Train {i}" for i in range(1, 6)]
+        # ctc_data: ensure Dispatcher->Trains has entries
+        try:
+            with open(data_file_ctc_data, 'r') as f:
+                ctc_data = json.load(f)
+        except Exception:
+            ctc_data = {"Dispatcher": {"Trains": {}}}
+
+        dispatcher_trains = ctc_data.setdefault("Dispatcher", {}).setdefault("Trains", {})
+        for t in trains:
+            dispatcher_trains.setdefault(t, {
+                "Line": "",
+                "Suggested Speed": "",
+                "Authority": "",
+                "Station Destination": "",
+                "Arrival Time": "",
+                "Position": "",
+                "State": "",
+                "Current Station": ""
+            })
+
+        try:
+            with open(data_file_ctc_data, 'w') as f:
+                json.dump(ctc_data, f, indent=4)
+        except Exception:
+            pass
+
+        # track controller file: ensure Trains has entries
+        try:
+            with open(data_file_track_cont, 'r') as f:
+                track_updates = json.load(f)
+        except Exception:
+            track_updates = {"Trains": {}}
+
+        trains_dict = track_updates.setdefault("Trains", {})
+        for t in trains:
+            trains_dict.setdefault(t, {
+                "Active": 0,
+                "Suggested Authority": 0,
+                "Suggested Speed": 0,
+                "Train Position": None,
+                "Train State": ""
+            })
+
+        try:
+            with open(data_file_track_cont, 'w') as f:
+                json.dump(track_updates, f, indent=4)
+        except Exception:
+            pass
+
+    _ensure_train_entries()
+
     dest_id = route_lookup_via_station[station]["id"]
     print(f"dest id ={dest_id}")
     total_dist = 0
