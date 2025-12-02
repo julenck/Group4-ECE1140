@@ -33,7 +33,7 @@ class sw_wayside_controller:
         self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
         self.active_plc: str = plc
-        self.ctc_comm_file: str = "ctc_to_wayside.json"
+        self.ctc_comm_file: str = "ctc_track_controller.json"
         self.track_comm_file: str = "track_controller\\New_SW_Code\\track_to_wayside.json"
         self.train_comm_file: str = "track_controller\\New_SW_Code\\wayside_to_train.json"
         self.block_status: list = []
