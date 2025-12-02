@@ -3,8 +3,8 @@ import os, json, time, random
 # === FIXED ABSOLUTE PATHS (MATCHING TRACK MODEL FIX) ===
 
 # Folder containing Train_Model/
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Track_and_Train/Train_Model
-PARENT_DIR = os.path.dirname(BASE_DIR)  # Track_and_Train
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Train_Model
+PARENT_DIR = os.path.dirname(BASE_DIR)  # Group4-ECE1140
 
 # Ensure train_controller folder exists
 TRAIN_CONTROLLER_DIR = os.path.join(PARENT_DIR, "train_controller", "data")
@@ -16,6 +16,9 @@ TRAIN_STATES_FILE = os.path.join(TRAIN_CONTROLLER_DIR, "train_states.json")
 # Train Model JSONs (stay inside Train_Model)
 TRAIN_DATA_FILE = os.path.join(BASE_DIR, "train_data.json")
 TRACK_INPUT_FILE = os.path.join(PARENT_DIR, "track_model_Train_Model.json")
+
+# Wayside to Train JSON (from track_controller)
+WAYSIDE_TO_TRAIN_FILE = os.path.join(PARENT_DIR, "track_controller", "New_SW_Code", "wayside_to_train.json")
 
 
 # === Safe IO ===
@@ -312,3 +315,63 @@ def compute_passengers_disembarking(
         count = random.randint(0, max_out) if max_out > 0 else 0
         return count, {"station": station, "count": count}
     return int(prev_count), {"station": prev_station, "count": prev_count}
+
+
+def sync_wayside_to_train_data():
+    """
+    Reads wayside_to_train.json and updates corresponding train inputs in train_data.json.
+    Maps: "Train 1" -> "train_1", "Train 2" -> "train_2", etc.
+    Updates: commanded speed, commanded authority, current station, next station
+    """
+    if not os.path.exists(WAYSIDE_TO_TRAIN_FILE):
+        return
+    
+    wayside_data = safe_read_json(WAYSIDE_TO_TRAIN_FILE)
+    if not isinstance(wayside_data, dict):
+        return
+    
+    train_data = safe_read_json(TRAIN_DATA_FILE)
+    if not isinstance(train_data, dict):
+        train_data = {}
+    
+    updated = False
+    
+    for wayside_key, wayside_info in wayside_data.items():
+        # Parse "Train 1" -> train number 1
+        if not wayside_key.startswith("Train "):
+            continue
+        try:
+            train_num = int(wayside_key.split(" ")[1])
+        except (IndexError, ValueError):
+            continue
+        
+        train_key = f"train_{train_num}"
+        
+        # Ensure train section exists
+        if train_key not in train_data:
+            train_data[train_key] = {"specs": DEFAULT_SPECS, "inputs": {}, "outputs": {}}
+        if "inputs" not in train_data[train_key]:
+            train_data[train_key]["inputs"] = {}
+        
+        inputs = train_data[train_key]["inputs"]
+        
+        # Map wayside fields to train_data inputs
+        if "Commanded Speed" in wayside_info:
+            inputs["commanded speed"] = float(wayside_info["Commanded Speed"])
+            updated = True
+        
+        if "Commanded Authority" in wayside_info:
+            inputs["commanded authority"] = float(wayside_info["Commanded Authority"])
+            updated = True
+        
+        if "Beacon" in wayside_info and isinstance(wayside_info["Beacon"], dict):
+            beacon = wayside_info["Beacon"]
+            if "Current Station" in beacon:
+                inputs["current station"] = str(beacon["Current Station"])
+                updated = True
+            if "Next Station" in beacon:
+                inputs["next station"] = str(beacon["Next Station"])
+                updated = True
+    
+    if updated:
+        safe_write_json(TRAIN_DATA_FILE, train_data)

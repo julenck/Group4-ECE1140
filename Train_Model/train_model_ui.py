@@ -35,6 +35,7 @@ from train_model_core import (
     update_track_motion,  # renamed: motion only
     DEFAULT_SPECS,
     compute_passengers_disembarking,
+    sync_wayside_to_train_data,
 )
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -411,6 +412,9 @@ class TrainModelUI(ttk.Frame):
         self._run_cycle(schedule=True)
 
     def _run_cycle(self, schedule: bool):
+        # Sync wayside controller data to train inputs first
+        sync_wayside_to_train_data()
+        
         td = ensure_train_data(self.train_data_path)
         ctrl = self.get_train_state()
         idx = max(((self.train_id or 1) - 1), 0)

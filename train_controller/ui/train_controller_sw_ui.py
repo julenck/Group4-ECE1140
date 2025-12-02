@@ -149,7 +149,7 @@ class vital_train_controls:
 		speed_error = self.driver_velocity - self.train_velocity
 		
 		# If speed error is zero or negative (train at or above target), return zero power
-		if speed_error <= 0.0:  # Exact match or train too fast
+		if speed_error <= 0.01:  # Exact match or train too fast
 			return (0.0, 0.0, time.time())  # Reset accumulated error and return 0 power
 		
 		# Get current time
