@@ -21,13 +21,10 @@ import json
 import os
 from datetime import datetime, timezone
 from PIL import Image, ImageTk
-#from .Green_Line_PLC_XandLup import process_states_green_xlup
-#from .Green_Line_PLC_XandLdown import process_states_green_xldown
-#from track_controller.New_SW_Code import sw_wayside_controller
-#from track_controller.New_SW_Code import sw_vital_check
-import sw_wayside_controller
-import sw_vital_check
-
+# from .Green_Line_PLC_XandLup import process_states_green_xlup
+# from .Green_Line_PLC_XandLdown import process_states_green_xldown
+from track_controller.New_SW_Code import sw_wayside_controller
+from track_controller.New_SW_Code import sw_vital_check
 
 class sw_wayside_controller_ui(tk.Tk):
     def __init__(self, controller):

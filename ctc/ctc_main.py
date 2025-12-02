@@ -4,10 +4,11 @@ from ctc_main_helper_functions import JSONFileWatcher
 from watchdog.observers import Observer
 from track.map import route_lookup_via_station, route_lookup_via_id
 
-# define file variables
-data_file_ctc_data = 'ctc_data.json'
-data_file_ui_inputs = 'ctc_ui_inputs.json'
-data_file_track_cont = '../ctc_track_controller.json' 
+# define file variables (use absolute paths relative to this module to avoid cwd issues)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+data_file_ctc_data = os.path.join(BASE_DIR, 'ctc_data.json')
+data_file_ui_inputs = os.path.join(os.path.dirname(__file__), 'ctc_ui_inputs.json')
+data_file_track_cont = os.path.join(BASE_DIR, 'ctc_track_controller.json')
 
 # define dwell time variable
 dwell_time_s = 10
