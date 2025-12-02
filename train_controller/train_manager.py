@@ -292,7 +292,7 @@ class TrainManager:
         # Map keys with spaces to controller state fields
         commanded_speed = float(block.get("commanded speed", 0.0) or 0.0)
         commanded_authority = float(block.get("commanded authority", 0.0) or 0.0)
-        speed_limit = float(beacon.get("speed limit", 0.0) or 0.0)
+        speed_limit = float(beacon.get("speed limit", 60.0) or 60.0)  # Default to 60 mph
         next_stop = beacon.get("next station", "") or ""
         station_side = beacon.get("side_door", "") or ""
 

@@ -254,6 +254,15 @@ class CTCUI:
         with open('ctc\\ctc_ui_inputs.json', "w") as f1:
             self.json.dump(data1, f1, indent=4)
         self.update_active_trains_table()
+        
+        # Open Train Manager window
+        try:
+            from train_controller.train_manager import TrainManagerUI
+            if not hasattr(self, 'train_manager_window') or not self.train_manager_window.winfo_exists():
+                self.train_manager_window = TrainManagerUI()
+        except Exception as e:
+            print(f"Failed to open Train Manager: {e}")
+        
         # Instead of launching a subprocess, call the in-process dispatch function
         try:
             import ctc.ctc_main_temp as ctc_main_temp
