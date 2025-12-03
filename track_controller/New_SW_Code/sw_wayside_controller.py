@@ -879,7 +879,21 @@ class sw_wayside_controller:
                 with self.file_lock:
                     with open(self.ctc_comm_file, 'r') as f:
                         data = json.load(f)
-                        self.active_trains = data.get("Trains", {})
+                        # Ensure trains section exists and contains expected keys
+                        trains = data.get("Trains", {})
+                        for tname, tinfo in list(trains.items()):
+                            if not isinstance(tinfo, dict):
+                                trains[tname] = {}
+                                tinfo = trains[tname]
+                            # Set defaults for keys the controller expects
+                            tinfo.setdefault("Train Position", 0)
+                            tinfo.setdefault("Train State", "")
+                            tinfo.setdefault("Active", 0)
+                            tinfo.setdefault("Suggested Authority", 0)
+                            tinfo.setdefault("Suggested Speed", 0)
+                        # Update in-memory structures
+                        data["Trains"] = trains
+                        self.active_trains = trains
                         self.closed_blocks = data.get("Block Closure", [])
                         self.ctc_sugg_switches = data.get("Switch Suggestion", [])
                 break  # Success

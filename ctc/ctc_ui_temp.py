@@ -19,7 +19,9 @@ class CTCUI:
         self.Observer = Observer
         self.FileSystemEventHandler = FileSystemEventHandler
 
-        self.data_file = 'ctc_data.json'
+        # Use absolute path to project root ctc_data.json so it's consistent across components
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        self.data_file = os.path.join(project_root, 'ctc_data.json')
         self.default_data = {
             "Dispatcher": {
                 "Trains":{
@@ -71,16 +73,29 @@ class CTCUI:
         self.update_active_trains_table()
 
     def setup_json_file(self):
-        if not self.os.path.exists(self.data_file) or self.os.stat(self.data_file).st_size == 0:
+        # Always reset `ctc_data.json` to default on UI start so active trains/table is fresh
+        try:
             with open(self.data_file, "w") as f:
                 self.json.dump(self.default_data, f, indent=4)
-        else:
-            try:
-                with open(self.data_file, "r") as f:
-                    self.json.load(f)
-            except self.json.JSONDecodeError:
-                with open(self.data_file, "w") as f:
-                    self.json.dump(self.default_data, f, indent=4)
+        except Exception as e:
+            print(f"Warning: failed to write default ctc_data.json: {e}")
+        # Also reset the project-root track controller file so Active flags start cleared
+        try:
+            track_file = self.os.path.join(self.os.path.dirname(self.data_file), 'ctc_track_controller.json')
+            default_track = {"Trains": {}}
+            for i in range(1, 6):
+                tname = f"Train {i}"
+                default_track["Trains"][tname] = {
+                    "Active": 0,
+                    "Suggested Speed": 0,
+                    "Suggested Authority": 0,
+                    "Train Position": 0,
+                    "Train State": 0
+                }
+            with open(track_file, 'w') as tf:
+                self.json.dump(default_track, tf, indent=4)
+        except Exception as e:
+            print(f"Warning: failed to write default ctc_track_controller.json: {e}")
 
     def load_data(self):
         if self.os.path.exists(self.data_file):
@@ -346,7 +361,24 @@ class CTCUI:
         for row in self.active_trains_table.get_children():
             self.active_trains_table.delete(row)
         trains = dispatcher_data.get("Trains", {})
+
+        # Load track controller file to check 'Active' flags (only show active trains)
+        track_file = self.os.path.join(self.os.path.dirname(self.data_file), 'ctc_track_controller.json')
+        track_updates = {}
+        if self.os.path.exists(track_file):
+            try:
+                with open(track_file, 'r') as tf:
+                    track_updates = self.json.load(tf)
+            except Exception:
+                track_updates = {}
+
+        track_trains = track_updates.get('Trains', {}) if isinstance(track_updates, dict) else {}
+
         for train_name, info in trains.items():
+            active_flag = track_trains.get(train_name, {}).get('Active', 0)
+            if not active_flag:
+                # skip trains that are not active
+                continue
             self.active_trains_table.insert("", "end", values=(
                 train_name,
                 info.get("Line", ""),
