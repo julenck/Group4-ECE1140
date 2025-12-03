@@ -7,7 +7,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 # Import after adding to path
-from api.train_controller_api import train_controller_api
+from train_controller.api.train_controller_api import train_controller_api
 from train_controller_hw_ui import train_controller
 
 class MockUI:

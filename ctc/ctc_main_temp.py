@@ -1,9 +1,14 @@
 
 import json, time, os
+import sys
 from datetime import datetime
 from .ctc_main_helper_functions import JSONFileWatcher
 from watchdog.observers import Observer
 from .track.map import route_lookup_via_station, route_lookup_via_id
+
+# Add parent directory to path for API client import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ctc.api.ctc_api_client import CTCAPIClient
 
 def track_update_handler(new_data, train, data_file_ctc_data):
     try:
@@ -22,90 +27,137 @@ def track_update_handler(new_data, train, data_file_ctc_data):
 def dispatch_train(train, line, station, arrival_time_str,
                    data_file_ctc_data='ctc_data.json',
                    data_file_track_cont='../ctc_track_controller.json',
-                   dwell_time_s=10):
-    # Resolve file paths relative to the ctc package base directory when not absolute
-    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    if not os.path.isabs(data_file_ctc_data):
-        # ensure ctc_data lives in the project base dir
-        data_file_ctc_data = os.path.join(BASE_DIR, os.path.basename(data_file_ctc_data))
-    if not os.path.isabs(data_file_track_cont):
-        # avoid honoring leading '..' in the default path; place track controller file in project base dir
-        data_file_track_cont = os.path.join(BASE_DIR, os.path.basename(data_file_track_cont))
+                   dwell_time_s=10,
+                   server_url=None):
+    # Initialize API client (remote mode) or use file paths (local mode)
+    api_client = CTCAPIClient(server_url=server_url)
+    is_remote = (server_url is not None)
+    
+    print(f"[CTC Dispatch] Mode: {'Remote' if is_remote else 'Local'}")
+    if is_remote:
+        print(f"[CTC Dispatch] Server: {server_url}")
+        # Check server connection
+        if not api_client.health_check():
+            print(f"ERROR: Cannot connect to server at {server_url}")
+            return
+    else:
+        # Resolve file paths relative to the ctc package base directory when not absolute
+        BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        if not os.path.isabs(data_file_ctc_data):
+            data_file_ctc_data = os.path.join(BASE_DIR, os.path.basename(data_file_ctc_data))
+        if not os.path.isabs(data_file_track_cont):
+            data_file_track_cont = os.path.join(BASE_DIR, os.path.basename(data_file_track_cont))
+        
+        data_file_ctc_data = os.path.abspath(data_file_ctc_data)
+        data_file_track_cont = os.path.abspath(data_file_track_cont)
+        print(f"CTC data file -> {data_file_ctc_data}")
+        print(f"Track controller file -> {data_file_track_cont}")
 
-    # normalize to absolute paths and report locations for debugging
-    data_file_ctc_data = os.path.abspath(data_file_ctc_data)
-    data_file_track_cont = os.path.abspath(data_file_track_cont)
-    print(f"CTC data file -> {data_file_ctc_data}")
-    print(f"Track controller file -> {data_file_track_cont}")
-
-    # Ensure the track controller file exists (create minimal structure if missing)
-    if not os.path.exists(data_file_track_cont):
-        try:
-            with open(data_file_track_cont, 'w') as f:
-                json.dump({"Trains": {}}, f, indent=4)
-        except Exception:
-            # If we cannot create the file, let the watcher raise a clear error
-            pass
-
-    # Ensure the ctc data file exists with minimal structure so UI updates succeed
-    if not os.path.exists(data_file_ctc_data):
-        try:
-            with open(data_file_ctc_data, 'w') as f:
-                json.dump({"Dispatcher": {"Trains": {}}}, f, indent=4)
-        except Exception:
-            pass
-
-    # Ensure both files contain default train entries expected by the UI/dispatcher
+    # Ensure data structures exist (API or files)
     def _ensure_train_entries():
         trains = [f"Train {i}" for i in range(1, 6)]
-        # ctc_data: ensure Dispatcher->Trains has entries
-        try:
-            with open(data_file_ctc_data, 'r') as f:
-                ctc_data = json.load(f)
-        except Exception:
-            ctc_data = {"Dispatcher": {"Trains": {}}}
+        
+        if is_remote:
+            # Ensure entries via API
+            ctc_data = api_client.get_state()
+            if not ctc_data:
+                ctc_data = {"Dispatcher": {"Trains": {}}}
+            
+            dispatcher_trains = ctc_data.setdefault("Dispatcher", {}).setdefault("Trains", {})
+            for t in trains:
+                dispatcher_trains.setdefault(t, {
+                    "Line": "",
+                    "Suggested Speed": "",
+                    "Authority": "",
+                    "Station Destination": "",
+                    "Arrival Time": "",
+                    "Position": "",
+                    "State": "",
+                    "Current Station": ""
+                })
+            api_client.update_state(ctc_data)
+            
+            # Ensure track controller entries
+            track_updates = api_client.get_track_controller_commands()
+            if not track_updates:
+                track_updates = {"Trains": {}}
+            
+            trains_dict = track_updates.setdefault("Trains", {})
+            for t in trains:
+                trains_dict.setdefault(t, {
+                    "Active": 0,
+                    "Suggested Authority": 0,
+                    "Suggested Speed": 0,
+                    "Train Position": None,
+                    "Train State": ""
+                })
+            
+            api_client.send_track_controller_command(train, 0, 0, active=0)  # Initialize
+            
+        else:
+            # Local file mode
+            if not os.path.exists(data_file_track_cont):
+                try:
+                    with open(data_file_track_cont, 'w') as f:
+                        json.dump({"Trains": {}}, f, indent=4)
+                except Exception:
+                    pass
 
-        dispatcher_trains = ctc_data.setdefault("Dispatcher", {}).setdefault("Trains", {})
-        for t in trains:
-            dispatcher_trains.setdefault(t, {
-                "Line": "",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": "",
-                "Position": "",
-                "State": "",
-                "Current Station": ""
-            })
+            if not os.path.exists(data_file_ctc_data):
+                try:
+                    with open(data_file_ctc_data, 'w') as f:
+                        json.dump({"Dispatcher": {"Trains": {}}}, f, indent=4)
+                except Exception:
+                    pass
+            
+            # ctc_data: ensure Dispatcher->Trains has entries
+            try:
+                with open(data_file_ctc_data, 'r') as f:
+                    ctc_data = json.load(f)
+            except Exception:
+                ctc_data = {"Dispatcher": {"Trains": {}}}
 
-        try:
-            with open(data_file_ctc_data, 'w') as f:
-                json.dump(ctc_data, f, indent=4)
-        except Exception:
-            pass
+            dispatcher_trains = ctc_data.setdefault("Dispatcher", {}).setdefault("Trains", {})
+            for t in trains:
+                dispatcher_trains.setdefault(t, {
+                    "Line": "",
+                    "Suggested Speed": "",
+                    "Authority": "",
+                    "Station Destination": "",
+                    "Arrival Time": "",
+                    "Position": "",
+                    "State": "",
+                    "Current Station": ""
+                })
 
-        # track controller file: ensure Trains has entries
-        try:
-            with open(data_file_track_cont, 'r') as f:
-                track_updates = json.load(f)
-        except Exception:
-            track_updates = {"Trains": {}}
+            try:
+                with open(data_file_ctc_data, 'w') as f:
+                    json.dump(ctc_data, f, indent=4)
+            except Exception:
+                pass
 
-        trains_dict = track_updates.setdefault("Trains", {})
-        for t in trains:
-            trains_dict.setdefault(t, {
-                "Active": 0,
-                "Suggested Authority": 0,
-                "Suggested Speed": 0,
-                "Train Position": None,
-                "Train State": ""
-            })
+            # track controller file: ensure Trains has entries
+            try:
+                with open(data_file_track_cont, 'r') as f:
+                    track_updates = json.load(f)
+            except Exception:
+                track_updates = {"Trains": {}}
 
-        try:
-            with open(data_file_track_cont, 'w') as f:
-                json.dump(track_updates, f, indent=4)
-        except Exception:
-            pass
+            trains_dict = track_updates.setdefault("Trains", {})
+            for t in trains:
+                trains_dict.setdefault(t, {
+                    "Active": 0,
+                    "Suggested Authority": 0,
+                    "Suggested Speed": 0,
+                    "Train Position": None,
+                    "Train State": ""
+                })
+
+            try:
+                with open(data_file_track_cont, 'w') as f:
+                    json.dump(track_updates, f, indent=4)
+            except Exception:
+                pass
 
     _ensure_train_entries()
 
@@ -140,19 +192,31 @@ def dispatch_train(train, line, station, arrival_time_str,
             train_pos = new_data["Trains"][train]["Train Position"]
             train_state = new_data["Trains"][train]["Train State"]
             print(f"train position {train_pos}")
-            with open(data_file_ctc_data, "r") as f_data:
-                data = json.load(f_data)
-            data["Dispatcher"]["Trains"][train]["Position"] = train_pos
-            data["Dispatcher"]["Trains"][train]["State"] = train_state
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
+            
+            # Update CTC data via API or file
+            if is_remote:
+                api_client.update_train(train, {
+                    "Position": train_pos,
+                    "State": train_state
+                })
+            else:
+                with open(data_file_ctc_data, "r") as f_data:
+                    data = json.load(f_data)
+                data["Dispatcher"]["Trains"][train]["Position"] = train_pos
+                data["Dispatcher"]["Trains"][train]["State"] = train_state
+                with open(data_file_ctc_data, "w") as f_data:
+                    json.dump(data, f_data, indent=4)
         except Exception as e:
             print(f"Train position data missing: {e}")
 
-    watcher = JSONFileWatcher(data_file_track_cont, _track_update_handler)
-    observer = Observer()
-    observer.schedule(watcher, os.path.dirname(data_file_track_cont), recursive=False)
-    observer.start()
+    # File watcher only for local mode; polling for remote mode
+    if not is_remote:
+        watcher = JSONFileWatcher(data_file_track_cont, _track_update_handler)
+        observer = Observer()
+        observer.schedule(watcher, os.path.dirname(data_file_track_cont), recursive=False)
+        observer.start()
+    else:
+        observer = None  # No file watcher needed in remote mode
 
     try:
         for i in range(dest_id + 1):
@@ -163,55 +227,94 @@ def dispatch_train(train, line, station, arrival_time_str,
             print(f"authority in meters = {authority_meters}")
             next_station_loc = route_lookup_via_id[i]["block"]
             print(f"next station loc = {next_station_loc}")
-            with open(data_file_ctc_data, "r") as f_data:
-                data = json.load(f_data)
-            data["Dispatcher"]["Trains"][train]["Line"] = line
-            data["Dispatcher"]["Trains"][train]["Authority"] = authority_yards
-            data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_mph
-            data["Dispatcher"]["Trains"][train]["Station Destination"] = station
-            data["Dispatcher"]["Trains"][train]["Arrival Time"] = arrival_time_str
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
-            with open(data_file_track_cont, "r") as f_updates:
-                updates = json.load(f_updates)
-            updates["Trains"][train]["Active"] = 1
-            updates["Trains"][train]["Suggested Authority"] = authority_meters
-            updates["Trains"][train]["Suggested Speed"] = speed_meters_s
-            with open(data_file_track_cont, "w") as f_updates:
-                json.dump(updates, f_updates, indent=4)
-            while(train_pos != next_station_loc):
-                time.sleep(0.5)
-                print("here")
-            current_station = test
-            with open(data_file_ctc_data, "r") as f_data:
-                data = json.load(f_data)
-            data["Dispatcher"]["Trains"][train]["Current Station"] = current_station
-            data["Dispatcher"]["Trains"][train]["Authority"] = authority_yards
-            data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_mph
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
-            print(f"Train arrived at {test}")
-            time.sleep(dwell_time_s)
-            time.sleep(0.5)
-            with open(data_file_ctc_data, "r") as f_data:
-                data = json.load(f_data)
-            data["Dispatcher"]["Trains"][train]["Current Station"] = "---"
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
-            if test != station:
+            # Update CTC data via API or file
+            if is_remote:
+                api_client.update_train(train, {
+                    "Line": line,
+                    "Authority": authority_yards,
+                    "Suggested Speed": speed_mph,
+                    "Station Destination": station,
+                    "Arrival Time": arrival_time_str
+                })
+                api_client.send_track_controller_command(train, speed_meters_s, authority_meters, active=1)
+            else:
+                with open(data_file_ctc_data, "r") as f_data:
+                    data = json.load(f_data)
+                data["Dispatcher"]["Trains"][train]["Line"] = line
+                data["Dispatcher"]["Trains"][train]["Authority"] = authority_yards
+                data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_mph
+                data["Dispatcher"]["Trains"][train]["Station Destination"] = station
+                data["Dispatcher"]["Trains"][train]["Arrival Time"] = arrival_time_str
+                with open(data_file_ctc_data, "w") as f_data:
+                    json.dump(data, f_data, indent=4)
                 with open(data_file_track_cont, "r") as f_updates:
                     updates = json.load(f_updates)
                 updates["Trains"][train]["Active"] = 1
+                updates["Trains"][train]["Suggested Authority"] = authority_meters
+                updates["Trains"][train]["Suggested Speed"] = speed_meters_s
                 with open(data_file_track_cont, "w") as f_updates:
                     json.dump(updates, f_updates, indent=4)
+            while(train_pos != next_station_loc):
+                time.sleep(0.5)
+                # In remote mode, poll for train position updates
+                if is_remote:
+                    track_data = api_client.get_track_controller_commands()
+                    try:
+                        train_pos = track_data["Trains"][train]["Train Position"]
+                        train_state = track_data["Trains"][train]["Train State"]
+                        # Update CTC with position
+                        api_client.update_train(train, {
+                            "Position": train_pos,
+                            "State": train_state
+                        })
+                    except:
+                        pass
+                # Waiting for train to reach station (removed debug print)
+            current_station = test
+            # Update current station via API or file
+            if is_remote:
+                api_client.update_train(train, {
+                    "Current Station": current_station,
+                    "Authority": authority_yards,
+                    "Suggested Speed": speed_mph
+                })
+            else:
+                with open(data_file_ctc_data, "r") as f_data:
+                    data = json.load(f_data)
+                data["Dispatcher"]["Trains"][train]["Current Station"] = current_station
+                data["Dispatcher"]["Trains"][train]["Authority"] = authority_yards
+                data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_mph
+                with open(data_file_ctc_data, "w") as f_data:
+                    json.dump(data, f_data, indent=4)
+            print(f"Train arrived at {test}")
+            time.sleep(dwell_time_s)
+            time.sleep(0.5)
+            # Clear current station via API or file
+            if is_remote:
+                api_client.update_train(train, {"Current Station": "---"})
+                if test != station:
+                    api_client.send_track_controller_command(train, speed_meters_s, authority_meters, active=1)
+            else:
+                with open(data_file_ctc_data, "r") as f_data:
+                    data = json.load(f_data)
+                data["Dispatcher"]["Trains"][train]["Current Station"] = "---"
+                with open(data_file_ctc_data, "w") as f_data:
+                    json.dump(data, f_data, indent=4)
+                if test != station:
+                    with open(data_file_track_cont, "r") as f_updates:
+                        updates = json.load(f_updates)
+                    updates["Trains"][train]["Active"] = 1
+                    with open(data_file_track_cont, "w") as f_updates:
+                        json.dump(updates, f_updates, indent=4)
             if test == station:
                 print("train at destination")
                 break
     except KeyboardInterrupt:
         print("stopping observer")
     finally:
-        observer.stop()
-        observer.join()
+        if observer:
+            observer.stop()
+            observer.join()
 
 if __name__ == "__main__":
     # Example usage: read from ctc_ui_inputs.json and dispatch

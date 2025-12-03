@@ -349,6 +349,11 @@ class TrainModelUI(ttk.Frame):
         safe_write_json(TRAIN_STATES_FILE, all_states)
 
     def write_train_data(self, specs, outputs, td_inputs):
+        from train_model_core import create_backup
+        
+        # Create backup before modifying
+        create_backup(self.train_data_path)
+        
         data = safe_read_json(self.train_data_path)
         if not isinstance(data, dict):
             data = {}
@@ -559,6 +564,10 @@ class TrainModelUI(ttk.Frame):
                 pass
 
     def _update_ui(self, outputs, ctrl, merged_inputs, disembarking):
+        # Guard: UI may not be initialized yet (race condition with file watcher thread)
+        if not hasattr(self, 'info_labels') or not hasattr(self, 'fail_labels'):
+            return
+        
         try:
             self.info_labels["Velocity (mph)"].config(text=f"{outputs['velocity_mph']:.2f}")
             self.info_labels["Acceleration (ft/s²)"].config(
@@ -586,6 +595,10 @@ class TrainModelUI(ttk.Frame):
             # Widget has been destroyed, stop updating
             return
 
+        # Guard: env_labels may not be initialized yet
+        if not hasattr(self, 'env_labels') or not self.env_labels:
+            return
+        
         try:
             def door_style(open_):
                 return "Status.On.TLabel" if open_ else "Status.Off.TLabel"
@@ -611,6 +624,9 @@ class TrainModelUI(ttk.Frame):
 
         try:
             def set_flag(lbl_key, on):
+                # Guard: label may not be initialized yet
+                if lbl_key not in self.fail_labels:
+                    return
                 self.fail_labels[lbl_key].config(
                     text="On" if on else "Off",
                     style="Status.On.TLabel" if on else "Status.Off.TLabel",
@@ -631,6 +647,10 @@ class TrainModelUI(ttk.Frame):
         except tk.TclError:
             return
 
+        # Guard: announcement_box may not be initialized yet
+        if not hasattr(self, 'announcement_box'):
+            return
+        
         try:
             self.announcement_box.config(state="normal")
             self.announcement_box.delete("1.0", "end")

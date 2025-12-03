@@ -23,12 +23,27 @@ WAYSIDE_TO_TRAIN_FILE = os.path.join(PARENT_DIR, "track_controller", "New_SW_Cod
 
 # === Safe IO ===
 def safe_read_json(path):
-    try:
-        with open(path, "r") as f:
-            data = json.load(f)
-            return data if isinstance(data, (dict, list)) else {}
-    except Exception:
-        return {}
+    """Read JSON with retry logic for file lock conflicts."""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+                return data if isinstance(data, (dict, list)) else {}
+        except (PermissionError, OSError) as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            else:
+                print(f"[READ ERROR] Failed to read {path} after {max_retries} attempts: {e}")
+                return {}
+        except json.JSONDecodeError as e:
+            print(f"[READ ERROR] JSON decode error in {path}: {e}")
+            return {}
+        except Exception as e:
+            print(f"[READ ERROR] Unexpected error reading {path}: {e}")
+            return {}
+    return {}
 
 
 def safe_write_json(path, data):
@@ -36,24 +51,53 @@ def safe_write_json(path, data):
     out_dir = os.path.dirname(os.path.abspath(path))
     if out_dir and not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
-    tmp = path + ".tmp"
-    for attempt in range(3):
+    
+    # Use unique temp file with process ID to avoid conflicts
+    import tempfile
+    tmp_dir = os.path.dirname(os.path.abspath(path))
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.tmp', dir=tmp_dir, text=True)
+    
+    max_retries = 5  # Increased retries
+    for attempt in range(max_retries):
         try:
-            with open(tmp, "w") as f:
+            # Write to temp file using the file descriptor
+            with os.fdopen(tmp_fd, 'w') as f:
                 f.write(payload)
-            os.replace(tmp, path)
-            return
-        except PermissionError:
+                f.flush()
+                os.fsync(f.fileno())
+            
+            # Atomic replace - this should work even on Windows
+            os.replace(tmp_path, path)
+            return  # Success!
+            
+        except PermissionError as e:
+            # File is locked by another process, wait and retry
+            if attempt < max_retries - 1:
+                wait_time = 0.05 * (2 ** attempt)  # Exponential backoff
+                time.sleep(wait_time)
+                # Reopen temp file for next attempt
+                try:
+                    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.tmp', dir=tmp_dir, text=True)
+                except Exception:
+                    break
+            else:
+                print(f"[WRITE ERROR] Failed to write {path} after {max_retries} attempts: {e}")
+                try:
+                    os.close(tmp_fd)
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except Exception:
+                    pass
+                break
+        except Exception as e:
+            print(f"[WRITE ERROR] Unexpected error writing {path}: {e}")
             try:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
+                os.close(tmp_fd)
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
             except Exception:
                 pass
-            time.sleep(0.1 * (attempt + 1))
-        except Exception:
             break
-    with open(path, "w") as f:
-        f.write(payload)
 
 
 # === Train Data shape ===
@@ -72,21 +116,41 @@ DEFAULT_SPECS = {
 
 
 def ensure_train_data(path):
+    """Ensure train_data.json exists and has valid structure. Restores from backup if corrupted."""
     data = {}
     if os.path.exists(path):
         try:
             with open(path, "r") as f:
                 data = json.load(f)
                 if not isinstance(data, dict):
-                    data = {}
-        except Exception:
-            data = {}
+                    print(f"[ENSURE] Invalid data type in {path}, attempting restore from backup")
+                    if restore_from_backup(path):
+                        data = safe_read_json(path)
+                    else:
+                        data = {}
+        except json.JSONDecodeError:
+            print(f"[ENSURE] Corrupted JSON in {path}, attempting restore from backup")
+            if restore_from_backup(path):
+                data = safe_read_json(path)
+            else:
+                data = {}
+        except Exception as e:
+            print(f"[ENSURE] Error reading {path}: {e}, attempting restore from backup")
+            if restore_from_backup(path):
+                data = safe_read_json(path)
+            else:
+                data = {}
+    
+    # Ensure required structure exists
     specs = data.get("specs", {})
     for k, v in DEFAULT_SPECS.items():
         specs.setdefault(k, v)
     data["specs"] = specs
     data.setdefault("inputs", {})
     data.setdefault("outputs", {})
+    
+    # Create backup before writing
+    create_backup(path)
     safe_write_json(path, data)
     return data
 
@@ -317,6 +381,36 @@ def compute_passengers_disembarking(
     return int(prev_count), {"station": prev_station, "count": prev_count}
 
 
+def create_backup(path):
+    """Create a backup of the JSON file before modifying it."""
+    if os.path.exists(path):
+        backup_path = path + ".backup"
+        try:
+            import shutil
+            shutil.copy2(path, backup_path)
+        except Exception as e:
+            print(f"[BACKUP WARNING] Could not create backup of {path}: {e}")
+
+
+def restore_from_backup(path):
+    """Restore JSON file from backup if main file is corrupted."""
+    backup_path = path + ".backup"
+    if os.path.exists(backup_path):
+        try:
+            # Verify backup is valid JSON
+            with open(backup_path, 'r') as f:
+                json.load(f)
+            # Backup is valid, restore it
+            import shutil
+            shutil.copy2(backup_path, path)
+            print(f"[RESTORE] Restored {path} from backup")
+            return True
+        except Exception as e:
+            print(f"[RESTORE ERROR] Could not restore from backup: {e}")
+            return False
+    return False
+
+
 def sync_wayside_to_train_data():
     """
     Reads wayside_to_train.json and updates corresponding train inputs in train_data.json.
@@ -329,6 +423,9 @@ def sync_wayside_to_train_data():
     wayside_data = safe_read_json(WAYSIDE_TO_TRAIN_FILE)
     if not isinstance(wayside_data, dict):
         return
+    
+    # Create backup before modifying
+    create_backup(TRAIN_DATA_FILE)
     
     train_data = safe_read_json(TRAIN_DATA_FILE)
     if not isinstance(train_data, dict):

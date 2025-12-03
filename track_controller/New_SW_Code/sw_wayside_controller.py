@@ -9,13 +9,17 @@ from track_controller.New_SW_Code.Green_Line_PLC_XandLup import process_states_g
 from track_controller.New_SW_Code.Green_Line_PLC_XandLdown import process_states_green_xldown
 import threading
 import csv
+import sys
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from track_controller.api.wayside_api_client import WaysideAPIClient
 
 class sw_wayside_controller:
-    def __init__(self, vital,plc=""):
+    def __init__(self, vital,plc="", server_url=None, wayside_id=1):
     # Association
         self.vital = vital
-
+        self.api_client = WaysideAPIClient(server_url=server_url, wayside_id=wayside_id)
+        self.is_remote = (server_url is not None)
     # Attributes
         self.light_result: bool = False
         self.switch_result: bool = False
@@ -873,15 +877,21 @@ class sw_wayside_controller:
         return train_speeds
     
     def load_inputs_ctc(self):
+        """Load CTC commands via API client or local files."""
         max_retries = 3
         for retry in range(max_retries):
             try:
-                with self.file_lock:
-                    with open(self.ctc_comm_file, 'r') as f:
-                        data = json.load(f)
-                        self.active_trains = data.get("Trains", {})
-                        self.closed_blocks = data.get("Block Closure", [])
-                        self.ctc_sugg_switches = data.get("Switch Suggestion", [])
+                # Use API client if in remote mode, otherwise fall back to file
+                if self.is_remote:
+                    data = self.api_client.get_ctc_commands()
+                else:
+                    with self.file_lock:
+                        with open(self.ctc_comm_file, 'r') as f:
+                            data = json.load(f)
+                
+                self.active_trains = data.get("Trains", {})
+                self.closed_blocks = data.get("Block Closure", [])
+                self.ctc_sugg_switches = data.get("Switch Suggestion", [])
                 break  # Success
             except (json.JSONDecodeError, IOError) as e:
                 if retry < max_retries - 1:
@@ -892,18 +902,33 @@ class sw_wayside_controller:
             
 
     def load_inputs_track(self):
-        #read track to wayside json file
-        with self.file_lock:
-            with open(self.track_comm_file, 'r') as f:
-                data = json.load(f)
-                #self.occupied_blocks = data.get("G-Occupancy", [0]*152)
-                self.input_faults = data.get("G-Failures", [0]*152*3)
+        """Load track model data via API client or local files."""
+        try:
+            # Use API client if in remote mode, otherwise fall back to file
+            if self.is_remote:
+                data = self.api_client.get_track_data()
+            else:
+                with self.file_lock:
+                    with open(self.track_comm_file, 'r') as f:
+                        data = json.load(f)
+            
+            #self.occupied_blocks = data.get("G-Occupancy", [0]*152)
+            self.input_faults = data.get("G-Failures", [0]*152*3)
+        except Exception as e:
+            print(f"Warning: Failed to load track inputs: {e}")
+            self.input_faults = [0]*152*3
         
      
     def load_track_outputs(self):
-        with self.file_lock:
-            with open(self.track_comm_file, 'r') as f:
-                data = json.load(f)
+        """Write track outputs via API client or local files."""
+        try:
+            # Read current data first
+            if self.is_remote:
+                data = self.api_client.get_track_data()
+            else:
+                with self.file_lock:
+                    with open(self.track_comm_file, 'r') as f:
+                        data = json.load(f)
 
             # Update only the switches, lights, and gates managed by this controller
             if self.active_plc == "Green_Line_PLC_XandLup.py":
@@ -938,13 +963,17 @@ class sw_wayside_controller:
             
             data["G-Commanded Authority"] = cmd_auth
             data["G-Commanded Speed"] = cmd_speed
-                
 
-            
-
-            # Now rewrite cleanly (overwrite file)
-            with open(self.track_comm_file, 'w') as f:
-                json.dump(data, f, indent=4)
+            # Write data back via API or file
+            if self.is_remote:
+                # Update track model via API
+                pass  # Track model reads from wayside_to_train, not this file
+            else:
+                with self.file_lock:
+                    with open(self.track_comm_file, 'w') as f:
+                        json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"Warning: Failed to write track outputs: {e}")
 
             
 
@@ -952,53 +981,81 @@ class sw_wayside_controller:
         pass
 
     def load_train_outputs(self, trains_to_remove=[]):
-        """Write commanded speed and authority directly to train communication file"""
-        # Don't use file_lock here since both controllers need to write independently
+        """Write commanded speed and authority via API client or local files"""
         try:
-            with open('wayside_to_train.json', 'r') as f:
-                data = json.load(f)
-        except:
-            # If file doesn't exist or is corrupted, create fresh structure
-            data = {
-                "Train 1": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
-                "Train 2": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
-                "Train 3": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
-                "Train 4": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
-                "Train 5": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
-            }
-        
-        # Load actual train speeds to write to output file
-        actual_train_speeds = self.load_train_speeds()
+            # Read current data via API or file
+            if self.is_remote:
+                # Get current train commands from API
+                data = self.api_client.api_client.get_wayside_train_commands() if hasattr(self.api_client, 'api_client') else {}
+                if not data:  # If empty, get from API properly
+                    import requests
+                    try:
+                        response = requests.get(f"{self.api_client.server_url}/api/wayside/train_commands", timeout=5)
+                        if response.status_code == 200:
+                            data = response.json()
+                        else:
+                            data = {}
+                    except:
+                        data = {}
+            else:
+                try:
+                    with open('wayside_to_train.json', 'r') as f:
+                        data = json.load(f)
+                except:
+                    data = {}
+            
+            # If no data structure exists, create it
+            if not data:
+                data = {
+                    "Train 1": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                    "Train 2": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                    "Train 3": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                    "Train 4": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                    "Train 5": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
+                }
+            
+            # Load actual train speeds to write to output file
+            actual_train_speeds = self.load_train_speeds()
 
-        # Update commanded speed and authority only for trains in our managed blocks
-        train_ids = ["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"]
-        
-        for train_id in train_ids:
-            # If train is being removed by THIS controller, write 0
-            if train_id in trains_to_remove:
-                data[train_id]["Commanded Speed"] = 0
-                data[train_id]["Commanded Authority"] = 0
-                data[train_id]["Train Speed"] = 0
-            elif train_id in self.cmd_trains:
-                # Only update if train is in our managed section
-                train_pos = self.cmd_trains[train_id]["pos"]
-                # Controller 2 should NEVER write outputs for trains at block 0 (yard)
-                if train_pos == 0 and self.active_plc != "Green_Line_PLC_XandLup.py":
-                    continue  # Skip - Controller 1 handles yard
-                if train_pos in self.managed_blocks or (train_pos == 0 and self.active_plc == "Green_Line_PLC_XandLup.py"):
-                    # Convert m/s to mph (multiply by 2.23694)
-                    cmd_speed_mph = self.cmd_trains[train_id]["cmd speed"] * 2.23694
-                    # Convert meters to yards (multiply by 1.09361)
-                    cmd_auth_yds = self.cmd_trains[train_id]["cmd auth"] * 1.09361
-                    
-                    data[train_id]["Commanded Speed"] = cmd_speed_mph
-                    data[train_id]["Commanded Authority"] = cmd_auth_yds
-                    # Write actual train speed from train_data.json (also convert to mph)
-                    data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0) * 2.23694
-                # else: don't update - other controller is managing this train
+            # Update commanded speed and authority only for trains in our managed blocks
+            train_ids = ["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"]
+            
+            for train_id in train_ids:
+                # Ensure train entry exists
+                if train_id not in data:
+                    data[train_id] = {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
+                
+                # If train is being removed by THIS controller, write 0
+                if train_id in trains_to_remove:
+                    data[train_id]["Commanded Speed"] = 0
+                    data[train_id]["Commanded Authority"] = 0
+                    data[train_id]["Train Speed"] = 0
+                elif train_id in self.cmd_trains:
+                    # Only update if train is in our managed section
+                    train_pos = self.cmd_trains[train_id]["pos"]
+                    # Controller 2 should NEVER write outputs for trains at block 0 (yard)
+                    if train_pos == 0 and self.active_plc != "Green_Line_PLC_XandLup.py":
+                        continue  # Skip - Controller 1 handles yard
+                    if train_pos in self.managed_blocks or (train_pos == 0 and self.active_plc == "Green_Line_PLC_XandLup.py"):
+                        # Convert m/s to mph (multiply by 2.23694)
+                        cmd_speed_mph = self.cmd_trains[train_id]["cmd speed"] * 2.23694
+                        # Convert meters to yards (multiply by 1.09361)
+                        cmd_auth_yds = self.cmd_trains[train_id]["cmd auth"] * 1.09361
+                        
+                        data[train_id]["Commanded Speed"] = cmd_speed_mph
+                        data[train_id]["Commanded Authority"] = cmd_auth_yds
+                        # Write actual train speed from train_data.json (also convert to mph)
+                        data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0) * 2.23694
+                    # else: don't update - other controller is managing this train
 
-        with open('wayside_to_train.json', 'w') as f:
-            json.dump(data, f, indent=4)
+            # Write data back via API or file
+            if self.is_remote:
+                self.api_client.send_train_commands(data)
+            else:
+                with open('wayside_to_train.json', 'w') as f:
+                    json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"Warning: Failed to write train outputs: {e}")
 
 
         

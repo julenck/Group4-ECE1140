@@ -1,0 +1,207 @@
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                          UNIFIED RAILWAY SYSTEM ARCHITECTURE                      ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                              MAIN COMPUTER                                      │
+│                                                                                 │
+│  ┌────────────────────────────────────────────────────────────────────────┐   │
+│  │                  UNIFIED REST API SERVER                                │   │
+│  │                  (unified_api_server.py)                                │   │
+│  │                  Port: 5000 (default)                                   │   │
+│  │                                                                          │   │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌────────────────┐         │   │
+│  │  │ Train Controller│  │Track Controller │  │  CTC System    │         │   │
+│  │  │   Endpoints     │  │   Endpoints     │  │  Endpoints     │         │   │
+│  │  │                 │  │                 │  │                │         │   │
+│  │  │ /api/trains     │  │ /api/wayside    │  │ /api/ctc       │         │   │
+│  │  │ /api/train/<id> │  │ /api/wayside/<> │  │ /api/ctc/trains│         │   │
+│  │  └─────────────────┘  └─────────────────┘  └────────────────┘         │   │
+│  │                                                                          │   │
+│  │  ┌──────────────────────────────────────────────────────────────┐      │   │
+│  │  │         CENTRALIZED JSON FILE STORAGE (Thread-Safe)          │      │   │
+│  │  │  • train_states.json                                         │      │   │
+│  │  │  • ctc_data.json                                             │      │   │
+│  │  │  • ctc_track_controller.json                                 │      │   │
+│  │  │  • wayside_to_train.json                                     │      │   │
+│  │  │  • track_model_Train_Model.json                              │      │   │
+│  │  └──────────────────────────────────────────────────────────────┘      │   │
+│  └────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+│  ┌───────────────┐  ┌───────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │   CTC UI      │  │ Train Manager │  │ Train Model  │  │  Track Model │   │
+│  │ (API Client)  │  │  (Existing)   │  │ (Existing)   │  │  (Existing)  │   │
+│  └───────┬───────┘  └───────────────┘  └──────────────┘  └──────────────┘   │
+│          │                                                                     │
+└──────────┼─────────────────────────────────────────────────────────────────────┘
+           │
+           │  HTTP REST API (JSON over HTTP)
+           │  Network: LAN (Ethernet/WiFi)
+           │  Protocol: GET/POST requests
+           │
+    ┌──────┴──────┬──────────────┬──────────────┬──────────────┐
+    │             │              │              │              │
+┌───┴────────┐ ┌──┴─────────┐ ┌──┴─────────┐ ┌──┴─────────┐ ┌──┴─────────┐
+│Raspberry Pi│ │Raspberry Pi│ │Raspberry Pi│ │Raspberry Pi│ │  Future    │
+│     #1     │ │     #2     │ │     #3     │ │     #4     │ │  Clients   │
+│            │ │            │ │            │ │            │ │            │
+│  Wayside   │ │  Wayside   │ │   Train    │ │   Train    │ │    ...     │
+│Controller 1│ │Controller 2│ │Controller 1│ │Controller 2│ │            │
+│  (HW)      │ │  (HW)      │ │  (HW)      │ │  (HW)      │ │            │
+│            │ │            │ │            │ │            │ │            │
+│ API Client │ │ API Client │ │ API Client │ │ API Client │ │ API Client │
+│  (Remote)  │ │  (Remote)  │ │  (Remote)  │ │  (Remote)  │ │  (Remote)  │
+└────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘
+     ↑               ↑              ↑              ↑
+     │               │              │              │
+     └───────┬───────┴──────┬───────┴──────┬───────┘
+             │              │              │
+      GPIO Hardware    GPIO Hardware  GPIO Hardware
+      (Switches,       (Switches,     (Buttons,
+       Lights,          Lights,        LEDs,
+       Relays)          Relays)        Sensors)
+
+
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                            DATA FLOW EXAMPLE                                      ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+1. CTC dispatches a train:
+   
+   CTC UI → POST /api/ctc/trains/Train_1 → Server → ctc_data.json (updated)
+                                                  ↓
+                                         POST /api/ctc/track_controller
+                                                  ↓
+                                         Server → ctc_track_controller.json
+
+2. Wayside Controller reads CTC commands:
+   
+   Raspberry Pi #1 → GET /api/wayside/1/state → Server → Reads ctc_track_controller.json
+                                                       → Returns commands to Pi
+
+3. Wayside processes PLC logic and sends train commands:
+   
+   Raspberry Pi #1 → POST /api/wayside/train_commands → Server → wayside_to_train.json
+
+4. Train Model reads wayside commands:
+   
+   Train Model → GET /api/wayside/train_commands → Server → Reads wayside_to_train.json
+                                                          → Returns authority/speed
+
+5. Train updates position:
+   
+   Train Model → POST /api/train/1/state → Server → train_states.json (updated)
+
+6. CTC monitors train position:
+   
+   CTC UI → GET /api/ctc/trains/Train_1 → Server → Reads ctc_data.json
+                                                 → Returns current position
+
+
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                         BEFORE vs AFTER COMPARISON                                ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+BEFORE (Current - Broken):
+┌─────────────────────┐     ┌─────────────────────┐
+│  Main Computer      │     │  Raspberry Pi #1    │
+│                     │     │                     │
+│  CTC writes:        │     │  Wayside reads:     │
+│  ctc_tc.json ──X────┼─────┼──X→ (file missing!) │
+│                     │     │                     │
+│  (different         │     │  (different         │
+│   filesystem)       │     │   filesystem)       │
+└─────────────────────┘     └─────────────────────┘
+         PROBLEM: Files don't sync across machines!
+
+
+AFTER (New - Fixed):
+┌─────────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
+│  Main Computer      │     │  Network (HTTP)  │     │  Raspberry Pi #1    │
+│                     │     │                  │     │                     │
+│  CTC → API Server   │────→│  JSON over HTTP  │────→│  API Client → HW    │
+│  (POST /api/ctc/..) │     │  (works across   │     │  (GET /api/...)     │
+│                     │     │   network!)      │     │                     │
+│  Single source      │     │                  │     │  Always gets        │
+│  of truth           │     │                  │     │  latest data        │
+└─────────────────────┘     └──────────────────┘     └─────────────────────┘
+         SOLUTION: Server provides single source of truth accessible over network!
+
+
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                            BENEFITS OF NEW SYSTEM                                 ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+✅ Single Source of Truth
+   • All data lives on server
+   • No file sync issues
+   • No race conditions
+
+✅ Network Transparent
+   • Works across machines
+   • Raspberry Pis connect via IP
+   • Location-independent
+
+✅ Thread-Safe
+   • Server uses locks
+   • No file corruption
+   • Safe concurrent access
+
+✅ Scalable
+   • Add Raspberry Pis easily
+   • No code changes needed
+   • Just connect with URL
+
+✅ Testable
+   • Local mode for development
+   • Remote mode for deployment
+   • Same code, different mode
+
+✅ Maintainable
+   • Clear API boundaries
+   • Easy to debug
+   • Server logs all activity
+
+✅ Reliable
+   • Automatic reconnection
+   • Error handling
+   • Graceful degradation
+
+
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                           DEPLOYMENT TOPOLOGY                                     ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+    University Lab / Testing Environment:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │                    Local Network (WiFi/Ethernet)            │
+    │                    192.168.1.x                              │
+    │                                                             │
+    │  ┌───────────────┐                                          │
+    │  │ Main Computer │                                          │
+    │  │ 192.168.1.100 │                                          │
+    │  │               │                                          │
+    │  │  • API Server │                                          │
+    │  │  • CTC UI     │                                          │
+    │  │  • Train Mgr  │                                          │
+    │  │  • Train Model│                                          │
+    │  │  • Track Model│                                          │
+    │  └───────┬───────┘                                          │
+    │          │                                                  │
+    │          │   HTTP REST API                                 │
+    │          │                                                  │
+    │    ┌─────┴──────┬──────────────┬──────────────┐            │
+    │    │            │              │              │            │
+    │  ┌─┴──┐      ┌──┴─┐         ┌──┴─┐         ┌──┴─┐         │
+    │  │ Pi │      │ Pi │         │ Pi │         │ Pi │         │
+    │  │ #1 │      │ #2 │         │ #3 │         │ #4 │         │
+    │  └────┘      └────┘         └────┘         └────┘         │
+    │  Wayside     Wayside        Train          Train          │
+    │  (Blocks     (Blocks        Hardware       Hardware       │
+    │   0-73)      70-143)                                      │
+    └─────────────────────────────────────────────────────────────┘
+
+    All devices must be on same network
+    Server IP must be accessible from all Raspberry Pis
+

@@ -28,7 +28,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 # Import API from api directory
-from api.train_controller_api import train_controller_api
+from train_controller.api.train_controller_api import train_controller_api
 
 
 class train_controller_test_ui(tk.Tk):

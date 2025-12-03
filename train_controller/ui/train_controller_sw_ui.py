@@ -19,7 +19,10 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 # Import API
-from api.train_controller_api import train_controller_api
+from train_controller.api.train_controller_api import train_controller_api
+
+# Debug mode flag - Set to False to disable debug output
+DEBUG_MODE = False
 
 
 class beacon:
@@ -744,7 +747,8 @@ class train_controller_ui(tk.Tk):
                                         bg=self.normal_color, width=button_width, height=button_height,
                                         state='normal')  # Explicitly set to normal at creation
         self.manual_mode_btn.grid(row=1, column=3, padx=padding, pady=padding)
-        print(f"[DEBUG] Manual mode button created with state: {self.manual_mode_btn['state']}")
+        if DEBUG_MODE:
+            print(f"[DEBUG] Manual mode button created with state: {self.manual_mode_btn['state']}")
 
                 
         # Row 3 (Temperature Controls)
@@ -896,7 +900,8 @@ class train_controller_ui(tk.Tk):
                 not current_state['service_brake'] and 
                 not critical_failure):
                 power = self.controller.calculate_power_command(current_state)
-                print(f"[DEBUG POWER] train_vel={current_state['train_velocity']:.2f}, driver_vel={current_state['driver_velocity']:.2f}, calculated_power={power:.2f}")
+                if DEBUG_MODE:
+                    print(f"[DEBUG POWER] train_vel={current_state['train_velocity']:.2f}, driver_vel={current_state['driver_velocity']:.2f}, calculated_power={power:.2f}")
                 # Always update power command even if same to ensure it's written
                 self.controller.vital_control_check_and_update({'power_command': power})
             else:
@@ -1006,7 +1011,8 @@ class train_controller_ui(tk.Tk):
         # Manual mode button is ALWAYS enabled so driver can switch modes
         mode_text = "Manual Mode: ON" if manual_mode else "Automatic Mode"
         self.manual_mode_btn.configure(state='normal', text=mode_text)
-        print(f"[DEBUG update_button_enabled_states] Manual mode button set to: state='normal', text='{mode_text}'")
+        if DEBUG_MODE:
+            print(f"[DEBUG update_button_enabled_states] Manual mode button set to: state='normal', text='{mode_text}'")
     
     def update_button_states(self, state):
         """Update button colors based on their states."""
@@ -1025,7 +1031,8 @@ class train_controller_ui(tk.Tk):
         bg_color = self.active_color if state['manual_mode'] else self.normal_color
         self.manual_mode_btn.configure(bg=bg_color)
         current_state = self.manual_mode_btn['state']
-        print(f"[DEBUG update_button_states] Manual mode button: bg={bg_color}, current state={current_state}")
+        if DEBUG_MODE:
+            print(f"[DEBUG update_button_states] Manual mode button: bg={bg_color}, current state={current_state}")
         
         # Brake buttons - Only update colors, states are handled in update_button_enabled_states
         self.service_brake_btn.configure(bg=self.active_color if state['service_brake'] > 0 else self.normal_color)

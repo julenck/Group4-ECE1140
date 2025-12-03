@@ -11,7 +11,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(current_dir)
 sys.path.append(parent_dir)
 
-from api.train_controller_api import train_controller_api
+from train_controller.api.train_controller_api import train_controller_api
 
 def print_json_state():
     """Print current JSON file state"""

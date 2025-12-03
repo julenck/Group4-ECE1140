@@ -1,6 +1,6 @@
 
 class CTCUI:
-    def __init__(self):
+    def __init__(self, server_url=None):
         import tkinter as tk, json, os, threading, subprocess, sys
         from datetime import datetime
         from tkinter import filedialog, ttk
@@ -19,7 +19,23 @@ class CTCUI:
         self.Observer = Observer
         self.FileSystemEventHandler = FileSystemEventHandler
 
+        # Initialize API client (remote mode) or use files (local mode)
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from ctc.api.ctc_api_client import CTCAPIClient
+        self.api_client = CTCAPIClient(server_url=server_url)
+        self.server_url = server_url
+        self.is_remote = (server_url is not None)
+
         self.data_file = 'ctc_data.json'
+        
+        # Check server connection if in remote mode
+        if self.is_remote:
+            if self.api_client.health_check():
+                print(f"[CTC UI] Connected to server: {server_url}")
+            else:
+                print(f"[CTC UI] WARNING: Cannot connect to server: {server_url}")
+                print(f"[CTC UI] Falling back to local file mode")
+                self.is_remote = False
         self.default_data = {
             "Dispatcher": {
                 "Trains":{
@@ -34,7 +50,8 @@ class CTCUI:
 
         self.setup_json_file()
         self.root = tk.Tk()
-        self.root.title("CTC User Interface")
+        mode_text = " (Remote Mode)" if self.is_remote else " (Local Mode)"
+        self.root.title("CTC User Interface" + mode_text)
         self.root.geometry("1500x700")
         self.root.grid_rowconfigure(3, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
@@ -52,16 +69,22 @@ class CTCUI:
 
         self.setup_ui()
 
-        class FileChangeHandler(self.FileSystemEventHandler):
-            def on_modified(handler_self, event):
-                if event.src_path.endswith("ctc_data.json"):
-                    self.root.after(100, self.update_active_trains_table)
-        self.event_handler = FileChangeHandler()
-        self.observer = self.Observer()
-        self.observer.schedule(self.event_handler, path=self.os.path.dirname(self.data_file) or ".", recursive=False)
-        self.observer_thread = self.threading.Thread(target=self.observer.start)
-        self.observer_thread.daemon = True
-        self.observer_thread.start()
+        # File watcher for local mode; polling for remote mode
+        if not self.is_remote:
+            class FileChangeHandler(self.FileSystemEventHandler):
+                def on_modified(handler_self, event):
+                    if event.src_path.endswith("ctc_data.json"):
+                        self.root.after(100, self.update_active_trains_table)
+            self.event_handler = FileChangeHandler()
+            self.observer = self.Observer()
+            self.observer.schedule(self.event_handler, path=self.os.path.dirname(self.data_file) or ".", recursive=False)
+            self.observer_thread = self.threading.Thread(target=self.observer.start)
+            self.observer_thread.daemon = True
+            self.observer_thread.start()
+        else:
+            # In remote mode, use polling instead of file watcher
+            self.observer = None
+            self.poll_updates()
 
         self.show_frame(self.auto_frame)
         self.auto_button.config(bg="lightgray")
@@ -71,29 +94,37 @@ class CTCUI:
         self.update_active_trains_table()
 
     def setup_json_file(self):
-        if not self.os.path.exists(self.data_file) or self.os.stat(self.data_file).st_size == 0:
-            with open(self.data_file, "w") as f:
-                self.json.dump(self.default_data, f, indent=4)
-        else:
-            try:
-                with open(self.data_file, "r") as f:
-                    self.json.load(f)
-            except self.json.JSONDecodeError:
-                with open(self.data_file, "w") as f:
-                    self.json.dump(self.default_data, f, indent=4)
+        # Always reset to default data on startup to ensure clean state
+        with open(self.data_file, "w") as f:
+            self.json.dump(self.default_data, f, indent=4)
 
     def load_data(self):
-        if self.os.path.exists(self.data_file):
-            with open(self.data_file, "r") as f:
-                try:
-                    return self.json.load(f)
-                except self.json.JSONDecodeError:
-                    return {}
-        return {}
+        """Load CTC data via API or local file."""
+        if self.is_remote:
+            return self.api_client.get_state()
+        else:
+            if self.os.path.exists(self.data_file):
+                with open(self.data_file, "r") as f:
+                    try:
+                        return self.json.load(f)
+                    except self.json.JSONDecodeError:
+                        return {}
+            return {}
 
     def save_data(self, data):
-        with open(self.data_file, "w") as f:
-            self.json.dump(data, f, indent=4)
+        """Save CTC data via API or local file."""
+        if self.is_remote:
+            self.api_client.update_state(data)
+        else:
+            with open(self.data_file, "w") as f:
+                self.json.dump(data, f, indent=4)
+    
+    def poll_updates(self):
+        """Poll server for updates in remote mode."""
+        if self.is_remote:
+            self.update_active_trains_table()
+            # Schedule next poll in 500ms
+            self.root.after(500, self.poll_updates)
 
 
     def setup_ui(self):
@@ -274,6 +305,7 @@ class CTCUI:
                 self.dispatch_threads = []
             t = self.threading.Thread(target=ctc_main_temp.dispatch_train,
                                       args=(train, line, dest, arrival),
+                                      kwargs={'server_url': self.server_url},  # Pass server URL for remote mode
                                       daemon=True)
             t.start()
             self.dispatch_threads.append(t)
@@ -378,8 +410,9 @@ class CTCUI:
         self.root.mainloop()
     
     def on_close(self):
-        self.observer.stop()
-        self.observer_thread.join()
+        if self.observer:
+            self.observer.stop()
+            self.observer_thread.join()
         # Terminate any subprocesses started
         if hasattr(self, 'subprocesses'):
             for proc in self.subprocesses:
@@ -389,5 +422,16 @@ class CTCUI:
 
 # To use the class:
 if __name__ == "__main__":
-    ui = CTCUI()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="CTC User Interface")
+    parser.add_argument('--server', type=str, help='REST API server URL (e.g., http://192.168.1.100:5000)')
+    args = parser.parse_args()
+    
+    print("[CTC UI] Starting CTC User Interface")
+    print(f"[CTC UI] Mode: {'Remote' if args.server else 'Local'}")
+    if args.server:
+        print(f"[CTC UI] Server: {args.server}")
+    
+    ui = CTCUI(server_url=args.server)
     ui.run()

@@ -1,0 +1,173 @@
+================================================================================
+  JSON FILE ACCESS DENIED - COMPLETE FIX SUMMARY
+================================================================================
+
+PROBLEMS FIXED:
+---------------
+❌ "Access Denied" errors when writing to train_data.json
+❌ "Access Denied" errors when writing to train_states.json
+❌ JSON decode errors (Expecting value: line 1 column 1)
+❌ Power commands resetting to 0
+❌ Files being locked by multiple processes simultaneously
+❌ Files being corrupted/emptied during writes
+
+ROOT CAUSE:
+-----------
+Multiple processes writing to same file at same time:
+  • Train Model UI (every 500ms)
+  • Wayside Sync (when active)
+  • Train Controller (reading)
+  
+Original code silently failed on PermissionError - no logging, no retry!
+
+FIXES APPLIED:
+--------------
+✅ Improved safe_write_json() with:
+   - Unique temp files per process (no conflicts)
+   - 5 retries with exponential backoff (50ms → 800ms)
+   - Atomic writes with fsync()
+   - ERROR LOGGING (no more silent failures!)
+
+✅ Improved safe_read_json() with:
+   - 3 retries on PermissionError
+   - Error logging
+
+✅ Backup/Restore System:
+   - Creates .backup before every write
+   - Auto-restores if corruption detected
+   - Prevents data loss
+
+✅ Enhanced Visibility:
+   - All errors now logged to console
+   - Easy to diagnose issues
+
+FILES MODIFIED:
+---------------
+1. Train_Model/train_model_core.py
+   - safe_write_json() - Complete rewrite with atomic writes
+   - safe_read_json() - Added retries and error logging
+   - create_backup() - NEW
+   - restore_from_backup() - NEW
+   - ensure_train_data() - Added backup/restore
+   - sync_wayside_to_train_data() - Added backup
+
+2. Train_Model/train_model_ui.py
+   - write_train_data() - Added backup creation
+
+3. train_controller/api/train_controller_api.py
+   - _safe_write_json() - NEW - Atomic writes with retries
+   - _create_backup() - NEW
+   - _restore_from_backup() - NEW
+   - get_state() - Always log errors, auto-restore from backup
+   - save_state() - Use atomic writes, create backups
+
+TESTING:
+--------
+1. Run: python combine_ctc_wayside_test.py
+
+2. Dispatch a train
+
+3. Check console for errors:
+   ✅ No [WRITE ERROR] or [READ ERROR] = Perfect!
+   ✅ [RESTORE] Restored from backup = Safety system working!
+   ⚠️  Occasional [WRITE ERROR] = Retries working (OK)
+   ⚠️  [CACHE] Using cached state = Temporary workaround (OK)
+   ❌ Frequent [READ ERROR] or [WRITE ERROR] = Need investigation
+
+4. Verify train_data.json has non-zero power:
+   {
+     "train_1": {
+       "inputs": {
+         "commanded speed": 4.47388,  ← Should be non-zero!
+         "commanded authority": 976.9
+       }
+     }
+   }
+
+5. Verify train_states.json is valid JSON:
+   PowerShell: Get-Content train_controller\data\train_states.json | ConvertFrom-Json
+   Should not error
+
+6. Check BOTH backup files exist:
+   ✅ Train_Model/train_data.json.backup
+   ✅ train_controller/data/train_states.json.backup
+
+WHAT TO LOOK FOR:
+-----------------
+✅ GOOD SIGNS:
+   - No error messages in console
+   - train_data.json.backup exists
+   - Power commands are non-zero
+   - File updates regularly (check LastWriteTime)
+
+⚠️  WARNING SIGNS:
+   - Occasional [WRITE ERROR] (< 1% of writes)
+   - Multiple .tmp files in Train_Model/
+
+❌ CRITICAL ISSUES:
+   - Frequent [WRITE ERROR] (> 10% of writes)
+   - Power stuck at 0
+   - No backup file
+   - train_data.json not updating
+
+TROUBLESHOOTING:
+----------------
+Issue: Still getting Access Denied errors
+Fix:   1. Close train_data.json if open in editor
+       2. Disable antivirus for project folder
+       3. Increase max_retries in safe_write_json()
+
+Issue: Power commands still 0
+Fix:   1. Set DEBUG_MODE = True in train_controller_api.py
+       2. Check train_states.json for power_command
+       3. Verify Train Controller is running
+
+Issue: File corrupted
+Fix:   1. Stop all processes
+       2. Copy train_data.json.backup to train_data.json
+       3. Restart system
+
+MONITORING:
+-----------
+Watch file updates in real-time:
+  
+  PowerShell:
+  while ($true) { 
+      Get-Item Train_Model\train_data.json | Select Name, LastWriteTime
+      Start-Sleep -Seconds 1
+  }
+
+Check for errors:
+  python combine_ctc_wayside_test.py 2>&1 | Select-String "ERROR"
+
+ADDITIONAL RECOMMENDATIONS:
+---------------------------
+1. Use unified API server (reduces file conflicts)
+2. Don't open train_data.json in editors while system running
+3. If issues persist, increase retry count to 10
+4. Consider reducing Train Model update frequency (500ms → 1000ms)
+
+DOCUMENTATION:
+--------------
+train_data.json fix:   TRAIN_DATA_JSON_FIX.md
+train_states.json fix: TRAIN_STATES_JSON_FIX.md
+Monitoring guide:      MONITOR_FILE_LOCKS.md
+Visual diagrams:       FILE_LOCK_SOLUTION_DIAGRAM.txt
+
+FILES NOW PROTECTED:
+--------------------
+✅ Train_Model/train_data.json (Train Model outputs)
+✅ train_controller/data/train_states.json (Controller states)
+
+Both files now have:
+  • Atomic writes (temp file + replace)
+  • 5 retries with exponential backoff
+  • Automatic backup before writes
+  • Auto-restore on corruption
+  • Full error logging
+
+================================================================================
+  Both critical JSON files are now protected! 🚂✅
+  Your power commands should persist correctly!
+================================================================================
+

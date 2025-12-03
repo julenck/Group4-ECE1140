@@ -339,7 +339,7 @@ class train_controller_ui(tk.Tk):
             print(f"[HW UI] Using REMOTE API: {server_url} (timeout: {timeout}s)")
         else:
             # Local mode - use file-based API
-            from api.train_controller_api import train_controller_api
+            from train_controller.api.train_controller_api import train_controller_api
             self.api = train_controller_api(train_id=train_id)
             print(f"[HW UI] Using LOCAL API (file-based)")
 

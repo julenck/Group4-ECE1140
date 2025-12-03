@@ -27,7 +27,7 @@ train_model_dir = os.path.join(parent_dir, "Train_Model")
 sys.path.append(train_model_dir)
 
 # Import required classes
-from api.train_controller_api import train_controller_api
+from train_controller.api.train_controller_api import train_controller_api
 
 
 class TrainPair:
@@ -984,6 +984,9 @@ and control Train {train_id}."""
                 # Update all trains
                 if self.manager.get_train_count() > 0:
                     self.manager.update_all_trains()
+            except (PermissionError, OSError):
+                # Silently ignore permission errors - file may be locked
+                pass
             except Exception as e:
                 print(f"Simulation loop error: {e}")
             

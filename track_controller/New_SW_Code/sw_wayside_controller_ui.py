@@ -376,8 +376,8 @@ class sw_wayside_controller_ui(tk.Tk):
         scroller.pack(side="right", fill="y")
 
 
-        def on_scroll(self, event):
-            event.widget.yview_scroll(int(-1*(event.delta/120)), "units")
+        def on_scroll(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         canvas.bind_all("<MouseWheel>", on_scroll)
 
         #message for start because no plc file loaded
@@ -884,25 +884,49 @@ class sw_wayside_controller_ui(tk.Tk):
 
 
 def main():
-    # Create first UI window (still a Tk)
-    vital1 = sw_vital_check.sw_vital_check()
-    controller1 = sw_wayside_controller.sw_wayside_controller(vital1, "Green_Line_PLC_XandLup.py")
-    ui1 = sw_wayside_controller_ui(controller1)
-    ui1.title("Wayside Controller 1")
-    ui1.geometry("1200x800")
-
-    # Create second UI window (another Tk)
-    vital2 = sw_vital_check.sw_vital_check()
-    controller2 = sw_wayside_controller.sw_wayside_controller(vital2, "Green_Line_PLC_XandLdown.py")
-    #ui2 = sw_wayside_controller_ui(controller2)
-    #ui2.title("Wayside Controller 2")
-    #ui2.geometry("1200x800")
-
-    # Bring both windows to front
-    #ui1.lift()
-    #ui2.lift()
-
-    # Run *one* mainloop (both Tk windows share it)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Wayside Track Controller UI")
+    parser.add_argument('--server', type=str, help='REST API server URL (e.g., http://192.168.1.100:5000)')
+    parser.add_argument('--wayside-id', type=int, default=1, choices=[1, 2], help='Wayside controller ID (1 or 2)')
+    parser.add_argument('--plc', type=str, help='PLC program file (optional, defaults based on wayside-id)')
+    args = parser.parse_args()
+    
+    # Determine PLC based on wayside-id if not specified
+    if args.plc:
+        plc = args.plc
+    elif args.wayside_id == 1:
+        plc = "Green_Line_PLC_XandLup.py"
+    else:
+        plc = "Green_Line_PLC_XandLdown.py"
+    
+    # Create UI window
+    vital = sw_vital_check.sw_vital_check()
+    controller = sw_wayside_controller.sw_wayside_controller(
+        vital, 
+        plc=plc,
+        server_url=args.server,
+        wayside_id=args.wayside_id
+    )
+    ui = sw_wayside_controller_ui(controller)
+    
+    # Set title based on mode and wayside ID
+    mode = "Remote Mode" if args.server else "Local Mode"
+    if args.wayside_id == 1:
+        ui.title(f"Green Line Wayside Controller - X and L Up (Blocks 0-73, 144-150) - {mode}")
+    else:
+        ui.title(f"Green Line Wayside Controller - X and L Down (Blocks 70-143) - {mode}")
+    
+    ui.geometry("1200x800")
+    
+    # Print connection info
+    print(f"[Wayside UI] Starting Wayside Controller {args.wayside_id}")
+    print(f"[Wayside UI] Mode: {mode}")
+    if args.server:
+        print(f"[Wayside UI] Server: {args.server}")
+    print(f"[Wayside UI] PLC: {plc}")
+    
+    # Run mainloop
     tk.mainloop()
 
 
