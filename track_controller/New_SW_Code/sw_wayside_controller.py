@@ -32,10 +32,18 @@ class sw_wayside_controller:
         self.switch_states: list = [0]*6
         self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
-        self.active_plc: str = plc
-        self.ctc_comm_file: str = "ctc_track_controller.json"
-        self.track_comm_file: str = "track_controller\\New_SW_Code\\track_to_wayside.json"
-        self.train_comm_file: str = "track_controller\\New_SW_Code\\wayside_to_train.json"
+        # Extract just the filename from the plc path (in case full path is provided)
+        self.active_plc: str = os.path.basename(plc) if '\\' in plc or '/' in plc else plc
+        
+        # Use absolute paths based on the project root
+        # Get the directory where this file is located
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))  # Go up two levels to project root
+        
+        self.ctc_comm_file: str = os.path.join(project_root, "ctc_track_controller.json")
+        self.track_comm_file: str = os.path.join(project_root, "track_controller", "New_SW_Code", "track_to_wayside.json")
+        self.train_comm_file: str = os.path.join(project_root, "track_controller", "New_SW_Code", "wayside_to_train.json")
+        
         self.block_status: list = []
         self.detected_faults: dict = {}
         self.input_faults: list = [0]*152*3
@@ -313,7 +321,6 @@ class sw_wayside_controller:
                 if train_pos not in self.managed_blocks and train_pos != 0:
                     # Update last seen position even if we're not managing it
                     self.last_seen_position[train] = train_pos
-                    # print(f"DEBUG: {self.active_plc} skipping {train} at block {train_pos} (not in managed_blocks)")
                     continue
                     
                 
@@ -356,7 +363,7 @@ class sw_wayside_controller:
                         # This is a handoff - take over the train
                         # Read current authority from the shared JSON file (written by previous controller)
                         try:
-                            with open('wayside_to_train.json', 'r') as f:
+                            with open(self.train_comm_file, 'r') as f:
                                 train_data = json.load(f)
                                 current_auth = train_data.get(train, {}).get("Commanded Authority", sug_auth)
                                 current_speed = train_data.get(train, {}).get("Commanded Speed", self.active_trains[train]["Suggested Speed"])
@@ -969,7 +976,7 @@ class sw_wayside_controller:
         """Write commanded speed and authority directly to train communication file"""
         # Don't use file_lock here since both controllers need to write independently
         try:
-            with open('wayside_to_train.json', 'r') as f:
+            with open(self.train_comm_file, 'r') as f:
                 data = json.load(f)
         except:
             # If file doesn't exist or is corrupted, create fresh structure
@@ -1011,7 +1018,7 @@ class sw_wayside_controller:
                     data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0) * 2.23694
                 # else: don't update - other controller is managing this train
 
-        with open('wayside_to_train.json', 'w') as f:
+        with open(self.train_comm_file, 'w') as f:
             json.dump(data, f, indent=4)
 
 
