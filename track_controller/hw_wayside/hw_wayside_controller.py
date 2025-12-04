@@ -1,35 +1,24 @@
-"""
-HW wayside controller: mirrors the SW controller shape but stays hardware-agnostic.
-- Holds block set for this wayside
-- Accepts feed updates (speed/authority/emergency/occupancy/closures)
-- Exposes read-only getters used by the UI
-"""
+#HW Wayside_Controller
 
 from __future__ import annotations
 from typing import Dict, Any, List, Optional, Tuple
 import threading
 import time
-try:
-    from hw_vital_check import HW_Vital_Check
-except Exception:
-    # support package-style imports
-    from .hw_vital_check import HW_Vital_Check
+from hw_vital_check import HW_Vital_Check
 import importlib.util
 import os
 import json
 import csv
 import datetime
 
-# PLC module will be dynamically loaded when requested
 plc_module = None
 
-# --- Mappings for track model enums -> human-readable strings -----------------------
-_SWITCH_NAMES = {0: "Left", 1: "Right"}  # placeholder until final mapping
+_SWITCH_NAMES = {0: "Left", 1: "Right"} 
 _GATE_NAMES = {0: "DOWN", 1: "UP"}
 
-_YARD_TO_M = 0.9144  # convert yards -> meters for SW-style distance math
+_YARD_TO_M = 0.9144 
 
-# Blocks with hardware elements (same as SW)
+# Blocks with hardware elements:
 _BLOCKS_WITH_SWITCHES = [13, 28, 57, 63, 77, 85]
 _BLOCKS_WITH_LIGHTS = [0, 3, 7, 29, 58, 62, 76, 86, 100, 101, 150, 151]
 _BLOCKS_WITH_GATES = [19, 108]
@@ -43,21 +32,27 @@ def _encode_light_bits(name: str | None) -> Tuple[int, int]:
       10: YELLOW
       11: RED
     """
+
     if not name:
         return 0, 0
+    
     name = str(name).upper()
+
     if name == "SUPERGREEN":
         return 0, 0
     if name == "GREEN":
         return 0, 1
     if name == "YELLOW":
         return 1, 0
+    
     # default / RED
     return 1, 1
 
 
 class HW_Wayside_Controller:
+
     def __init__(self, wayside_id: str, block_ids: List[str]):
+
         self.wayside_id = wayside_id
         self.block_ids = [str(b) for b in (block_ids or [])]
         self._lock = threading.Lock()
@@ -91,8 +86,9 @@ class HW_Wayside_Controller:
         self._failures: Dict[str, Tuple[bool, bool, bool]] = {}
 
         # ------------------------------------------------------------------
-        # ADDED: Train tracking (SW-style green_order + distance table)
+        # Train tracking 
         # ------------------------------------------------------------------
+
         self.green_order: List[int] = [
             0,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,
             85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,85,84,83,82,81,80,79,
@@ -104,6 +100,7 @@ class HW_Wayside_Controller:
             29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,
             50,51,52,53,54,55,56,57,151
         ]
+
         # Distance to end-of-block (meters) indexed by position in green_order
         self.block_eob_m: List[float] = [
             100, 200, 300, 500, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 
@@ -127,6 +124,7 @@ class HW_Wayside_Controller:
             19327.6, 19377.6, 19427.6, 19477.6, 19527.6, 19577.6, 19627.6, 19677.6, 
             19727.6, 19777.6, 19827.6, 19877.6, 19927.6, 19977.6, 20077.6
         ]
+
         self._train_idx: Optional[int] = None      # index into green_order
         self._train_block: Optional[str] = None    # current block as string
         self._auth_start_m: Optional[float] = None # authority at the moment we began/last reset (meters)
@@ -145,6 +143,7 @@ class HW_Wayside_Controller:
         # background loop (optional; not used by hw_main.poll loop)
         self._running = False
         self._thread: Optional[threading.Thread] = None
+
         # Multi-train state (parity with SW controller)
         self.active_trains: Dict[str, Dict[str, Any]] = {}
         self.cmd_trains: Dict[str, Dict[str, Any]] = {}  # {"Train 1": {"cmd auth": yards, "cmd speed": mph, "pos": int}}
@@ -152,24 +151,32 @@ class HW_Wayside_Controller:
         self.ctc_comm_file = 'ctc_to_hw_wayside.json'
         self._trains_running = False
         self._trains_timer: Optional[threading.Timer] = None
-        # Track topology and distances (attempt to load CSV like SW)
+
+        # Track topology and distances
         self.block_graph: Dict[int, Dict[str, Any]] = {}
         self.block_distances: Dict[int, float] = {}
         self.block_lengths: Dict[int, float] = {}
         self.station_blocks: set = set()
+
         self.direction_transitions = [
+
             (100, 85, 'reverse'),
             (77, 101, 'forward'),
             (1, 13, 'reverse'),
             (28, 29, 'forward')
         ]
+
         self._load_track_data()
-        # Attempt to load an explicit switch map (preferred for exact routing)
+
+        # Switch map from JSON file if present
         try:
             base = os.path.dirname(__file__)
             sm_path = os.path.join(base, 'switch_map.json')
+
             if os.path.exists(sm_path):
+
                 with open(sm_path, 'r', encoding='utf-8') as f:
+
                     self.switch_map = json.load(f) or {}
             else:
                 self.switch_map = {}
@@ -177,13 +184,12 @@ class HW_Wayside_Controller:
             self.switch_map = {}
 
         # Build switch_map and gate approach lists automatically from `block_graph`
-        # if entries are missing; this helps generate a canonical map from
-        # `track_data.csv` when available.
         try:
             self._build_switch_and_gate_maps()
         except Exception:
             pass
-        # Per-train bookkeeping (port of SW structures)
+
+        # Per-train bookkeeping
         self.train_idx: Dict[str, int] = {}
         self.train_pos_start: Dict[str, int] = {}
         self.train_auth_start: Dict[str, float] = {}
@@ -192,6 +198,7 @@ class HW_Wayside_Controller:
         self.cumulative_distance: Dict[str, float] = {}
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
+        
         # managed/visible blocks default to the controller's block_ids
         try:
             self.managed_blocks = set(int(b) for b in self.block_ids)
