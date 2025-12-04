@@ -7,6 +7,7 @@ One UI window per wayside. Mirrors the SW UI shape but stays minimal.
 from __future__ import annotations
 from datetime import time
 import time
+import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import Optional
@@ -98,10 +99,36 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         self.display = HW_Display(self)
         self.display.pack(fill="both", expand=True)
 
-        # block list
-        ids = self.controller.get_block_ids()
+        # Try to load a track map image if present in this wayside folder
+        try:
+            base = os.path.dirname(__file__)
+            img_path = os.path.join(base, 'track_map.png')
+            if os.path.exists(img_path):
+                self.display.set_map_image_from_file(img_path)
+        except Exception:
+            pass
+
+        # wire handlers for manual operations
+        try:
+            self.display.set_handlers(on_set_switch=self._on_set_switch)
+        except Exception:
+            pass
+
+        # block list: show only the controller's managed blocks. Including
+        # external switch_map entries caused cross-wayside confusion (blocks
+        # from Wayside A appearing in Wayside B). Keep UI limited to the
+        # canonical `block_ids` supplied to this controller.
+        try:
+            ids = self.controller.get_block_ids()
+        except Exception:
+            try:
+                ids = self.controller.get_ui_block_list()
+            except Exception:
+                ids = []
         self.display.set_blocks(ids)
         self.display.bind_on_select(self._on_select_block)
+
+        # (Removed) occupancy debug button: keep UI minimal and stable
 
         # pick a first block immediately so the panel renders
         if ids:
@@ -154,20 +181,70 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         self.controller.on_selected_block(block_id)
         self._push_to_display()
 
+    def _on_set_switch(self, block_id: str, new_state: str):
+        """Called when the display requests a manual switch change.
+
+        We call controller.request_switch_change and show a dialog if rejected.
+        """
+        try:
+            ok, reason = self.controller.request_switch_change(block_id, new_state)
+            if not ok:
+                messagebox.showwarning("Switch denied", f"Switch change denied: {reason}")
+            else:
+                messagebox.showinfo("Switch staged", f"Switch change staged: {block_id} -> {new_state}")
+                # refresh display
+                self._push_to_display()
+        except Exception as e:
+            messagebox.showerror("Switch error", f"Error changing switch: {e}")
+
     # -------- periodic refresh --------
     def _push_to_display(self):
 
-        ids = self.controller.get_block_ids()
+        # Do NOT overwrite the display's block list every tick — leave block
+        # population to initialization or explicit changes to avoid stomping
+        # the user's selection while they interact with the UI.
+        try:
+            ids = self.controller.get_block_ids()
+        except Exception:
+            ids = []
 
         if self._selected_block is None and ids:
-
             self._selected_block = ids[0]
             self.display.select_block(ids[0])
 
         if self._selected_block:
 
+            # Base state (includes speed/authority/status/emergency)
             state = self.controller.get_block_state(self._selected_block)
+            # Merge in switch_map (and any small extras) from get_block_data for display
+            try:
+                bdata = self.controller.get_block_data(self._selected_block) or {}
+                # Merge switch_map and resolved switch display value from get_block_data
+                if 'switch_map' in bdata and bdata.get('switch_map') is not None:
+                    state['switch_map'] = bdata.get('switch_map')
+                if 'switch' in bdata and bdata.get('switch') is not None:
+                    # Override the basic switch textual/state value with the
+                    # controller-resolved display value (could be target block).
+                    state['switch'] = bdata.get('switch')
+            except Exception:
+                pass
             self.display.update_details(state)
+            # Enable switch buttons only if this block actually has a switch
+            try:
+                has_sw = False
+                try:
+                    has_sw = self.controller.has_switch(self._selected_block)
+                except Exception:
+                    has_sw = bool(state.get('switch_map'))
+                self.display.set_switch_buttons_enabled(bool(has_sw))
+            except Exception:
+                pass
+
+            # final update to the details (map and switch button state already set above)
+            try:
+                self.display.update_details(state)
+            except Exception:
+                pass
             try:
                 train_block = self.controller.get_current_train_block()
             except Exception:
