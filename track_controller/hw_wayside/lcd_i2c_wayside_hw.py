@@ -82,7 +82,7 @@ class I2CLcd:
     # ---------------- Friendly API ----------------
 
     def present(self) -> bool:
-        return bool(self.bus)
+        return self.bus is not None
 
     def clear(self):
         self._command(0x01)

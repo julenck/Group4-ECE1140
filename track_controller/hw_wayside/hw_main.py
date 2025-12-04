@@ -238,14 +238,6 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
         cmd = controller.build_commanded_arrays(n_total)
         # Merge only keys we set; preserve everything else in TRACK_FILE
         _atomic_merge_write_track_json(cmd)
-
-        ui._push_to_display()
-
-        n_total = _discover_block_count()
-        cmd = controller.build_commanded_arrays(n_total)
-        # Merge only keys we set; preserve everything else in TRACK_FILE
-        _atomic_merge_write_track_json(cmd)
-
         ui._push_to_display()
 
     # Write back to CTC JSON

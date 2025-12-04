@@ -240,11 +240,7 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             except Exception:
                 pass
 
-            # final update to the details (map and switch button state already set above)
-            try:
-                self.display.update_details(state)
-            except Exception:
-                pass
+            # final update to the details already performed above
             try:
                 train_block = self.controller.get_current_train_block()
             except Exception:
