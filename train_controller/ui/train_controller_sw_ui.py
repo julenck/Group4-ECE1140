@@ -404,6 +404,42 @@ class train_controller:
 		}
 		self.vital_control_check_and_update(changes)
 	
+	def auto_manage_service_brake(self, state: dict) -> None:
+		"""Automatically manage service brake based on speed difference.
+		
+		When the train is going significantly faster than the target speed (driver_velocity),
+		this method automatically engages the service brake to slow down more quickly.
+		The brake is released when the train gets close to the target speed.
+		
+		Args:
+			state: Current train state dictionary.
+		"""
+		train_velocity = state['train_velocity']
+		driver_velocity = state['driver_velocity']
+		current_service_brake = state['service_brake']
+		emergency_brake = state['emergency_brake']
+		
+		# Don't manage service brake if emergency brake is active
+		if emergency_brake:
+			return
+		
+		# Calculate speed difference (how much faster we're going than target)
+		speed_difference = train_velocity - driver_velocity
+		
+		# Thresholds for engaging/releasing service brake
+		ENGAGE_THRESHOLD = 2.0   # Engage brake if going 2+ mph over target
+		RELEASE_THRESHOLD = 0.5  # Release brake when within 0.5 mph of target
+		
+		# Decide whether to engage or release service brake
+		if speed_difference >= ENGAGE_THRESHOLD and not current_service_brake:
+			# Train is going significantly faster than target - engage service brake
+			print(f"[Auto Brake] Engaging service brake - Train: {train_velocity:.1f} mph, Target: {driver_velocity:.1f} mph")
+			self.set_service_brake(True)
+		elif speed_difference < RELEASE_THRESHOLD and current_service_brake:
+			# Train is close to target speed - release service brake
+			print(f"[Auto Brake] Releasing service brake - Train: {train_velocity:.1f} mph, Target: {driver_velocity:.1f} mph")
+			self.set_service_brake(False)
+	
 	def adjust_temperature(self, increase: bool) -> None:
 		"""Adjust temperature setpoint.
 		
@@ -890,6 +926,13 @@ class train_controller_ui(tk.Tk):
             if critical_failure and not current_state['emergency_brake']:
                 # Automatically engage emergency brake on critical failure
                 self.controller.set_emergency_brake(True)
+            
+            # Auto-manage service brake based on speed difference
+            # This will engage/release service brake when train needs to slow down
+            self.controller.auto_manage_service_brake(current_state)
+            
+            # Refresh state after potential service brake change
+            current_state = self.api.get_state()
                 
             # Recalculate power command based on current state
             if (not current_state['emergency_brake'] and 
