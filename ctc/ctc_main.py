@@ -13,6 +13,53 @@ data_file_track_cont = os.path.join(BASE_DIR, 'ctc_track_controller.json')
 # define dwell time variable
 dwell_time_s = 10
 
+# ALWAYS reset both JSON files to default at start of dispatch
+# This ensures clean state for each new dispatch operation
+print("Resetting CTC JSON files to default state...")
+
+# Reset ctc_data.json
+default_ctc_data = {
+    "Dispatcher": {
+        "Trains": {}
+    }
+}
+for i in range(1, 6):
+    tname = f"Train {i}"
+    default_ctc_data["Dispatcher"]["Trains"][tname] = {
+        "Line": "",
+        "Suggested Speed": "",
+        "Authority": "",
+        "Station Destination": "",
+        "Arrival Time": "",
+        "Position": "",
+        "State": "",
+        "Current Station": ""
+    }
+try:
+    with open(data_file_ctc_data, 'w') as f:
+        json.dump(default_ctc_data, f, indent=4)
+    print("ctc_data.json reset complete")
+except Exception as e:
+    print(f"Warning: failed to reset ctc_data.json: {e}")
+
+# Reset ctc_track_controller.json
+default_track = {"Trains": {}}
+for i in range(1, 6):
+    tname = f"Train {i}"
+    default_track["Trains"][tname] = {
+        "Active": 0,
+        "Suggested Speed": 0,
+        "Suggested Authority": 0,
+        "Train Position": 0,
+        "Train State": 0
+    }
+try:
+    with open(data_file_track_cont, 'w') as f:
+        json.dump(default_track, f, indent=4)
+    print("ctc_track_controller.json reset complete")
+except Exception as e:
+    print(f"Warning: failed to reset ctc_track_controller.json: {e}")
+
 # read from ctc_ui_inputs.json 
 with open(data_file_ui_inputs, "r") as f_inputs:
     inputs = json.load(f_inputs)
@@ -146,28 +193,32 @@ try:
             json.dump(data, f_data, indent=4)
 
         print(f"Train arrived at {test}")
+        
+        # Set Active = 0 so train stops at station
+        with open(data_file_track_cont, "r") as f_updates: 
+            updates = json.load(f_updates)
+        updates["Trains"][train]["Active"] = 0
+        with open(data_file_track_cont, "w") as f_updates: 
+            json.dump(updates, f_updates, indent=4)
 
-        # once train gets to station, wait for dwell time 
+        # Wait for dwell time
         time.sleep(dwell_time_s)
 
-        # wait for wayside to finish writes 
+        # Wait for wayside to finish writes 
         time.sleep(0.5)
 
-        # train is moving now, clear current station
+        # Clear current station after dwell
         with open(data_file_ctc_data, "r") as f_data:
             data = json.load(f_data)
-
         data["Dispatcher"]["Trains"][train]["Current Station"] = "---"  
-
         with open(data_file_ctc_data, "w") as f_data:
             json.dump(data, f_data, indent=4)
 
+        # If not at final destination, set Active = 1 with new authority for next leg
         if test != station: 
             with open(data_file_track_cont, "r") as f_updates: 
                 updates = json.load(f_updates) 
-            
             updates["Trains"][train]["Active"] = 1
- 
             with open(data_file_track_cont, "w") as f_updates: 
                 json.dump(updates, f_updates, indent=4)
         
