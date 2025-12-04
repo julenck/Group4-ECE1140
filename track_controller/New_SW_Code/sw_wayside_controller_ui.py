@@ -26,11 +26,11 @@ from PIL import Image, ImageTk
 from track_controller.New_SW_Code import sw_wayside_controller
 from track_controller.New_SW_Code import sw_vital_check
 
-class sw_wayside_controller_ui(tk.Tk):
+class sw_wayside_controller_ui:
     def __init__(self, controller):
-        super().__init__()
+        self.root = tk.Tk()
         self.controller = controller
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     
 
@@ -58,15 +58,15 @@ class sw_wayside_controller_ui(tk.Tk):
 
 
         # Configure grid layout
-        self.columnconfigure(0, weight=1)  # Left column
-        self.columnconfigure(1, weight=1)  # Middle column
-        self.columnconfigure(2, weight=1)  # Right column
-        self.rowconfigure(0, weight=1)  # Top row
-        self.rowconfigure(1, weight=1)  # Bottom row
+        self.root.columnconfigure(0, weight=1)  # Left column
+        self.root.columnconfigure(1, weight=1)  # Middle column
+        self.root.columnconfigure(2, weight=1)  # Right column
+        self.root.rowconfigure(0, weight=1)  # Top row
+        self.root.rowconfigure(1, weight=1)  # Bottom row
 
         # Add frames for each section
         # Define styles for the frames
-        style = ttk.Style()
+        style = ttk.Style(self.root)
         style.configure("Maintenance.TFrame", background="lightgray")
         style.configure("Input.TFrame", background="white")
         style.configure("AllBlocks.TFrame", background="white")
@@ -74,20 +74,20 @@ class sw_wayside_controller_ui(tk.Tk):
         style.configure("SelectedBlock.TFrame", background="white")
 
         # Create frames with ttk and apply styles
-        self.maintenance_frame = ttk.Frame(self, style="Maintenance.TFrame")
+        self.maintenance_frame = ttk.Frame(self.root, style="Maintenance.TFrame")
         self.maintenance_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
 
-        self.input_frame = ttk.Frame(self, style="Input.TFrame")
+        self.input_frame = ttk.Frame(self.root, style="Input.TFrame")
         self.input_frame.grid(row=0, column=1, sticky="nsew")
 
-        self.all_blocks_frame = ttk.Frame(self, style="AllBlocks.TFrame")
+        self.all_blocks_frame = ttk.Frame(self.root, style="AllBlocks.TFrame")
         self.all_blocks_frame.grid(row=1, column=1, sticky="nsew")
 
-        self.map_frame = ttk.Frame(self, style="Map.TFrame")
+        self.map_frame = ttk.Frame(self.root, style="Map.TFrame")
         self.map_frame.grid(row=0, column=2, sticky="nsew")
         
 
-        self.selected_block_frame = ttk.Frame(self, style="SelectedBlock.TFrame")
+        self.selected_block_frame = ttk.Frame(self.root, style="SelectedBlock.TFrame")
         self.selected_block_frame.grid(row=1, column=2, sticky="nsew")
 
         self.start_plc: str = controller.get_start_plc()
@@ -105,6 +105,17 @@ class sw_wayside_controller_ui(tk.Tk):
         self.update_block_labels()
         self.update_train_data_labels()
     
+    def title(self, title_text):
+        """Set window title"""
+        self.root.title(title_text)
+    
+    def geometry(self, geometry_string):
+        """Set window geometry"""
+        self.root.geometry(geometry_string)
+    
+    def mainloop(self):
+        """Start the Tkinter main loop"""
+        self.root.mainloop()
 
     def on_close(self):
          # Stop the PLC loop and all background timers
@@ -112,11 +123,14 @@ class sw_wayside_controller_ui(tk.Tk):
             self.controller.stop()
 
         # Destroy the UI window cleanly
-        self.destroy()
+        self.root.destroy()
 
-        # End Tkinter’s mainloop completely if no other windows remain
-        if not any(isinstance(w, tk.Tk) and w.winfo_exists() for w in tk._default_root.children.values()):
-            self.quit()
+        # End Tkinter's mainloop completely if no other windows remain
+        if hasattr(self, 'root') and hasattr(self.root, 'winfo_exists'):
+            try:
+                self.root.quit()
+            except:
+                pass
 
     
 
@@ -162,9 +176,9 @@ class sw_wayside_controller_ui(tk.Tk):
 
     def build_maintenance_frame(self):
 
-        # Define a style for the maintenance frame widgets
-        style = ttk.Style()
-        style.configure("Maintenance.TLabel", font=("Arial", 16, "bold"), background="lightgray")
+        # Define styles for the maintenance frame widgets
+        style = ttk.Style(self.root)
+        style.configure("Maintenance.TLabel", font=("Arial", 18, "bold"), background="lightgray")
         style.configure("Maintenance.TCheckbutton", font=("Arial", 12, "bold"), background="lightgray")
         style.configure("display.TLabel", font=("Arial", 12), background="lightgray")
 
@@ -231,7 +245,7 @@ class sw_wayside_controller_ui(tk.Tk):
             widget.destroy()
             
         # Define a style for the input frame widgets
-        style = ttk.Style()
+        style = ttk.Style(self.root)
         style.configure("Input.TLabel", font=("Arial", 16, "bold"), background="white")
         style.configure("TrainData.TLabel", font=("Arial", 10), background="white")
 
@@ -346,7 +360,7 @@ class sw_wayside_controller_ui(tk.Tk):
         # Clear block_labels dict since we're rebuilding all labels
         self.block_labels = {}
         # Define a style for the all blocks frame widgets
-        style = ttk.Style()
+        style = ttk.Style(self.root)
         style.configure("AllBlocks.TLabel", font=("Arial", 16, "bold"), background="white")
         style.configure("smaller.TLabel", font=("Arial", 12), background="white")
 
@@ -376,9 +390,10 @@ class sw_wayside_controller_ui(tk.Tk):
         scroller.pack(side="right", fill="y")
 
 
-        def on_scroll(self, event):
-            event.widget.yview_scroll(int(-1*(event.delta/120)), "units")
-        canvas.bind_all("<MouseWheel>", on_scroll)
+        def on_scroll(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        # Bind only to this canvas, not all widgets
+        canvas.bind("<MouseWheel>", on_scroll)
 
         #message for start because no plc file loaded
         if self.selected_file_str.get() == "N/A":
@@ -582,7 +597,7 @@ class sw_wayside_controller_ui(tk.Tk):
         if set(train_data.keys()) != set(self.train_data_labels.keys()):
             self.build_input_frame()
         
-        self.after(200, self.update_train_data_labels)
+        self.root.after(200, self.update_train_data_labels)
 
     def update_block_labels(self):
         for block_id, labels in self.block_labels.items():
@@ -598,10 +613,13 @@ class sw_wayside_controller_ui(tk.Tk):
             labels["gate"].config(text=f"{data['gate_state']}")
             labels["failure"].config(text=f"{data['Failure']}")
         
+        # Don't rebuild the frame every update - it causes lag
+        # Only call update_selected_block_info to refresh values
         if self.selected_block != -1:
-            self.build_selected_block_frame()
+            self.update_selected_block_info()
 
-        self.after(200, self.update_block_labels)  # Update every second
+        # Reduced frequency to 1000ms (1 second) to prevent scroll lag
+        self.root.after(1000, self.update_block_labels)
 
     def on_block_selected(self, idx: int):
         # If user clicks the same checkbox again, deselect it
@@ -613,12 +631,12 @@ class sw_wayside_controller_ui(tk.Tk):
         else:
             self.selected_block = idx
 
-        # Update the right-side info frame
-        #self.build_selected_block_frame()
+        # Update the right-side info frame - rebuild when selection changes
+        self.build_selected_block_frame()
     
     def build_map_frame(self):
         # Define a style for the map frame widgets
-        style = ttk.Style()
+        style = ttk.Style(self.root)
         style.configure("Map.TLabel", font=("Arial", 16, "bold"), background="white")
         style.configure("smaller.TLabel", font=("Arial", 12), background="white")
 
@@ -628,9 +646,15 @@ class sw_wayside_controller_ui(tk.Tk):
 
         # Load and display track map image
         try:
-            # Get the directory of the current file
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            image_path = os.path.join(current_dir, "track_map.png")
+            # Use absolute path based on this module's location
+            # This works correctly even when module is imported from different locations
+            import sys
+            import inspect
+            
+            # Get the directory of THIS module file
+            module_file = inspect.getfile(inspect.currentframe())
+            module_dir = os.path.dirname(os.path.abspath(module_file))
+            image_path = os.path.join(module_dir, "track_map.png")
             
             # Load image
             image = Image.open(image_path)
@@ -641,12 +665,12 @@ class sw_wayside_controller_ui(tk.Tk):
             max_height = 350
             image.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
             
-            # Convert to PhotoImage
-            photo = ImageTk.PhotoImage(image)
+            # Convert to PhotoImage - store as instance variable to prevent garbage collection
+            self.track_map_photo = ImageTk.PhotoImage(image, master=self.root)
             
             # Create label to display image
-            map_label = ttk.Label(self.map_frame, image=photo)
-            map_label.image = photo  # Keep a reference to prevent garbage collection
+            map_label = ttk.Label(self.map_frame, image=self.track_map_photo)
+            map_label.image = self.track_map_photo  # Keep a reference to prevent garbage collection
             map_label.pack(pady=10, padx=10)
             
         except FileNotFoundError:
@@ -664,32 +688,147 @@ class sw_wayside_controller_ui(tk.Tk):
         #clear frame first
         for widget in self.selected_block_frame.winfo_children():
             widget.destroy()
-        # Define a style for the selected block frame widgets
-        style = ttk.Style()
-        style.configure("SelectedBlock.TLabel", font=("Arial", 16, "bold"), background="white")
-        style.configure("smaller.TLabel", font=("Arial", 12), background="white")
+        
+        # Initialize label references dictionary
+        self.selected_block_labels = {}
+        
+        try:
+            # Define a style for the selected block frame widgets
+            style = ttk.Style(self.root)
+            style.configure("SelectedBlock.TLabel", font=("Arial", 16, "bold"), background="white")
+            style.configure("smaller.TLabel", font=("Arial", 12), background="white")
 
-        # Title label
-        title_label = ttk.Label(self.selected_block_frame, text="Selected Block Info", style="SelectedBlock.TLabel")
-        title_label.pack(pady=10)
+            # Title label
+            title_label = ttk.Label(self.selected_block_frame, text="Selected Block Info", style="SelectedBlock.TLabel")
+            title_label.pack(pady=10)
 
-        # Selected block info display (placeholder)
-        if self.selected_block == -1:
-            self.block_info_label = ttk.Label(self.selected_block_frame, text="Selected block information will be displayed here.", style="smaller.TLabel")
-            self.block_info_label.pack(pady=10)
-        elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLup.py":
-            if self.selected_block <= 79:
-                block = self.selected_block + 1 if self.selected_block < 73 else self.selected_block + 71
+            # Selected block info display (placeholder)
+            if self.selected_block == -1:
+                self.block_info_label = ttk.Label(self.selected_block_frame, text="Selected block information will be displayed here.", style="smaller.TLabel")
+                self.block_info_label.pack(pady=10)
+            elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLup.py":
+                if self.selected_block <= 79:
+                    block = self.selected_block + 1 if self.selected_block < 73 else self.selected_block + 71
+                    sec = self.get_section_letter(block)
+                    self.selected_block_data = self.controller.get_block_data(block)  
+                elif self.selected_block == 151:
+                    block=151
+                    self.selected_block_data = self.controller.get_block_data(block)
+                    
+                elif self.selected_block == 152:
+                    block=0
+                    self.selected_block_data = self.controller.get_block_data(block)
+                
+                id = self.selected_block_data["block_id"]
+                occupied = self.selected_block_data["occupied"]
+                switch_state_enum = self.selected_block_data["switch_state"]
+                light_state_enum = self.selected_block_data["light_state"]
+                gate_state_enum = self.selected_block_data["gate_state"]
+                failure_enum = self.selected_block_data["Failure"]
+
+                switch_state, light_state, gate_state, failure = self.get_all_strings(switch_state_enum, light_state_enum, gate_state_enum, failure_enum,id)
+
+                if self.selected_block <=79:
+                    id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
+                elif self.selected_block ==151:
+                    id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Enter Yard(151)", style="smaller.TLabel")
+                elif self.selected_block ==152:
+                    id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Leave Yard(0)", style="smaller.TLabel")
+                id_label.pack(pady=5)
+                self.selected_block_labels['id'] = id_label
+                
+                occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
+                occupied_label.pack(pady=5)
+                self.selected_block_labels['occupied'] = occupied_label
+                
+                switch_label = ttk.Label(self.selected_block_frame, text=f"Switch State: {switch_state}", style="smaller.TLabel")
+                switch_label.pack(pady=5)
+                self.selected_block_labels['switch'] = switch_label
+                
+                light_label = ttk.Label(self.selected_block_frame, text=f"Light State: {light_state}", style="smaller.TLabel")
+                light_label.pack(pady=5)
+                self.selected_block_labels['light'] = light_label
+                
+                gate_label = ttk.Label(self.selected_block_frame, text=f"Gate State: {gate_state}", style="smaller.TLabel")
+                gate_label.pack(pady=5)
+                self.selected_block_labels['gate'] = gate_label
+                
+                failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
+                failure_label.pack(pady=5)
+                self.selected_block_labels['failure'] = failure_label
+
+            elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py":
+                block = self.selected_block + 70
                 sec = self.get_section_letter(block)
                 self.selected_block_data = self.controller.get_block_data(block)  
-            elif self.selected_block == 151:
-                block=151
-                self.selected_block_data = self.controller.get_block_data(block)
+
+                id = block
+                occupied = self.selected_block_data["occupied"]
+                switch_state_enum = self.selected_block_data["switch_state"]
+                light_state_enum = self.selected_block_data["light_state"]
+                gate_state_enum = self.selected_block_data["gate_state"]
+                failure_enum = self.selected_block_data["Failure"]
+
+                switch_state, light_state, gate_state, failure = self.get_all_strings(switch_state_enum, light_state_enum, gate_state_enum, failure_enum,id)    
+
+                id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
+                id_label.pack(pady=5)
+                self.selected_block_labels['id'] = id_label
                 
-            elif self.selected_block == 152:
-                block=0
-                self.selected_block_data = self.controller.get_block_data(block)
+                occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
+                occupied_label.pack(pady=5)
+                self.selected_block_labels['occupied'] = occupied_label
+                
+                switch_label = ttk.Label(self.selected_block_frame, text=f"Switch State: {switch_state}", style="smaller.TLabel")
+                switch_label.pack(pady=5)
+                self.selected_block_labels['switch'] = switch_label
+                
+                light_label = ttk.Label(self.selected_block_frame, text=f"Light State: {light_state}", style="smaller.TLabel")
+                light_label.pack(pady=5)
+                self.selected_block_labels['light'] = light_label
+                
+                gate_label = ttk.Label(self.selected_block_frame, text=f"Gate State: {gate_state}", style="smaller.TLabel")
+                gate_label.pack(pady=5)
+                self.selected_block_labels['gate'] = gate_label
+                
+                failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
+                failure_label.pack(pady=5)
+                self.selected_block_labels['failure'] = failure_label
             
+        except Exception as e:
+            # If there's an error, display it
+            error_label = ttk.Label(self.selected_block_frame, text=f"Error: {str(e)}", style="smaller.TLabel")
+            error_label.pack(pady=10)
+            print(f"Error in build_selected_block_frame: {e}")
+
+    def update_selected_block_info(self):
+        """Update selected block info without rebuilding the entire frame - prevents lag"""
+        if self.selected_block == -1:
+            return
+        
+        # Check if labels exist
+        if not hasattr(self, 'selected_block_labels') or not self.selected_block_labels:
+            return  # Labels haven't been built yet
+        
+        # Just refresh the data, don't rebuild widgets
+        try:
+            if os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLup.py":
+                if self.selected_block <= 79:
+                    block = self.selected_block + 1 if self.selected_block < 73 else self.selected_block + 71
+                elif self.selected_block == 151:
+                    block = 151
+                elif self.selected_block == 152:
+                    block = 0
+                else:
+                    return
+                self.selected_block_data = self.controller.get_block_data(block)
+            elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py":
+                block = self.selected_block + 70
+                self.selected_block_data = self.controller.get_block_data(block)
+            else:
+                return
+            
+            # Now update the label texts without destroying them
             id = self.selected_block_data["block_id"]
             occupied = self.selected_block_data["occupied"]
             switch_state_enum = self.selected_block_data["switch_state"]
@@ -697,52 +836,18 @@ class sw_wayside_controller_ui(tk.Tk):
             gate_state_enum = self.selected_block_data["gate_state"]
             failure_enum = self.selected_block_data["Failure"]
 
-            switch_state, light_state, gate_state, failure = self.get_all_strings(switch_state_enum, light_state_enum, gate_state_enum, failure_enum,id)
+            switch_state, light_state, gate_state, failure = self.get_all_strings(switch_state_enum, light_state_enum, gate_state_enum, failure_enum, id)
 
-            if self.selected_block <=79:
-                id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
-            elif self.selected_block ==151:
-                id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Enter Yard(151)", style="smaller.TLabel")
-            elif self.selected_block ==152:
-                id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: Leave Yard(0)", style="smaller.TLabel")
-            id_label.pack(pady=5)
-            occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
-            occupied_label.pack(pady=5)
-            switch_label = ttk.Label(self.selected_block_frame, text=f"Switch State: {switch_state}", style="smaller.TLabel")
-            switch_label.pack(pady=5)
-            light_label = ttk.Label(self.selected_block_frame, text=f"Light State: {light_state}", style="smaller.TLabel")
-            light_label.pack(pady=5)
-            gate_label = ttk.Label(self.selected_block_frame, text=f"Gate State: {gate_state}", style="smaller.TLabel")
-            gate_label.pack(pady=5)
-            failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
-            failure_label.pack(pady=5)
-
-        elif os.path.basename(self.selected_file_str.get()) == "Green_Line_PLC_XandLdown.py":
-            block = self.selected_block + 70
-            sec = self.get_section_letter(block)
-            self.selected_block_data = self.controller.get_block_data(block)  
-
-            id = block
-            occupied = self.selected_block_data["occupied"]
-            switch_state_enum = self.selected_block_data["switch_state"]
-            light_state_enum = self.selected_block_data["light_state"]
-            gate_state_enum = self.selected_block_data["gate_state"]
-            failure_enum = self.selected_block_data["Failure"]
-
-            switch_state, light_state, gate_state, failure = self.get_all_strings(switch_state_enum, light_state_enum, gate_state_enum, failure_enum,id)    
-
-            id_label = ttk.Label(self.selected_block_frame, text=f"Block ID: {sec}{block}", style="smaller.TLabel")
-            id_label.pack(pady=5)
-            occupied_label = ttk.Label(self.selected_block_frame, text=f"Occupied: {occupied}", style="smaller.TLabel")
-            occupied_label.pack(pady=5)
-            switch_label = ttk.Label(self.selected_block_frame, text=f"Switch State: {switch_state}", style="smaller.TLabel")
-            switch_label.pack(pady=5)
-            light_label = ttk.Label(self.selected_block_frame, text=f"Light State: {light_state}", style="smaller.TLabel")
-            light_label.pack(pady=5)
-            gate_label = ttk.Label(self.selected_block_frame, text=f"Gate State: {gate_state}", style="smaller.TLabel")
-            gate_label.pack(pady=5)
-            failure_label = ttk.Label(self.selected_block_frame, text=f"Failure: {failure}", style="smaller.TLabel")
-            failure_label.pack(pady=5)
+            # Update existing labels
+            self.selected_block_labels['occupied'].config(text=f"Occupied: {occupied}")
+            self.selected_block_labels['switch'].config(text=f"Switch State: {switch_state}")
+            self.selected_block_labels['light'].config(text=f"Light State: {light_state}")
+            self.selected_block_labels['gate'].config(text=f"Gate State: {gate_state}")
+            self.selected_block_labels['failure'].config(text=f"Failure: {failure}")
+            
+        except Exception as e:
+            print(f"Error updating selected block info: {e}")
+            pass  # Silently ignore errors during update
 
 
 
