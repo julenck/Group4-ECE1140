@@ -331,6 +331,14 @@ class TrainModelUI(ttk.Frame):
 
         # Local mode: write to file (inputs section)
         all_states = safe_read_json(TRAIN_STATES_FILE)
+        
+        # CRITICAL: If read failed and returned empty dict, DON'T write!
+        # This prevents resetting the entire state due to race conditions
+        if not all_states and os.path.exists(TRAIN_STATES_FILE):
+            # File exists but read failed (race condition) - skip this write
+            print(f"[Train Model] Skipping write due to read failure (race condition)")
+            return
+        
         if self.train_id is None:
             # Legacy mode: write to inputs section at root
             if 'inputs' not in all_states:
@@ -338,14 +346,28 @@ class TrainModelUI(ttk.Frame):
             all_states['inputs'].update(updates)
         else:
             key = f"train_{self.train_id}"
+            # Preserve existing outputs section if train exists
             if key not in all_states:
                 all_states[key] = {'inputs': {}, 'outputs': {}}
-            section = all_states[key]
-            if 'inputs' not in section:
-                section['inputs'] = {}
-            # Train Model writes to inputs section (Train Controller reads from here)
-            section['inputs'].update(updates)
-            all_states[key] = section
+            
+            # CRITICAL: Preserve existing outputs - don't overwrite!
+            # Save existing outputs if they exist
+            if 'outputs' in all_states[key]:
+                existing_outputs = all_states[key]['outputs'].copy()
+            else:
+                existing_outputs = None
+            
+            # Update only inputs section
+            if 'inputs' not in all_states[key]:
+                all_states[key]['inputs'] = {}
+            all_states[key]['inputs'].update(updates)
+            
+            # Restore outputs (preserve them!)
+            if existing_outputs is not None:
+                all_states[key]['outputs'] = existing_outputs
+            else:
+                all_states[key]['outputs'] = {}
+                
         safe_write_json(TRAIN_STATES_FILE, all_states)
 
     def write_train_data(self, specs, outputs, td_inputs):
