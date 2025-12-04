@@ -108,35 +108,7 @@ def _read_ctc_json() -> dict:
 
     return defaults
 
-def _safe_read_track_json() -> dict:
-    
-    if not os.path.exists(TRACK_IN_FILE):
-        return {}
-    try:
-        with open(TRACK_IN_FILE, "r", encoding="utf-8") as f:
-            return json.load(f) or {}
-    except Exception as e:
-        print(f"[WARN] Track file read failed: {e}")
-        return {}
 
-def _atomic_merge_write_track_json(patch: dict) -> None:
-    
-    try:
-        base = _safe_read_track_json()
-        base.update(patch or {})
-        d = os.path.dirname(TRACK_OUT_FILE) or "."
-
-        with tempfile.NamedTemporaryFile("w", delete=False, dir=d, encoding="utf-8") as tmp:
-
-            json.dump(base, tmp, indent=2)
-            tmp.flush()
-            os.fsync(tmp.fileno())
-            tmp_path = tmp.name
-
-        os.replace(tmp_path, TRACK_OUT_FILE)
-
-    except Exception as e:
-        print(f"[WARN] Track file write failed: {e}")
 
 def _safe_read_track_json() -> dict:
     """Read the track snapshot file defensively."""
@@ -240,7 +212,7 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
     raw = _read_ctc_json()
     vital_in = _make_vital_in(raw)
 
-    print("[DEBUG] vital_in:", vital_in)
+    # debug: vital_in payload (removed for clean runtime)
 
     track_snapshot = _safe_read_track_json()
 
@@ -286,6 +258,13 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
         combined_occ = [max(a, b) for a, b in zip(combined_occ, occ)]
     _write_ctc_occupancy(combined_occ)
 
+    # Let each controller optionally write wayside->train outputs
+    for controller in controllers:
+        try:
+            controller.write_wayside_to_train()
+        except Exception:
+            pass
+
     root.after(POLL_MS, _poll_json_loop, root, controllers, uis, blocks_by_ws)
 
 
@@ -297,7 +276,7 @@ def main() -> None:
 
     # Build block list for Wayside B 
     blocks_B: List[str] = _discover_blocks_B()
-    print(f"[INFO] blocks_B: {len(blocks_B)} -> {blocks_B[:8]}")    
+    # info: initial block list (removed for clean runtime)
 
     root = tk.Tk()
 
@@ -305,9 +284,21 @@ def main() -> None:
     root.geometry("900x520")
 
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
+    # Attempt to load and start a default PLC for this wayside (non-fatal)
+    try:
+        ws_b_ctrl.load_plc("Green_Line_PLC_XandLup.py")
+        ws_b_ctrl.start_plc()
+    except Exception:
+        pass
+
     ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Wayside B")
     ws_b_ui.pack(fill="both", expand=True)
     ws_b_ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
+    # Start multi-train processing loop (background)
+    try:
+        ws_b_ctrl.start_trains(period_s=1.0)
+    except Exception:
+        pass
 
     # Start polling loop
     controllers = [ws_b_ctrl]
