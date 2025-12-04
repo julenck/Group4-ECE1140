@@ -435,35 +435,16 @@ class TrainManager:
             print(f"Warning: failed to remove train_{train_id} from train_data.json: {e}")
 
     def _update_train_data_outputs(self, train_id: int, outputs: dict, state: dict):
-        """Update the per-train outputs in Train Model/train_data.json with latest model values."""
-        train_data = self._safe_read_json(self.train_data_file)
-        train_key = f"train_{train_id}"
-        if train_key not in train_data:
-            # If missing, initialize with index = train_id-1
-            self._initialize_train_data_entry(train_id, max(0, train_id - 1))
-            train_data = self._safe_read_json(self.train_data_file)
-
-        entry = train_data.get(train_key, {})
-        entry_outputs = entry.get("outputs", {})
-
-        # Map outputs we have
-        entry_outputs.update({
-            "velocity_mph": outputs.get("velocity_mph", 0.0),
-            "acceleration_ftps2": outputs.get("acceleration_ftps2", 0.0),
-            "position_yds": outputs.get("position_yds", 0.0),
-            "authority_yds": outputs.get("authority_yds", 0.0),
-            "station_name": outputs.get("station_name", entry_outputs.get("station_name", "Unknown")),
-            "next_station": outputs.get("next_station", entry_outputs.get("next_station", "Unknown")),
-            "left_door_open": outputs.get("left_door_open", False),
-            "right_door_open": outputs.get("right_door_open", False),
-            "temperature_F": outputs.get("temperature_F", entry_outputs.get("temperature_F", 68.0)),
-            "door_side": state.get("station_side", entry_outputs.get("door_side", "Right")),
-            # keep boarding/passengers counts if you manage elsewhere
-        })
-
-        entry["outputs"] = entry_outputs
-        train_data[train_key] = entry
-        self._safe_write_json(self.train_data_file, train_data)
+        """Update the per-train outputs in Train Model/train_data.json with latest model values.
+        
+        NOTE: This function should NOT overwrite data that Train Model is managing.
+        Train Manager should only initialize the entry once, then let Train Model handle updates.
+        This function is now a NO-OP to prevent conflicts.
+        """
+        # DO NOT write to train_data.json during operation!
+        # The Train Model owns this file and writes to it.
+        # Train Manager only initializes it once when train is created.
+        pass
     
     def remove_train(self, train_id: int) -> bool:
         """Remove a train from the manager.
@@ -589,15 +570,22 @@ class TrainManager:
         
         This method should be called periodically (e.g., by a timer) to update
         the simulation for all active trains.
+        
+        NOTE: If trains have their own UIs (model_ui or controller_ui), those UIs
+        handle their own update loops. This method only updates trains without UIs.
         """
         for train_id, train_pair in self.trains.items():
+            # Skip trains that have UIs - they handle their own updates
+            if train_pair.model_ui is not None or train_pair.controller_ui is not None:
+                continue
+            
             # Get current state for this train
             state = self.get_train_state(train_id)
             
             if state is None:
                 continue
             
-            # Skip if controller is None (remote controller or managed by own UI)
+            # Skip if controller is None (remote controller)
             if train_pair.controller is None:
                 continue
             

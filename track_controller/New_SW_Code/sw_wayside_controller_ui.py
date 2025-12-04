@@ -468,13 +468,13 @@ class sw_wayside_controller_ui(tk.Tk):
                     if desired['occupied']:
                         occupied_label.configure(background="lightgreen")
                     occupied_label.grid(row=i+2, column=2, padx=5, pady=5)  
-                    switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
+                    switch_label = ttk.Label(self.scrollable_frame, text=f"{desired['switch_state']}", style="smaller.TLabel")
                     switch_label.grid(row=i+2, column=3, padx=5, pady= 5)
-                    light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                    light_label = ttk.Label(self.scrollable_frame, text=f"{desired['light_state']}", style="smaller.TLabel")
                     light_label.grid(row=i+2, column=4, padx=5, pady=5)
-                    gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"] }", style="smaller.TLabel")
+                    gate_label = ttk.Label(self.scrollable_frame, text=f"{desired['gate_state']}", style="smaller.TLabel")
                     gate_label.grid(row=i+2, column=5, padx=5, pady=5)
-                    failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")  
+                    failure_label = ttk.Label(self.scrollable_frame, text=f"{desired['Failure']}", style="smaller.TLabel")  
                     failure_label.grid(row=i+2, column=6, padx=5, pady=5)
 
                     self.block_labels[block_num] = {
@@ -504,13 +504,13 @@ class sw_wayside_controller_ui(tk.Tk):
                 if desired['occupied']:
                     occupied_label.configure(background="lightgreen")
                 occupied_label.grid(row=82, column=2, padx=5, pady=5)
-                switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")
+                switch_label = ttk.Label(self.scrollable_frame, text=f"{desired['switch_state']}", style="smaller.TLabel")
                 switch_label.grid(row=82, column=3, padx=5, pady=5)
-                light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
+                light_label = ttk.Label(self.scrollable_frame, text=f"{desired['light_state']}", style="smaller.TLabel")
                 light_label.grid(row=82, column=4, padx=5, pady=5)
-                gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"]}", style="smaller.TLabel")
+                gate_label = ttk.Label(self.scrollable_frame, text=f"{desired['gate_state']}", style="smaller.TLabel")
                 gate_label.grid(row=82, column=5, padx=5, pady=5)
-                failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")
+                failure_label = ttk.Label(self.scrollable_frame, text=f"{desired['Failure']}", style="smaller.TLabel")
                 failure_label.grid(row=82, column=6, padx=5, pady=5)
 
                 self.block_labels[151] = {
@@ -544,15 +544,15 @@ class sw_wayside_controller_ui(tk.Tk):
                     occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired['occupied']}", style="smaller.TLabel")
                     if desired['occupied']:
                         occupied_label.configure(background="lightgreen")
-                    occupied_label.grid(row=i+1, column=2, padx=5, pady=5)  
-                    switch_label = ttk.Label(self.scrollable_frame, text=f"{desired["switch_state"]}", style="smaller.TLabel")  
-                    switch_label.grid(row=i+1, column=3, padx=5, pady= 5)
-                    light_label = ttk.Label(self.scrollable_frame, text=f"{desired["light_state"]}", style="smaller.TLabel")
-                    light_label.grid(row=i+1, column=4, padx=5, pady=5)
-                    gate_label = ttk.Label(self.scrollable_frame, text=f"{desired["gate_state"] }", style="smaller.TLabel")
-                    gate_label.grid(row=i+1, column=5, padx=5, pady=5)
-                    failure_label = ttk.Label(self.scrollable_frame, text=f"{desired["Failure"]}", style="smaller.TLabel")  
-                    failure_label.grid(row=i+1, column=6, padx=5, pady=5)
+                    occupied_label.grid(row=i+2, column=2, padx=5, pady=5)  
+                    switch_label = ttk.Label(self.scrollable_frame, text=f"{desired['switch_state']}", style="smaller.TLabel")  
+                    switch_label.grid(row=i+2, column=3, padx=5, pady= 5)
+                    light_label = ttk.Label(self.scrollable_frame, text=f"{desired['light_state']}", style="smaller.TLabel")
+                    light_label.grid(row=i+2, column=4, padx=5, pady=5)
+                    gate_label = ttk.Label(self.scrollable_frame, text=f"{desired['gate_state']}", style="smaller.TLabel")
+                    gate_label.grid(row=i+2, column=5, padx=5, pady=5)
+                    failure_label = ttk.Label(self.scrollable_frame, text=f"{desired['Failure']}", style="smaller.TLabel")  
+                    failure_label.grid(row=i+2, column=6, padx=5, pady=5)
 
                     self.block_labels[block_num] = {
                         "occupied": occupied_label,
