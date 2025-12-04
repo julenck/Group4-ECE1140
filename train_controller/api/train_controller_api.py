@@ -75,29 +75,42 @@ class train_controller_api:
         # Legacy flat structure for backward compatibility
         self.train_states = {**self.default_inputs, **self.default_outputs}
         
-        # Initialize state file - ALWAYS reset kp/ki to None on restart
-        # This ensures train won't move until values are locked through UI
-        try:
-            print(f"[API INIT] Initializing train_controller_api for train_id={train_id}")
-            # Initialize default state with matched values
-            initial_state = self.train_states.copy()
-            initial_state['driver_velocity'] = initial_state['commanded_speed']
-            initial_state['set_temperature'] = initial_state['train_temperature']
-            # Ensure kp and ki are None (must be set through UI)
-            initial_state['kp'] = None
-            initial_state['ki'] = None
-            print(f"[API INIT] Setting kp={initial_state['kp']}, ki={initial_state['ki']}")
-            self.save_state(initial_state)
-            print(f"[API INIT] State saved successfully")
-        except Exception as e:
-            print(f"[API INIT] Error initializing state file: {e}")
-            # Ensure we have a valid state file with proper initialization
-            initial_state = self.train_states.copy()
-            initial_state['driver_velocity'] = initial_state['commanded_speed']
-            initial_state['set_temperature'] = initial_state['train_temperature']
-            initial_state['kp'] = None
-            initial_state['ki'] = None
-            self.save_state(initial_state)
+        # Check if train state already exists before initializing
+        # Only initialize if this is a NEW train
+        train_exists = False
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, 'r') as f:
+                    existing_states = json.load(f)
+                    if self.train_id is not None:
+                        train_key = f"train_{self.train_id}"
+                        train_exists = train_key in existing_states
+                    else:
+                        train_exists = bool(existing_states)
+            except:
+                pass
+        
+        # Only initialize state file if train doesn't exist yet
+        # This prevents overwriting existing state (lights, power_command, etc.)
+        if not train_exists:
+            try:
+                print(f"[API INIT] Initializing NEW train_controller_api for train_id={train_id}")
+                # Initialize default state with matched values
+                initial_state = self.train_states.copy()
+                initial_state['driver_velocity'] = initial_state['commanded_speed']
+                initial_state['set_temperature'] = initial_state['train_temperature']
+                # Ensure kp and ki are None (must be set through UI)
+                initial_state['kp'] = None
+                initial_state['ki'] = None
+                initial_state['interior_lights'] = True  # Default lights ON for new trains
+                initial_state['exterior_lights'] = True
+                print(f"[API INIT] Setting kp={initial_state['kp']}, ki={initial_state['ki']}")
+                self.save_state(initial_state)
+                print(f"[API INIT] State saved successfully")
+            except Exception as e:
+                print(f"[API INIT] Error initializing state file: {e}")
+        else:
+            print(f"[API INIT] Train {train_id} already exists, preserving existing state")
 
     def update_state(self, state_dict: dict) -> None:
         """Update train state with new values.
@@ -174,6 +187,10 @@ class train_controller_api:
         """
         with _file_lock:
             try:
+                # Validate state parameter
+                if not isinstance(state, dict):
+                    raise ValueError(f"save_state() requires dict, got {type(state)}")
+                
                 # Ensure all default fields are present
                 complete_state = self.train_states.copy()
                 complete_state.update(state)
@@ -191,13 +208,30 @@ class train_controller_api:
                     else:
                         all_states = {}
                     
+                    # Clean up legacy flat fields - only keep train_X entries
+                    keys_to_remove = [k for k in all_states.keys() if not k.startswith('train_')]
+                    for k in keys_to_remove:
+                        del all_states[k]
+                    
                     train_key = f"train_{self.train_id}"
                     
-                    # Create clean inputs/outputs structure (no flat duplicate fields)
-                    inputs = self.default_inputs.copy()
-                    outputs = self.default_outputs.copy()
+                    # Preserve existing values, then merge with new state
+                    # Start from existing data if available, otherwise use defaults
+                    if train_key in all_states and isinstance(all_states[train_key], dict):
+                        inputs = all_states[train_key].get('inputs', {}).copy()
+                        outputs = all_states[train_key].get('outputs', {}).copy()
+                        # Ensure all default fields exist (for new fields added later)
+                        for k, v in self.default_inputs.items():
+                            if k not in inputs:
+                                inputs[k] = v
+                        for k, v in self.default_outputs.items():
+                            if k not in outputs:
+                                outputs[k] = v
+                    else:
+                        inputs = self.default_inputs.copy()
+                        outputs = self.default_outputs.copy()
                     
-                    # Sort complete_state into inputs and outputs
+                    # Update with new values from complete_state
                     for key, value in complete_state.items():
                         # Skip nested train_X sections and train_id
                         if key.startswith('train_') and isinstance(value, dict):
@@ -242,10 +276,11 @@ class train_controller_api:
                         json.dump(all_states, f, indent=4)
 
             except Exception as e:
-                print(f"Error saving state: {e}")
-                # If all else fails, try direct write
-                with open(self.state_file, 'w') as f:
-                    json.dump(self.train_states.copy(), f, indent=4)
+                print(f"[ERROR] Failed to save train state: {e}")
+                print(f"[ERROR] train_id={self.train_id}, state keys={list(state.keys())}")
+                import traceback
+                traceback.print_exc()
+                # DO NOT write corrupted data - preserve existing file
 
     def reset_state(self) -> None:
         """Reset train state to default values."""
@@ -292,9 +327,9 @@ class train_controller_api:
             outputs = data.get("outputs", {})
 
         mapped_data = {
-            'commanded_speed': outputs.get('commanded_speed', 0.0),
-            'commanded_authority': outputs.get('authority_yds', 0.0),
-            'speed_limit': outputs.get('speed_limit', 0.0),
+            'commanded_speed': inputs.get('commanded speed', 0.0),
+            'commanded_authority': inputs.get('commanded authority', 0.0),
+            'speed_limit': inputs.get('speed limit', 0.0),
             'train_velocity': outputs.get('velocity_mph', 0.0),
             'train_temperature': outputs.get('temperature_F', 0.0),
             'train_model_engine_failure': inputs.get('train_model_engine_failure', False),
