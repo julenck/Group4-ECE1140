@@ -75,7 +75,7 @@ class sw_wayside_controller:
             self.visible_blocks = set(range(0, 152))
 
         # Load track data from Excel file
-        self.block_graph = {}  # Maps block number to {length, forward_next, reverse_next, bidirectional}
+        self.block_graph = {}  # Maps block number to {length, forward_next, reverse_next, bidirectional, beacon data}
         self.block_distances = {}  # Maps block number to cumulative distance
         self.block_lengths = {}  # Maps block number to individual block length
         self.block_speed_limits = {}  # Maps block number to speed limit in m/s
@@ -127,6 +127,16 @@ class sw_wayside_controller:
                     has_station = row[6] if len(row) > 6 else '0'  # 7th column for station indicator
                     speed_limit_ms = row[8] if len(row) > 8 else '0'  # 9th column (index 8) for speed limit in m/s
                     
+                    # Beacon data for forward direction (columns 10, 11, 12 -> indices 9, 10, 11)
+                    forward_has_beacon = row[9] if len(row) > 9 else '0'
+                    forward_current_station = row[10] if len(row) > 10 else ''
+                    forward_next_station = row[11] if len(row) > 11 else ''
+                    
+                    # Beacon data for reverse direction (columns 13, 14, 15 -> indices 12, 13, 14)
+                    reverse_has_beacon = row[12] if len(row) > 12 else '0'
+                    reverse_current_station = row[13] if len(row) > 13 else ''
+                    reverse_next_station = row[14] if len(row) > 14 else ''
+                    
                     if block_num and block_num.strip():
                         try:
                             block_num = int(block_num)
@@ -160,7 +170,17 @@ class sw_wayside_controller:
                                 'forward_next': forward_next,
                                 'reverse_next': reverse_next,
                                 'bidirectional': bidirectional,
-                                'cumulative_distance': cumulative_distance
+                                'cumulative_distance': cumulative_distance,
+                                'forward_beacon': {
+                                    'has_beacon': forward_has_beacon.strip() == '1',
+                                    'current_station': forward_current_station.strip(),
+                                    'next_station': forward_next_station.strip()
+                                },
+                                'reverse_beacon': {
+                                    'has_beacon': reverse_has_beacon.strip() == '1',
+                                    'current_station': reverse_current_station.strip(),
+                                    'next_station': reverse_next_station.strip()
+                                }
                             }
                             self.block_distances[block_num] = cumulative_distance
                             self.block_lengths[block_num] = length
@@ -1016,6 +1036,19 @@ class sw_wayside_controller:
                     data[train_id]["Commanded Authority"] = cmd_auth_yds
                     # Write actual train speed from train_data.json (also convert to mph)
                     data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0) * 2.23694
+                    
+                    # Update beacon data based on train direction and current block
+                    if train_pos in self.block_graph:
+                        train_direction = self.train_direction.get(train_id, 'forward')
+                        block_data = self.block_graph[train_pos]
+                        
+                        if train_direction == 'forward' and block_data['forward_beacon']['has_beacon']:
+                            data[train_id]["Beacon"]["Current Station"] = block_data['forward_beacon']['current_station']
+                            data[train_id]["Beacon"]["Next Station"] = block_data['forward_beacon']['next_station']
+                        elif train_direction == 'reverse' and block_data['reverse_beacon']['has_beacon']:
+                            data[train_id]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
+                            data[train_id]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
+                        # If no beacon at current block, keep existing beacon data (don't clear it)
                 # else: don't update - other controller is managing this train
 
         with open(self.train_comm_file, 'w') as f:
