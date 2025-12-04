@@ -131,9 +131,26 @@ class train_controller_api:
         with _file_lock:
             try:
                 if os.path.exists(self.state_file):
-                    with open(self.state_file, 'r') as f:
+                    # Retry up to 3 times to handle race conditions with other processes
+                    for attempt in range(3):
                         try:
-                            all_states = json.load(f)
+                            with open(self.state_file, 'r') as f:
+                                all_states = json.load(f)
+                                break  # Success!
+                        except json.JSONDecodeError as e:
+                            if attempt < 2:  # Retry on first 2 attempts
+                                import time
+                                time.sleep(0.01)  # Wait 10ms before retry
+                                continue
+                            else:  # Final attempt failed
+                                print(f"[WARNING] JSON decode error after 3 attempts (race condition): {e}")
+                                return self.train_states.copy()
+                    else:
+                        # This shouldn't happen, but just in case
+                        return self.train_states.copy()
+                    
+                    # Successfully loaded all_states, now process it
+                    try:
                             
                             # If train_id is specified, read from train_X section
                             if self.train_id is not None:
@@ -168,11 +185,11 @@ class train_controller_api:
                                     result = self.train_states.copy()
                                     result.update(all_states)
                                     return result
-                        except json.JSONDecodeError as e:
-                            print(f"Error reading state file: {e}")
-                            # Reset to default state if file is corrupted
-                            self.save_state(self.train_states)
-                return self.train_states.copy()
+                    except Exception as e:
+                        print(f"[WARNING] Error processing state: {e}")
+                        return self.train_states.copy()
+                else:
+                    return self.train_states.copy()
             except Exception as e:
                 print(f"Error accessing state file: {e}")
                 return self.train_states.copy()
@@ -191,11 +208,8 @@ class train_controller_api:
                 if not isinstance(state, dict):
                     raise ValueError(f"save_state() requires dict, got {type(state)}")
                 
-                # Ensure all default fields are present
-                complete_state = self.train_states.copy()
-                complete_state.update(state)
-                if self.train_id is not None:
-                    complete_state['train_id'] = self.train_id
+                # Use state as-is (no merging with defaults - preserves existing values)
+                complete_state = state
                 
                 # Create directory if it doesn't exist
                 os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
@@ -215,30 +229,27 @@ class train_controller_api:
                     
                     train_key = f"train_{self.train_id}"
                     
-                    # Preserve existing values, then merge with new state
-                    # Start from existing data if available, otherwise use defaults
+                    # Read existing state from file (if it exists), otherwise start with defaults
                     if train_key in all_states and isinstance(all_states[train_key], dict):
-                        inputs = all_states[train_key].get('inputs', {}).copy()
-                        outputs = all_states[train_key].get('outputs', {}).copy()
-                        # Ensure all default fields exist (for new fields added later)
-                        for k, v in self.default_inputs.items():
-                            if k not in inputs:
-                                inputs[k] = v
-                        for k, v in self.default_outputs.items():
-                            if k not in outputs:
-                                outputs[k] = v
+                        existing = all_states[train_key]
+                        if 'inputs' in existing and 'outputs' in existing:
+                            inputs = existing['inputs'].copy()
+                            outputs = existing['outputs'].copy()
+                        else:
+                            inputs = self.default_inputs.copy()
+                            outputs = self.default_outputs.copy()
                     else:
                         inputs = self.default_inputs.copy()
                         outputs = self.default_outputs.copy()
                     
-                    # Update with new values from complete_state
+                    # Update ONLY the fields present in complete_state (preserves other fields)
                     for key, value in complete_state.items():
                         # Skip nested train_X sections and train_id
                         if key.startswith('train_') and isinstance(value, dict):
                             continue
                         elif key == 'train_id':
                             continue
-                        # Categorize into inputs or outputs
+                        # Categorize into inputs or outputs and update
                         elif key in self.default_inputs:
                             inputs[key] = value
                         elif key in self.default_outputs:
@@ -250,6 +261,7 @@ class train_controller_api:
                         'outputs': outputs
                     }
                     
+                    # Direct write (file lock prevents race conditions)
                     with open(self.state_file, 'w') as f:
                         json.dump(all_states, f, indent=4)
                 else:
@@ -272,6 +284,7 @@ class train_controller_api:
                         elif key in self.default_outputs:
                             all_states['outputs'][key] = value
                     
+                    # Direct write (file lock prevents race conditions)
                     with open(self.state_file, 'w') as f:
                         json.dump(all_states, f, indent=4)
 

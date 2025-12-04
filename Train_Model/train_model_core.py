@@ -23,12 +23,25 @@ WAYSIDE_TO_TRAIN_FILE = os.path.join(PARENT_DIR, "track_controller", "New_SW_Cod
 
 # === Safe IO ===
 def safe_read_json(path):
-    try:
-        with open(path, "r") as f:
-            data = json.load(f)
-            return data if isinstance(data, (dict, list)) else {}
-    except Exception:
-        return {}
+    # Retry up to 3 times to handle race conditions
+    for attempt in range(3):
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+                return data if isinstance(data, (dict, list)) else {}
+        except json.JSONDecodeError:
+            # Race condition - file was being written
+            if attempt < 2:
+                time.sleep(0.02)  # Wait 20ms before retry
+                continue
+            else:
+                print(f"[WARNING] Failed to read {path} after 3 attempts (race condition)")
+                return {}
+        except FileNotFoundError:
+            return {}
+        except Exception as e:
+            print(f"[WARNING] Unexpected error reading {path}: {e}")
+            return {}
 
 
 def safe_write_json(path, data):
@@ -36,6 +49,15 @@ def safe_write_json(path, data):
     out_dir = os.path.dirname(os.path.abspath(path))
     if out_dir and not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
+    
+    # For train_states.json, use direct write (Train Controller also uses direct write)
+    # Atomic writes cause too many PermissionErrors on Windows with multiple processes
+    if "train_states.json" in path:
+        with open(path, "w") as f:
+            f.write(payload)
+        return
+    
+    # For other files (train_data.json, etc), use atomic write with fallback
     tmp = path + ".tmp"
     for attempt in range(3):
         try:
@@ -52,6 +74,7 @@ def safe_write_json(path, data):
             time.sleep(0.1 * (attempt + 1))
         except Exception:
             break
+    # Fallback to direct write
     with open(path, "w") as f:
         f.write(payload)
 

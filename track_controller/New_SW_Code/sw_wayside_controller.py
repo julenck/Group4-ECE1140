@@ -504,6 +504,17 @@ class sw_wayside_controller:
         ttr = []
         
         for cmd_train in self.cmd_trains:
+            # Check if CTC has set Active = 0 (train should stop at station for dwell time)
+            if cmd_train in self.active_trains:
+                is_active = self.active_trains[cmd_train].get("Active", 0)
+                if is_active == 0:
+                    # CTC deactivated train - set speed and authority to 0
+                    self.cmd_trains[cmd_train]["cmd auth"] = 0
+                    self.cmd_trains[cmd_train]["cmd speed"] = 0
+                    # Don't remove from cmd_trains yet - CTC will reactivate with new authority
+                    # Continue to next train
+                    continue
+            
             auth = self.cmd_trains[cmd_train]["cmd auth"]
             speed = self.cmd_trains[cmd_train]["cmd speed"]
             pos = self.cmd_trains[cmd_train]["pos"]

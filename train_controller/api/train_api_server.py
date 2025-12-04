@@ -82,61 +82,70 @@ def sync_train_data_to_states():
                     inputs = section.get("inputs", {})
                     outputs = section.get("outputs", {})
                     
-                    # Ensure train exists in states
+                    # Ensure train exists in states with proper inputs/outputs structure
                     if key not in train_states:
                         # Extract train_id from key
                         train_id = int(key.split("_")[1])
                         train_states[key] = {
-                            "train_id": train_id,
-                            "commanded_speed": 0.0,
-                            "commanded_authority": 0.0,
-                            "speed_limit": 0.0,
-                            "train_velocity": 0.0,
-                            "next_stop": "",
-                            "station_side": "Right",
-                            "train_temperature": 70.0,
-                            "train_model_engine_failure": False,
-                            "train_model_signal_failure": False,
-                            "train_model_brake_failure": False,
-                            "train_controller_engine_failure": False,
-                            "train_controller_signal_failure": False,
-                            "train_controller_brake_failure": False,
-                            "manual_mode": False,
-                            "driver_velocity": 0.0,
-                            "service_brake": False,
-                            "right_door": False,
-                            "left_door": False,
-                            "interior_lights": True,
-                            "exterior_lights": True,
-                            "set_temperature": 70.0,
-                            "temperature_up": False,
-                            "temperature_down": False,
-                            "announcement": "",
-                            "announce_pressed": False,
-                            "emergency_brake": False,
-                            "kp": 0.0,
-                            "ki": 0.0,
-                            "engineering_panel_locked": False,
-                            "power_command": 0.0,
-                            "current_station": "",
-                            "beacon_read_blocked": False
+                            "inputs": {
+                                "commanded_speed": 0.0,
+                                "commanded_authority": 0.0,
+                                "speed_limit": 0.0,
+                                "train_velocity": 0.0,
+                                "next_stop": "",
+                                "station_side": "Right",
+                                "train_temperature": 70.0,
+                                "train_model_engine_failure": False,
+                                "train_model_signal_failure": False,
+                                "train_model_brake_failure": False,
+                                "train_controller_engine_failure": False,
+                                "train_controller_signal_failure": False,
+                                "train_controller_brake_failure": False,
+                                "current_station": "",
+                                "beacon_read_blocked": False
+                            },
+                            "outputs": {
+                                "manual_mode": False,
+                                "driver_velocity": 0.0,
+                                "service_brake": False,
+                                "right_door": False,
+                                "left_door": False,
+                                "interior_lights": True,
+                                "exterior_lights": True,
+                                "set_temperature": 70.0,
+                                "temperature_up": False,
+                                "temperature_down": False,
+                                "announcement": "",
+                                "announce_pressed": False,
+                                "emergency_brake": False,
+                                "kp": None,
+                                "ki": None,
+                                "engineering_panel_locked": False,
+                                "power_command": 0.0
+                            }
                         }
                     
-                    # Update train_states with inputs from train_data
-                    # (same mapping as train_controller_api.py update_from_train_data)
-                    train_states[key]["commanded_speed"] = inputs.get("commanded speed", 0.0)
-                    train_states[key]["commanded_authority"] = inputs.get("commanded authority", 0.0)
-                    train_states[key]["speed_limit"] = inputs.get("speed limit", 0.0)
-                    train_states[key]["train_velocity"] = outputs.get("velocity_mph", 0.0)
-                    train_states[key]["train_temperature"] = outputs.get("temperature_F", 70.0)
-                    train_states[key]["train_model_engine_failure"] = inputs.get("train_model_engine_failure", False)
-                    train_states[key]["train_model_signal_failure"] = inputs.get("train_model_signal_failure", False)
-                    train_states[key]["train_model_brake_failure"] = inputs.get("train_model_brake_failure", False)
+                    # Ensure inputs/outputs structure exists (handle legacy flat format)
+                    if "inputs" not in train_states[key]:
+                        train_states[key] = {
+                            "inputs": {},
+                            "outputs": {}
+                        }
+                    
+                    # Update ONLY inputs section with train_data (preserve outputs!)
+                    train_states[key]["inputs"]["commanded_speed"] = inputs.get("commanded speed", 0.0)
+                    train_states[key]["inputs"]["commanded_authority"] = inputs.get("commanded authority", 0.0)
+                    train_states[key]["inputs"]["speed_limit"] = inputs.get("speed limit", 0.0)
+                    train_states[key]["inputs"]["train_velocity"] = outputs.get("velocity_mph", 0.0)
+                    train_states[key]["inputs"]["train_temperature"] = outputs.get("temperature_F", 70.0)
+                    train_states[key]["inputs"]["train_model_engine_failure"] = inputs.get("train_model_engine_failure", False)
+                    train_states[key]["inputs"]["train_model_signal_failure"] = inputs.get("train_model_signal_failure", False)
+                    train_states[key]["inputs"]["train_model_brake_failure"] = inputs.get("train_model_brake_failure", False)
                     
                     # Also sync beacon info (current_station, next_station, side_door)
-                    train_states[key]["current_station"] = inputs.get("current station", "")
-                    train_states[key]["next_stop"] = inputs.get("next station", "")
-                    train_states[key]["station_side"] = inputs.get("side_door", "Right")
+                    train_states[key]["inputs"]["current_station"] = inputs.get("current station", "")
+                    train_states[key]["inputs"]["next_stop"] = inputs.get("next station", "")
+                    train_states[key]["inputs"]["station_side"] = inputs.get("side_door", "Right")
             
             # Write updated states back
             write_json_file(TRAIN_STATES_FILE, train_states)
@@ -171,42 +180,69 @@ def update_train_state(train_id):
     data = read_json_file(TRAIN_STATES_FILE)
     train_key = f"train_{train_id}"
     
-    # Initialize train if it doesn't exist
+    # Define which fields go in inputs vs outputs
+    input_fields = {'commanded_speed', 'commanded_authority', 'speed_limit', 'train_velocity', 
+                    'current_station', 'next_stop', 'station_side', 'train_temperature',
+                    'train_model_engine_failure', 'train_model_signal_failure', 
+                    'train_model_brake_failure', 'train_controller_engine_failure',
+                    'train_controller_signal_failure', 'train_controller_brake_failure',
+                    'beacon_read_blocked'}
+    output_fields = {'manual_mode', 'driver_velocity', 'service_brake', 'right_door', 'left_door',
+                     'interior_lights', 'exterior_lights', 'set_temperature', 'temperature_up',
+                     'temperature_down', 'announcement', 'announce_pressed', 'emergency_brake',
+                     'kp', 'ki', 'engineering_panel_locked', 'power_command'}
+    
+    # Initialize train if it doesn't exist with proper structure
     if train_key not in data:
         data[train_key] = {
-            "train_id": train_id,
-            "commanded_speed": 0.0,
-            "commanded_authority": 0.0,
-            "speed_limit": 0.0,
-            "train_velocity": 0.0,
-            "driver_velocity": 0.0,
-            "service_brake": False,
-            "emergency_brake": False,
-            "power_command": 0.0,
-            "kp": 0.0,
-            "ki": 0.0,
-            "next_stop": "Station A",
-            "station_side": "Right",
-            "train_temperature": 70.0,
-            "set_temperature": 70.0,
-            "engine_failure": False,
-            "signal_failure": False,
-            "brake_failure": False,
-            "manual_mode": False,
-            "right_door": False,
-            "left_door": False,
-            "interior_lights": True,
-            "exterior_lights": True,
-            "temperature_up": False,
-            "temperature_down": False,
-            "announcement": "",
-            "announce_pressed": False,
-            "engineering_panel_locked": False
+            "inputs": {
+                "commanded_speed": 0.0,
+                "commanded_authority": 0.0,
+                "speed_limit": 0.0,
+                "train_velocity": 0.0,
+                "next_stop": "",
+                "station_side": "Right",
+                "train_temperature": 70.0,
+                "current_station": "",
+                "train_model_engine_failure": False,
+                "train_model_signal_failure": False,
+                "train_model_brake_failure": False,
+                "train_controller_engine_failure": False,
+                "train_controller_signal_failure": False,
+                "train_controller_brake_failure": False,
+                "beacon_read_blocked": False
+            },
+            "outputs": {
+                "manual_mode": False,
+                "driver_velocity": 0.0,
+                "service_brake": False,
+                "emergency_brake": False,
+                "power_command": 0.0,
+                "kp": None,
+                "ki": None,
+                "right_door": False,
+                "left_door": False,
+                "interior_lights": True,
+                "exterior_lights": True,
+                "set_temperature": 70.0,
+                "temperature_up": False,
+                "temperature_down": False,
+                "announcement": "",
+                "announce_pressed": False,
+                "engineering_panel_locked": False
+            }
         }
     
-    # Update with provided values
-    data[train_key].update(updates)
-    data[train_key]["train_id"] = train_id  # Ensure train_id is always set
+    # Ensure inputs/outputs structure exists
+    if "inputs" not in data[train_key]:
+        data[train_key] = {"inputs": {}, "outputs": {}}
+    
+    # Update fields in appropriate sections
+    for key, value in updates.items():
+        if key in input_fields:
+            data[train_key]["inputs"][key] = value
+        elif key in output_fields:
+            data[train_key]["outputs"][key] = value
     
     write_json_file(TRAIN_STATES_FILE, data)
     
@@ -230,34 +266,42 @@ def reset_train_state(train_id):
     train_key = f"train_{train_id}"
     
     default_state = {
-        "train_id": train_id,
-        "commanded_speed": 0.0,
-        "commanded_authority": 0.0,
-        "speed_limit": 0.0,
-        "train_velocity": 0.0,
-        "next_stop": "Station A",
-        "station_side": "Right",
-        "train_temperature": 70.0,
-        "engine_failure": False,
-        "signal_failure": False,
-        "brake_failure": False,
-        "manual_mode": False,
-        "driver_velocity": 0.0,
-        "service_brake": False,
-        "right_door": False,
-        "left_door": False,
-        "interior_lights": True,
-        "exterior_lights": True,
-        "set_temperature": 70.0,
-        "temperature_up": False,
-        "temperature_down": False,
-        "announcement": "",
-        "announce_pressed": False,
-        "emergency_brake": False,
-        "kp": 0.0,
-        "ki": 0.0,
-        "engineering_panel_locked": False,
-        "power_command": 0.0
+        "inputs": {
+            "commanded_speed": 0.0,
+            "commanded_authority": 0.0,
+            "speed_limit": 0.0,
+            "train_velocity": 0.0,
+            "next_stop": "",
+            "station_side": "Right",
+            "train_temperature": 70.0,
+            "current_station": "",
+            "train_model_engine_failure": False,
+            "train_model_signal_failure": False,
+            "train_model_brake_failure": False,
+            "train_controller_engine_failure": False,
+            "train_controller_signal_failure": False,
+            "train_controller_brake_failure": False,
+            "beacon_read_blocked": False
+        },
+        "outputs": {
+            "manual_mode": False,
+            "driver_velocity": 0.0,
+            "service_brake": False,
+            "emergency_brake": False,
+            "right_door": False,
+            "left_door": False,
+            "interior_lights": True,
+            "exterior_lights": True,
+            "set_temperature": 70.0,
+            "temperature_up": False,
+            "temperature_down": False,
+            "announcement": "",
+            "announce_pressed": False,
+            "kp": None,
+            "ki": None,
+            "engineering_panel_locked": False,
+            "power_command": 0.0
+        }
     }
     
     data[train_key] = default_state
