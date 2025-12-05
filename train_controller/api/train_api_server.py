@@ -22,7 +22,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 DATA_DIR = os.path.join(parent_dir, "data")
 TRAIN_STATES_FILE = os.path.join(DATA_DIR, "train_states.json")
-TRAIN_DATA_FILE = os.path.join(os.path.dirname(parent_dir), "Train Model", "train_data.json")
+TRAIN_DATA_FILE = os.path.join(os.path.dirname(parent_dir), "Train_Model", "train_data.json")
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
