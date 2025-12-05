@@ -520,57 +520,110 @@ class HW_Wayside_Controller:
             pass
 
     def _load_track_data(self):
-        """Load track geometry from `track_data.csv` if present; otherwise build fallback."""
+        """Load track data from CSV file: section, block_num, length, bidirectional, forward_next, reverse_next, etc.
+        
+        CSV columns (matching SW format):
+        0: section, 1: block_num, 2: length, 3: bidirectional, 4: forward_next, 5: reverse_next,
+        6: has_station, 7: speed_mph, 8: speed_m/s, 
+        9: fwd_has_beacon, 10: fwd_current_station, 11: fwd_next_station,
+        12: rev_has_beacon, 13: rev_current_station, 14: rev_next_station
+        """
         try:
-            base = os.path.dirname(__file__)
-            csv_path = os.path.join(base, 'track_data.csv')
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            csv_path = os.path.join(current_dir, 'track_data.csv')
+            
             if not os.path.exists(csv_path):
                 self._load_fallback_data()
                 return
-
-            cumulative = 0.0
-            with open(csv_path, 'r', encoding='utf-8') as fh:
-                reader = csv.reader(fh)
+            
+            cumulative_distance = 0.0
+            
+            with open(csv_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                
                 for row in reader:
-                    if len(row) < 3:
+                    if len(row) < 6:
                         continue
-                    section = row[0]
-                    try:
-                        block_num = int(row[1])
-                    except Exception:
-                        continue
-                    try:
-                        length = float(row[2])
-                    except Exception:
-                        length = 0.0
-                    forward_next = int(row[4]) if len(row) > 4 and row[4].strip() not in ['', 'None', '-1'] else -1
-                    reverse_next = int(row[5]) if len(row) > 5 and row[5].strip() not in ['', 'None', '-1'] else -1
-                    has_station = row[6] if len(row) > 6 else '0'
-                    speed_limit_ms = row[8] if len(row) > 8 else '0'
-
-                    # Get speed limit (column 8 is m/s, column 7 is mph)
-                    try:
-                        speed_limit_ms = float(row[8]) if len(row) > 8 and row[8].strip() else 19.44  # default ~43 mph
-                    except:
-                        speed_limit_ms = 19.44
                     
-                    cumulative += length
-                    self.block_graph[block_num] = {
-                        'length': length,
-                        'forward_next': forward_next,
-                        'reverse_next': reverse_next,
-                        'bidirectional': False,
-                        'cumulative_distance': cumulative,
-                        'speed_limit_ms': speed_limit_ms,
-                    }
-                    self.block_lengths[block_num] = length
-                    self.block_distances[block_num] = cumulative
-                    self.block_speed_limits[block_num] = speed_limit_ms
-                    if has_station.strip() == '1':
-                        self.station_blocks.add(block_num)
-                        # Map station names based on section
-                        self.station_names[block_num] = f"Station {section}-{block_num}"
-        except Exception:
+                    section = row[0]
+                    block_num = row[1]
+                    length = row[2]
+                    bidirectional = row[3]
+                    forward_next = row[4]
+                    reverse_next = row[5]
+                    has_station = row[6] if len(row) > 6 else '0'
+                    speed_limit_ms = row[8] if len(row) > 8 else '0'  # 9th column (index 8) for speed limit in m/s
+                    
+                    # Beacon data for forward direction (columns 10, 11, 12 -> indices 9, 10, 11)
+                    forward_has_beacon = row[9] if len(row) > 9 else '0'
+                    forward_current_station = row[10] if len(row) > 10 else ''
+                    forward_next_station = row[11] if len(row) > 11 else ''
+                    
+                    # Beacon data for reverse direction (columns 13, 14, 15 -> indices 12, 13, 14)
+                    reverse_has_beacon = row[12] if len(row) > 12 else '0'
+                    reverse_current_station = row[13] if len(row) > 13 else ''
+                    reverse_next_station = row[14] if len(row) > 14 else ''
+                    
+                    if block_num and block_num.strip():
+                        try:
+                            block_num = int(block_num)
+                            length = float(length) if length else 0
+                            cumulative_distance += length
+                            
+                            # Check if this block has a station
+                            if has_station.strip() == '1':
+                                self.station_blocks.add(block_num)
+                            
+                            # Parse speed limit (default to 19.44 m/s if not provided)
+                            try:
+                                speed_limit = float(speed_limit_ms) if speed_limit_ms and speed_limit_ms.strip() else 19.44
+                            except ValueError:
+                                speed_limit = 19.44
+                            self.block_speed_limits[block_num] = speed_limit
+                            
+                            # Convert next blocks to int or -1 if empty/none
+                            if forward_next and forward_next.strip().lower() not in ['', 'none', '-1']:
+                                forward_next = int(forward_next)
+                            else:
+                                forward_next = -1
+                                
+                            if reverse_next and reverse_next.strip().lower() not in ['', 'none', '-1']:
+                                reverse_next = int(reverse_next)
+                            else:
+                                reverse_next = -1
+                            
+                            self.block_graph[block_num] = {
+                                'length': length,
+                                'forward_next': forward_next,
+                                'reverse_next': reverse_next,
+                                'bidirectional': bidirectional.strip().upper() == 'TRUE',
+                                'cumulative_distance': cumulative_distance,
+                                'speed_limit_ms': speed_limit,
+                                'forward_beacon': {
+                                    'has_beacon': forward_has_beacon.strip() == '1',
+                                    'current_station': forward_current_station.strip(),
+                                    'next_station': forward_next_station.strip()
+                                },
+                                'reverse_beacon': {
+                                    'has_beacon': reverse_has_beacon.strip() == '1',
+                                    'current_station': reverse_current_station.strip(),
+                                    'next_station': reverse_next_station.strip()
+                                }
+                            }
+                            self.block_distances[block_num] = cumulative_distance
+                            self.block_lengths[block_num] = length
+                            
+                            # Store station name from beacon data if available
+                            if forward_current_station.strip():
+                                self.station_names[block_num] = forward_current_station.strip()
+                            elif reverse_current_station.strip():
+                                self.station_names[block_num] = reverse_current_station.strip()
+                                
+                        except ValueError:
+                            continue
+            
+        except Exception as e:
+            print(f"Error loading track data from CSV: {e}")
             self._load_fallback_data()
 
     def _load_fallback_data(self):
@@ -1089,6 +1142,19 @@ class HW_Wayside_Controller:
                         data[tkey]["Commanded Speed"] = cmd_speed_m_s * 2.23694
                         data[tkey]["Commanded Authority"] = cmd_auth_m * 1.09361
                         data[tkey]["Train Speed"] = actual_train_speeds.get(tkey, 0.0) * 2.23694
+                        
+                        # Populate beacon data based on train position and direction (matching SW behavior)
+                        if train_pos in self.block_graph:
+                            train_direction = self.train_direction.get(tkey, 'forward')
+                            block_data = self.block_graph[train_pos]
+                            
+                            if train_direction == 'forward' and block_data.get('forward_beacon', {}).get('has_beacon'):
+                                data[tkey]["Beacon"]["Current Station"] = block_data['forward_beacon']['current_station']
+                                data[tkey]["Beacon"]["Next Station"] = block_data['forward_beacon']['next_station']
+                            elif train_direction == 'reverse' and block_data.get('reverse_beacon', {}).get('has_beacon'):
+                                data[tkey]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
+                                data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
+                            # If no beacon at current block, keep existing beacon data (don't clear it)
 
             # Atomic write
             d = os.path.dirname(self.train_comm_file) or '.'
