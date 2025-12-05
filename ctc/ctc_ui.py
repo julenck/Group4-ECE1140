@@ -244,7 +244,7 @@ def manual_dispatch():
     arrival = manual_time_box.get()
 
     ############# write to ctc_ui_inputs.json ##############
-    with open('ctc\\ctc_ui_inputs.json',"r") as f1: 
+    with open(os.path.join('ctc', 'ctc_ui_inputs.json'),"r") as f1: 
         data1 = json.load(f1)
     
     data1["Train"] = train
@@ -252,7 +252,7 @@ def manual_dispatch():
     data1["Station"] = dest
     data1["Arrival Time"] = arrival
 
-    with open('ctc_ui_inputs.json',"w") as f1: 
+    with open(os.path.join('ctc', 'ctc_ui_inputs.json'),"w") as f1: 
         json.dump(data1,f1,indent=4)
 
     update_active_trains_table()
