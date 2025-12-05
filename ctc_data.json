@@ -2,14 +2,14 @@
     "Dispatcher": {
         "Trains": {
             "Train 1": {
-                "Line": "",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": "",
-                "Position": "",
-                "State": "",
-                "Current Station": ""
+                "Line": "Green",
+                "Suggested Speed": -2,
+                "Authority": 984,
+                "Station Destination": "Inglewood",
+                "Arrival Time": "19:15",
+                "Position": 65,
+                "State": 0,
+                "Current Station": "---"
             },
             "Train 2": {
                 "Line": "",

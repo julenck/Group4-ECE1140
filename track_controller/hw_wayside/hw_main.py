@@ -272,18 +272,18 @@ def main() -> None:
 
     root = tk.Tk()
 
-    root.title("Wayside B")
-    root.geometry("900x520")
+    root.title("Green Line Wayside Controller B (HW)")
+    root.geometry("900x750")
 
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
     # Attempt to load and start a default PLC for this wayside (non-fatal)
     try:
-        ws_b_ctrl.load_plc("Green_Line_PLC_XandLup.py")
+        ws_b_ctrl.load_plc("Green_Line_PLC_XandLdown.py")
         ws_b_ctrl.start_plc()
     except Exception:
         pass
 
-    ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Wayside B")
+    ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Green Line Wayside Controller B (HW)")
     ws_b_ui.pack(fill="both", expand=True)
     ws_b_ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
     # Start multi-train processing loop (background)
