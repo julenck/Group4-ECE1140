@@ -147,8 +147,13 @@ class HW_Wayside_Controller:
         # Multi-train state (parity with SW controller)
         self.active_trains: Dict[str, Dict[str, Any]] = {}
         self.cmd_trains: Dict[str, Dict[str, Any]] = {}  # {"Train 1": {"cmd auth": yards, "cmd speed": mph, "pos": int}}
-        self.train_comm_file = 'wayside_to_train.json'
-        self.ctc_comm_file = 'ctc_to_hw_wayside.json'
+        
+        # Use absolute paths based on project root (same approach as SW controller)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))  # hw_wayside -> track_controller -> project root
+        self.train_comm_file = os.path.join(project_root, "track_controller", "New_SW_Code", "wayside_to_train.json")
+        self.ctc_comm_file = os.path.join(project_root, "ctc_track_controller.json")
+        
         self._trains_running = False
         self._trains_timer: Optional[threading.Timer] = None
 

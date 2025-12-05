@@ -18,10 +18,14 @@ from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 # Config
 # ---------------------------------------------------------------------
 
-CTC_IN_FILE    =  "ctc_to_hw_wayside.json"         # CTC 
-CTC_OUT_FILE   =  "hw_wayside_to_ctc.json"         # CTC feedback
-TRACK_IN_FILE  =  "track_to_hw_wayside.json"       # Track Model
-TRACK_OUT_FILE = "hw_wayside_to_track.json"        # Track Model feedback
+# Use absolute paths based on project root (same approach as SW controller)
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(_CURRENT_DIR))  # hw_wayside -> track_controller -> project root
+
+CTC_IN_FILE    = os.path.join(_PROJECT_ROOT, "ctc_track_controller.json")      # CTC (shared with SW wayside)
+CTC_OUT_FILE   = os.path.join(_PROJECT_ROOT, "hw_wayside_to_ctc.json")         # CTC feedback
+TRACK_IN_FILE  = os.path.join(_PROJECT_ROOT, "track_controller", "New_SW_Code", "track_to_wayside.json")  # Shared track data
+TRACK_OUT_FILE = os.path.join(_PROJECT_ROOT, "track_controller", "New_SW_Code", "track_to_wayside.json")  # Write to same file
 
 POLL_MS = 500
 ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed 
