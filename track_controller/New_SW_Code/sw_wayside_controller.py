@@ -60,6 +60,7 @@ class sw_wayside_controller:
         self.train_direction: dict = {}  # Track direction for each train ('forward' or 'reverse')
         self.last_seen_position: dict = {}  # Track last known position to detect newly dispatched trains
         self.cumulative_distance: dict = {}  # Track actual distance traveled since last reset
+        self.last_ctc_authority: dict = {}  # Track last authority value from CTC to detect new dispatches
         
         # Define block ranges for each PLC
         # managed_blocks: blocks this controller controls (for handoff decisions)
@@ -93,7 +94,8 @@ class sw_wayside_controller:
             (28, 29, 'forward')    # Exiting section F/28 switches back to forward
         ]
 
-
+        # Initialize/clean wayside_to_train.json on startup
+        self.initialize_train_comm_file()
 
         # Start PLC processing loop
         self.run_plc()
@@ -234,6 +236,22 @@ class sw_wayside_controller:
                 break
         
         return order
+
+    def initialize_train_comm_file(self):
+        """Initialize wayside_to_train.json with clean state on startup"""
+        try:
+            clean_data = {
+                "Train 1": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 2": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 3": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 4": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0},
+                "Train 5": {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
+            }
+            with open(self.train_comm_file, 'w') as f:
+                json.dump(clean_data, f, indent=4)
+            print(f"[{self.active_plc}] Initialized wayside_to_train.json")
+        except Exception as e:
+            print(f"[{self.active_plc}] Warning: Could not initialize wayside_to_train.json: {e}")
 
     def stop(self):
         # Stop PLC processing loop
@@ -405,6 +423,10 @@ class sw_wayside_controller:
                         "cmd speed": speed_to_use,
                         "pos": train_pos
                     }
+                    # Track CTC authority for reactivation detection
+                    # Use the ACTUAL authority being used, not necessarily CTC's suggested value
+                    # This ensures proper comparison when CTC gives authority for next leg
+                    self.last_ctc_authority[train] = auth_to_use
                     
                     # Initialize per-train tracking from current position
                     train_pos = self.active_trains[train]["Train Position"]
@@ -491,6 +513,8 @@ class sw_wayside_controller:
                         "cmd speed": self.active_trains[train]["Suggested Speed"],
                         "pos": 0
                     }
+                    # Track CTC authority for reactivation detection
+                    self.last_ctc_authority[train] = self.active_trains[train]["Suggested Authority"]
                     # Initialize per-train tracking
                     self.train_idx[train] = 0
                     self.train_pos_start[train] = 0
@@ -511,18 +535,33 @@ class sw_wayside_controller:
                     # CTC deactivated train - set speed and authority to 0
                     self.cmd_trains[cmd_train]["cmd auth"] = 0
                     self.cmd_trains[cmd_train]["cmd speed"] = 0
+                    # Reset last_ctc_authority so ANY new authority from CTC will trigger reactivation
+                    self.last_ctc_authority[cmd_train] = 0
                     # Don't remove from cmd_trains yet - CTC will reactivate with new authority
                     # Continue to next train
                     continue
                 elif is_active == 1 and self.cmd_trains[cmd_train]["cmd auth"] == 0:
-                    # CTC reactivated train after dwell time - update with new authority and speed
+                    # Check if CTC has provided NEW authority (not the same authority that ran out)
                     new_auth = self.active_trains[cmd_train]["Suggested Authority"]
-                    new_speed = self.active_trains[cmd_train]["Suggested Speed"]
-                    self.cmd_trains[cmd_train]["cmd auth"] = new_auth
-                    self.cmd_trains[cmd_train]["cmd speed"] = new_speed
-                    # Update train_auth_start for proper distance tracking
-                    self.train_auth_start[cmd_train] = new_auth
-                    print(f"[Wayside] Reactivated {cmd_train} with auth={new_auth}m, speed={new_speed}m/s")
+                    last_auth = self.last_ctc_authority.get(cmd_train, 0)
+                    
+                    # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
+                    if new_auth > last_auth:
+                        new_speed = self.active_trains[cmd_train]["Suggested Speed"]
+                        self.cmd_trains[cmd_train]["cmd auth"] = new_auth
+                        self.cmd_trains[cmd_train]["cmd speed"] = new_speed
+                        # Update train_auth_start for proper distance tracking
+                        self.train_auth_start[cmd_train] = new_auth
+                        self.last_ctc_authority[cmd_train] = new_auth
+                        # Reset cumulative distance - train is at station (end of current block)
+                        # Set to negative block length so train will move to next block immediately
+                        pos = self.cmd_trains[cmd_train]["pos"]
+                        self.cumulative_distance[cmd_train] = -self.block_lengths.get(pos, 0)
+                        print(f"[Wayside] Reactivated {cmd_train} at block {pos} with auth={new_auth}m, speed={new_speed}m/s")
+                    else:
+                        # Authority hasn't increased - train is stuck waiting for CTC
+                        # Keep auth at 0 and wait
+                        continue
             
             auth = self.cmd_trains[cmd_train]["cmd auth"]
             speed = self.cmd_trains[cmd_train]["cmd speed"]
@@ -607,34 +646,28 @@ class sw_wayside_controller:
                 self.cmd_trains[cmd_train]["cmd speed"] = 0  # Stop the train
                 final_pos = self.cmd_trains[cmd_train]["pos"]  # Get final position from cmd_trains
 
-                #set train to inactive
+                # Update position in CTC JSON but DON'T set Active=0 (let CTC handle that)
+                # CTC will detect arrival and set Active=0 itself
                 max_retries = 3
                 for retry in range(max_retries):
                     try:
                         with self.file_lock:
                             with open(self.ctc_comm_file,'r') as f:
                                 data = json.load(f)
-                            # Update Active AND position before writing
-                            data["Trains"][cmd_train]["Active"] = 0
-                            data["Trains"][cmd_train]["Train Position"] = final_pos  # Use final_pos from cmd_trains
-                            print(f"DEBUG: Deactivating {cmd_train} at position {final_pos} - writing to CTC JSON")
+                            # Only update position, NOT Active status (CTC manages Active)
+                            data["Trains"][cmd_train]["Train Position"] = final_pos
+                            print(f"DEBUG: {cmd_train} authority exhausted at position {final_pos}, waiting for CTC")
                             with open(self.ctc_comm_file,'w') as f:
                                 json.dump(data,f,indent=4)
-                        # Verify what we just wrote
-                        import datetime
-                        with open(self.ctc_comm_file,'r') as f:
-                            verify_data = json.load(f)
-                            actual_pos = verify_data["Trains"][cmd_train]["Train Position"]
-                            timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                            print(f"[{timestamp}] DEBUG: Verified CTC JSON after write - {cmd_train} position is now: {actual_pos}")
                         break
                     except (json.JSONDecodeError, IOError) as e:
                         if retry < max_retries - 1:
                             time.sleep(0.01)
                         else:
-                            print(f"Warning: Failed to deactivate {cmd_train} after {max_retries} attempts: {e}")
-                ttr.append(cmd_train)
-                continue  # Skip rest of processing for this train
+                            print(f"Warning: Failed to update position for {cmd_train} after {max_retries} attempts: {e}")
+                # DON'T remove from cmd_trains - keep it so we can handle reactivation
+                # Just continue to next train (train will sit with auth=0 until CTC reactivates)
+                continue
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
             self.cmd_trains[cmd_train]["cmd speed"] = speed
