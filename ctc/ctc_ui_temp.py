@@ -35,6 +35,18 @@ class CTCUI:
         }
 
         self.setup_json_file()
+        
+        # Initialize TrainManager for automatic train controller dispatch
+        try:
+            from train_controller.train_manager import TrainManager
+            self.train_manager = TrainManager()
+            print("[CTC] TrainManager initialized - ready to dispatch trains")
+            print("[CTC] First train will use HARDWARE controller (REMOTE - Raspberry Pi)")
+            print("[CTC] Subsequent trains will use SOFTWARE controllers")
+        except Exception as e:
+            print(f"[CTC] Warning: Failed to initialize TrainManager: {e}")
+            self.train_manager = None
+        
         self.root = tk.Tk()
         self.root.title("CTC User Interface")
         self.root.geometry("1500x700")
@@ -270,13 +282,29 @@ class CTCUI:
             self.json.dump(data1, f1, indent=4)
         self.update_active_trains_table()
         
-        # Open Train Manager window
-        try:
-            from train_controller.train_manager import TrainManagerUI
-            if not hasattr(self, 'train_manager_window') or not self.train_manager_window.winfo_exists():
-                self.train_manager_window = TrainManagerUI()
-        except Exception as e:
-            print(f"Failed to open Train Manager: {e}")
+        # Automatically dispatch train controller
+        # First train = Hardware (Raspberry Pi), subsequent trains = Software
+        if hasattr(self, 'train_manager') and self.train_manager:
+            try:
+                from train_controller.train_manager import dispatch_train_from_ctc
+                
+                # Automatically dispatch train (hardware for first, software for rest)
+                train_id, controller_type = dispatch_train_from_ctc(
+                    train_manager=self.train_manager,
+                    server_url=None  # Will auto-detect server IP for remote hardware
+                )
+                
+                if train_id:
+                    print(f"[CTC] Successfully dispatched Train {train_id} with {controller_type} controller")
+                else:
+                    print("[CTC] Train dispatch failed")
+                    
+            except Exception as e:
+                print(f"[CTC] Failed to dispatch train controller: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[CTC] Warning: TrainManager not initialized - cannot dispatch train controller")
         
         # Instead of launching a subprocess, call the in-process dispatch function
         try:

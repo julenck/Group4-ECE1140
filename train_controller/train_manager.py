@@ -153,14 +153,20 @@ class TrainManager:
         
         # Import appropriate controller based on hardware flag
         if use_hardware:
-            from ui.train_controller_hw_ui import train_controller, train_controller_ui
-            if is_remote:
-                print(f"Using HARDWARE controller for train {self.next_train_id} (REMOTE - Raspberry Pi)")
-            else:
-                print(f"Using HARDWARE controller for train {self.next_train_id} (LOCAL)")
+            try:
+                from ui.train_controller_hw_ui import train_controller, train_controller_ui
+                if is_remote:
+                    print(f"[TrainManager] Using HARDWARE controller for train {self.next_train_id} (REMOTE - Raspberry Pi)")
+                else:
+                    print(f"[TrainManager] Using HARDWARE controller for train {self.next_train_id} (LOCAL - will open on PC)")
+            except Exception as e:
+                print(f"[TrainManager] ERROR importing hardware UI: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
         else:
             from ui.train_controller_sw_ui import train_controller, train_controller_ui
-            print(f"Using SOFTWARE controller for train {self.next_train_id}")
+            print(f"[TrainManager] Using SOFTWARE controller for train {self.next_train_id}")
         
         # Get train ID
         train_id = self.next_train_id
@@ -833,6 +839,7 @@ class TrainManagerUI(tk.Tk):
                 print(f"Train {train_id} created - REMOTE hardware controller")
                 
                 # Show instructions popup
+                import tkinter.messagebox
                 msg = f"""Train {train_id} Model created on this server!
 
 Hardware Controller must run on Raspberry Pi.
@@ -848,11 +855,21 @@ python train_controller_hw_ui.py --train-id {train_id} --server {server_url}
 The hardware controller will connect to this server
 and control Train {train_id}."""
                 
-                tk.messagebox.showinfo(f"Train {train_id} - Remote Hardware Setup", msg)
+                tkinter.messagebox.showinfo(f"Train {train_id} - Remote Hardware Setup", msg)
+            
+            else:
+                # Unknown controller type
+                import tkinter.messagebox
+                print(f"[ERROR] Unknown controller_type: '{controller_type}'")
+                self.update_status(f"ERROR: Unknown controller type '{controller_type}'")
+                tkinter.messagebox.showerror("Error", f"Unknown controller type: '{controller_type}'")
+                return
                 
         except Exception as e:
             self.update_status(f"Error adding train: {str(e)}")
             print(f"Error adding train: {e}")
+            import traceback
+            traceback.print_exc()
     
     def remove_selected_train(self):
         """Remove the selected train from the list."""
@@ -1199,11 +1216,11 @@ def dispatch_train_from_ctc(train_manager=None, server_url=None):
     existing_train_count = train_manager.get_train_count()
     
     if existing_train_count == 0:
-        # First train: Hardware controller (Raspberry Pi)
+        # First train: Hardware controller (REMOTE - Raspberry Pi)
         controller_type = "hardware_remote"
-        is_remote = True
-        use_hardware = True  # Use hardware controller
-        print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (Raspberry Pi)")
+        is_remote = True  # Run on Raspberry Pi (remote mode)
+        use_hardware = True  # Use hardware controller UI
+        print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (REMOTE - Raspberry Pi)")
     else:
         # Subsequent trains: Software controller
         controller_type = "software"
