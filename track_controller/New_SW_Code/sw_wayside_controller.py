@@ -69,7 +69,7 @@ class sw_wayside_controller:
             self.visible_blocks = set(range(0, 74)) | set(range(144, 151))  # Can see 0-73 and 144-150
         elif self.active_plc == "Green_Line_PLC_XandLdown.py":
             self.managed_blocks = set(range(70, 144))  # Blocks 70-143 (control boundaries)
-            self.visible_blocks = set(range(70, 144))  # Can see 70-143
+            self.visible_blocks = set(range(70, 144))  # Can see 66-143 (includes approach blocks for handoff detection)
         else:
             self.managed_blocks = set(range(0, 152))  # All blocks if no specific PLC
             self.visible_blocks = set(range(0, 152))
@@ -968,6 +968,12 @@ class sw_wayside_controller:
                     data["G-lights"][i] = self.light_states[i]
                 data["G-gates"][0] = self.gate_states[0]
                 
+                # Controller 1: Update occupancy for blocks 0-69 and 144-150 only
+                for i in range(0, 70):
+                    data["G-Occupancy"][i] = self.occupied_blocks[i]
+                for i in range(144, 151):
+                    data["G-Occupancy"][i] = self.occupied_blocks[i]
+                
             elif self.active_plc == "Green_Line_PLC_XandLdown.py":
                 # Controller 2: switches 4-5, lights 12-19, gate 1
                 for i in range(4, 6):
@@ -975,21 +981,18 @@ class sw_wayside_controller:
                 for i in range(12, 20):
                     data["G-lights"][i] = self.light_states[i]
                 data["G-gates"][1] = self.gate_states[1]
+                
+                # Controller 2: Update occupancy for blocks 70-143 only
+                for i in range(70, 144):
+                    data["G-Occupancy"][i] = self.occupied_blocks[i]
 
-            data["G-Occupancy"] = self.occupied_blocks
-
-            # Handle up to 5 trains
+            # Handle up to 5 trains - each controller updates only its managed trains
             train_ids = ["Train 1", "Train 2", "Train 3", "Train 4", "Train 5"]
-            cmd_auth = [0, 0, 0, 0, 0]
-            cmd_speed = [0, 0, 0, 0, 0]
             
             for i, train_id in enumerate(train_ids):
                 if train_id in self.cmd_trains:
-                    cmd_auth[i] = self.cmd_trains[train_id]["cmd auth"]
-                    cmd_speed[i] = self.cmd_trains[train_id]["cmd speed"]
-            
-            data["G-Commanded Authority"] = cmd_auth
-            data["G-Commanded Speed"] = cmd_speed
+                    data["G-Commanded Authority"][i] = self.cmd_trains[train_id]["cmd auth"]
+                    data["G-Commanded Speed"][i] = self.cmd_trains[train_id]["cmd speed"]
                 
 
             
