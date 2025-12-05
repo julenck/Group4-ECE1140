@@ -529,9 +529,12 @@ class train_controller_ui(tk.Tk):
 
     def periodic_update(self):
         try:
-            # Only read from train_data.json in local mode (not when using remote server)
+            # Read inputs from train_data.json (local) or from REST API (remote)
+            # In remote mode, the server syncs train_data.json changes to the API
             if not self.server_url:
+                # Local mode: read directly from train_data.json
                 self.api.update_from_train_data()
+            # Remote mode: API client automatically fetches from server via get_state()
             
             state = self.api.get_state()
             

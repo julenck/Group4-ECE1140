@@ -53,19 +53,69 @@ def write_json_file(filepath, data):
         except Exception as e:
             print(f"[Server] Error writing {filepath}: {e}")
 
-def sync_train_data_to_states():
-    """Background thread that syncs train_data.json to train_states.json.
+def sync_states_to_train_data():
+    """Sync controller outputs from train_states.json to train_data.json.
     
-    This allows the Train Model Test UI to write inputs to train_data.json,
-    and this server automatically syncs those inputs to train_states.json
-    for hardware controllers to read via REST API.
+    This writes controller outputs (power_command, etc.) back to train_data.json
+    so the Train Model can read and apply them.
+    """
+    try:
+        # Read current states
+        train_states = read_json_file(TRAIN_STATES_FILE)
+        train_data = read_json_file(TRAIN_DATA_FILE)
+        
+        if not train_states:
+            return
+        
+        # For each train in states, update its outputs in train_data
+        for key in train_states.keys():
+            if key.startswith("train_"):
+                train_section = train_states[key]
+                outputs = train_section.get("outputs", {})
+                
+                # Ensure train exists in train_data
+                if key not in train_data:
+                    train_data[key] = {"inputs": {}, "outputs": {}}
+                if "outputs" not in train_data[key]:
+                    train_data[key]["outputs"] = {}
+                
+                # Update outputs in train_data from train_states
+                # These are the controller outputs that Train Model needs
+                controller_outputs = {
+                    "power_command": outputs.get("power_command", 0.0),
+                    "service_brake": outputs.get("service_brake", False),
+                    "emergency_brake": outputs.get("emergency_brake", False),
+                    "left_door": outputs.get("left_door", False),
+                    "right_door": outputs.get("right_door", False),
+                    "interior_lights": outputs.get("interior_lights", True),
+                    "exterior_lights": outputs.get("exterior_lights", True),
+                    "set_temperature": outputs.get("set_temperature", 70.0)
+                }
+                
+                train_data[key]["outputs"].update(controller_outputs)
+        
+        # Write back to train_data.json
+        write_json_file(TRAIN_DATA_FILE, train_data)
+        
+    except Exception as e:
+        print(f"[Server] Error syncing states to train_data: {e}")
+
+def sync_train_data_to_states():
+    """Background thread that syncs bidirectionally between train_data.json and train_states.json.
+    
+    1. Syncs Train Model inputs (FROM train_data.json TO train_states.json)
+       - Controllers read these via REST API
+    2. Syncs Controller outputs (FROM train_states.json TO train_data.json)
+       - Train Model reads these to control the train
     """
     global sync_running
-    print("[Server] Train data sync thread started (500ms interval)")
+    print("[Server] Bidirectional sync thread started (500ms interval)")
+    print("[Server] Syncing train_data.json ↔ train_states.json")
     
     while sync_running:
         try:
-            # Read train_data.json from Train Model
+            # STEP 1: Sync Train Model inputs FROM train_data.json TO train_states.json
+            # (Controllers read these via REST API)
             train_data = read_json_file(TRAIN_DATA_FILE)
             
             if not train_data:
@@ -149,6 +199,10 @@ def sync_train_data_to_states():
             
             # Write updated states back
             write_json_file(TRAIN_STATES_FILE, train_states)
+            
+            # STEP 2: Sync Controller outputs FROM train_states.json TO train_data.json
+            # (Train Model reads these to control the train)
+            sync_states_to_train_data()
             
         except Exception as e:
             print(f"[Server] Error in sync thread: {e}")
@@ -245,6 +299,11 @@ def update_train_state(train_id):
             data[train_key]["outputs"][key] = value
     
     write_json_file(TRAIN_STATES_FILE, data)
+    
+    # Immediately sync controller outputs back to train_data.json
+    # This ensures Train Model gets updates without waiting for sync cycle
+    if any(key in output_fields for key in updates.keys()):
+        sync_states_to_train_data()
     
     print(f"[Server] Train {train_id} state updated: {list(updates.keys())}")
     return jsonify({"message": "State updated", "state": data[train_key]}), 200
