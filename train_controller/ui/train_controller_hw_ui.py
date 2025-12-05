@@ -117,10 +117,10 @@ class train_controller:
         - Zero power when error is zero
         """
         # Get current values
-        train_velocity = state['train_velocity']
-        driver_velocity = state['driver_velocity']
-        kp = state['kp']
-        ki = state['ki']
+        train_velocity = state.get('train_velocity', 0.0)
+        driver_velocity = state.get('driver_velocity', 0.0)
+        kp = state.get('kp', 5000.0)
+        ki = state.get('ki', 500.0)
         
         # Calculate speed error
         velocity_error = driver_velocity - train_velocity
@@ -215,10 +215,10 @@ class train_controller:
         Args:
             state: Current train state dictionary.
         """
-        train_velocity = state['train_velocity']
-        driver_velocity = state['driver_velocity']
-        current_service_brake = state['service_brake']
-        emergency_brake = state['emergency_brake']
+        train_velocity = state.get('train_velocity', 0.0)
+        driver_velocity = state.get('driver_velocity', 0.0)
+        current_service_brake = state.get('service_brake', False)
+        emergency_brake = state.get('emergency_brake', False)
         
         # Don't manage service brake if emergency brake is active
         if emergency_brake:
@@ -274,11 +274,14 @@ class train_controller:
             updates = {}
             
             # Auto-set driver velocity to commanded speed
-            if state['driver_velocity'] != state['commanded_speed']:
-                updates['driver_velocity'] = state['commanded_speed']
+            driver_vel = state.get('driver_velocity', 0.0)
+            cmd_speed = state.get('commanded_speed', 0.0)
+            if driver_vel != cmd_speed:
+                updates['driver_velocity'] = cmd_speed
             
             # Auto-regulate temperature to 70°F
-            if state['set_temperature'] != 70.0:
+            set_temp = state.get('set_temperature', 70.0)
+            if set_temp != 70.0:
                 updates['set_temperature'] = 70.0
             
             # Apply updates if any
@@ -589,7 +592,8 @@ class train_controller_ui(tk.Tk):
                               state.get('train_controller_signal_failure', False) or 
                               state.get('train_controller_brake_failure', False))
             
-            if critical_failure and not state['emergency_brake']:
+            emergency_brake_active = state.get('emergency_brake', False)
+            if critical_failure and not emergency_brake_active:
                 # Automatically engage emergency brake on critical failure
                 self.controller.set_emergency_brake(True)
                 state = self.api.get_state()
