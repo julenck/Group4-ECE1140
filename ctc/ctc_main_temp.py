@@ -259,11 +259,17 @@ def dispatch_train(train, line, station, arrival_time_str,
             
             # If not at final destination, set Active = 1 with new authority for next leg
             if test != station:
+                # Get authority for NEXT leg (i+1)
+                next_authority_meters = route_lookup_via_id[i + 1]["meters_to_next"]
+                
                 with open(data_file_track_cont, "r") as f_updates:
                     updates = json.load(f_updates)
                 updates["Trains"][train]["Active"] = 1
+                updates["Trains"][train]["Suggested Authority"] = next_authority_meters
+                updates["Trains"][train]["Suggested Speed"] = speed_meters_s
                 with open(data_file_track_cont, "w") as f_updates:
                     json.dump(updates, f_updates, indent=4)
+                print(f"[CTC] Reactivated {train} with authority={next_authority_meters}m for next leg")
             if test == station:
                 print("train at destination")
                 break
