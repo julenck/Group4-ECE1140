@@ -1202,7 +1202,7 @@ def dispatch_train_from_ctc(train_manager=None, server_url=None):
         # First train: Hardware controller (Raspberry Pi)
         controller_type = "hardware_remote"
         is_remote = True
-        use_hardware = False  # Hardware UI is on Raspberry Pi, not here
+        use_hardware = True  # Use hardware controller
         print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (Raspberry Pi)")
     else:
         # Subsequent trains: Software controller
