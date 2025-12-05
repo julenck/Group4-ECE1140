@@ -549,12 +549,15 @@ class train_controller_ui(tk.Tk):
             
             if not manual_mode:  # Automatic mode
                 # Auto-set driver velocity to commanded speed
-                if state['driver_velocity'] != state['commanded_speed']:
-                    self.api.update_state({'driver_velocity': state['commanded_speed']})
+                driver_vel = state.get('driver_velocity', 0.0)
+                cmd_speed = state.get('commanded_speed', 0.0)
+                if driver_vel != cmd_speed:
+                    self.api.update_state({'driver_velocity': cmd_speed})
                     state = self.api.get_state()
                 
                 # Auto-regulate temperature to 70°F
-                if state['set_temperature'] != 70.0:
+                set_temp = state.get('set_temperature', 70.0)
+                if set_temp != 70.0:
                     self.api.update_state({'set_temperature': 70.0})
                     state = self.api.get_state()
                 
@@ -574,7 +577,9 @@ class train_controller_ui(tk.Tk):
                     self.controller._last_beacon_for_announcement = current_station
             
             # Auto-release emergency brake when velocity reaches 0
-            if state['emergency_brake'] and state['train_velocity'] == 0.0:
+            emergency_brake = state.get('emergency_brake', False)
+            train_velocity = state.get('train_velocity', 0.0)
+            if emergency_brake and train_velocity == 0.0:
                 print("[Train Controller] Train stopped - Releasing emergency brake")
                 self.controller.set_emergency_brake(False)
                 state = self.api.get_state()
@@ -606,11 +611,14 @@ class train_controller_ui(tk.Tk):
                     print(f"ADC read/update error: {e}")
             
             # Recalculate power command based on current state
-            if (not state['emergency_brake'] and 
-                state['service_brake'] == 0 and 
+            emergency_brake = state.get('emergency_brake', False)
+            service_brake = state.get('service_brake', False)
+            power_command = state.get('power_command', 0.0)
+            if (not emergency_brake and 
+                not service_brake and 
                 not critical_failure):
                 power = self.controller.calculate_power_command(state)
-                if power != state['power_command']:
+                if power != power_command:
                     self.controller.vital_control_check_and_update({'power_command': power})
             else:
                 # Reset accumulated error when brakes are active
@@ -642,15 +650,15 @@ class train_controller_ui(tk.Tk):
                 if param == "Commanded Speed":
                     self.info_treeview.set(iid, "value", f"{state.get('commanded_speed', 0):.1f}")
                 elif param == "Commanded Authority":
-                    self.info_treeview.set(iid, "value", f"{state['commanded_authority']:.1f}")
+                    self.info_treeview.set(iid, "value", f"{state.get('commanded_authority', 0.0):.1f}")
                 elif param == "Speed Limit":
-                    self.info_treeview.set(iid, "value", f"{state['speed_limit']:.1f}")
+                    self.info_treeview.set(iid, "value", f"{state.get('speed_limit', 0.0):.1f}")
                 elif param == "Current Speed":
-                    self.info_treeview.set(iid, "value", f"{state['train_velocity']:.1f}")
+                    self.info_treeview.set(iid, "value", f"{state.get('train_velocity', 0.0):.1f}")
                 elif param == "Driver Set Speed":
                     self.info_treeview.set(iid, "value", f"{state.get('driver_velocity', 0):.1f}")
                 elif param == "Power Availability":
-                    self.info_treeview.set(iid, "value", f"{state['power_command']:.1f}")
+                    self.info_treeview.set(iid, "value", f"{state.get('power_command', 0.0):.1f}")
                 elif param == "Cabin Temperature":
                     self.info_treeview.set(iid, "value", f"{state.get('train_temperature', 0):.1f}")
                 elif param == "Set Temperature":
