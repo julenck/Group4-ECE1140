@@ -143,7 +143,7 @@ def sync_train_data_to_states():
                                 "speed_limit": 0.0,
                                 "train_velocity": 0.0,
                                 "next_stop": "",
-                                "station_side": "Right",
+                                "station_side": "",
                                 "train_temperature": 70.0,
                                 "train_model_engine_failure": False,
                                 "train_model_signal_failure": False,
@@ -181,6 +181,11 @@ def sync_train_data_to_states():
                             "inputs": {},
                             "outputs": {}
                         }
+                    
+                    # CLEAN UP: Remove flat fields (legacy format) - only keep inputs/outputs structure
+                    keys_to_remove = [k for k in train_states[key].keys() if k not in ['inputs', 'outputs']]
+                    for k in keys_to_remove:
+                        del train_states[key][k]
                     
                     # Ensure ALL required input fields exist with defaults (matches train_controller_api.py)
                     if "inputs" not in train_states[key]:
@@ -232,7 +237,7 @@ def sync_train_data_to_states():
                     # Also sync beacon info (current_station, next_station, side_door)
                     train_states[key]["inputs"]["current_station"] = inputs.get("current station", "")
                     train_states[key]["inputs"]["next_stop"] = inputs.get("next station", "")
-                    train_states[key]["inputs"]["station_side"] = inputs.get("side_door", "Right")
+                    train_states[key]["inputs"]["station_side"] = inputs.get("side_door", "")
                     
                     # Ensure ALL required output fields exist with defaults (matches train_controller_api.py)
                     if "outputs" not in train_states[key]:
@@ -349,7 +354,7 @@ def update_train_state(train_id):
                 "speed_limit": 0.0,
                 "train_velocity": 0.0,
                 "next_stop": "",
-                "station_side": "Right",
+                "station_side": "",
                 "train_temperature": 70.0,
                 "current_station": "",
                 "train_model_engine_failure": False,
@@ -384,6 +389,11 @@ def update_train_state(train_id):
     # Ensure inputs/outputs structure exists
     if "inputs" not in data[train_key]:
         data[train_key] = {"inputs": {}, "outputs": {}}
+    
+    # CLEAN UP: Remove flat fields (legacy format) - only keep inputs/outputs structure
+    keys_to_remove = [k for k in data[train_key].keys() if k not in ['inputs', 'outputs']]
+    for k in keys_to_remove:
+        del data[train_key][k]
     
     # Update fields in appropriate sections
     for key, value in updates.items():
@@ -425,7 +435,7 @@ def reset_train_state(train_id):
             "speed_limit": 0.0,
             "train_velocity": 0.0,
             "next_stop": "",
-            "station_side": "Right",
+            "station_side": "",
             "train_temperature": 70.0,
             "current_station": "",
             "train_model_engine_failure": False,
