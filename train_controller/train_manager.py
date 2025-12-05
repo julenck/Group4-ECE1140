@@ -232,7 +232,12 @@ class TrainManager:
             
             # Create Train Controller UI if not remote
             if not is_remote:
-                controller_ui = train_controller_ui(train_id=train_id)
+                # For software controllers, use server mode if server_url is provided
+                # For hardware controllers (local), also use server mode if available
+                if server_url:
+                    controller_ui = train_controller_ui(train_id=train_id, server_url=server_url)
+                else:
+                    controller_ui = train_controller_ui(train_id=train_id)
                 # Position controller UI to the right of model UI
                 controller_ui.geometry(f"600x800+{x_offset + 1460}+{y_offset}")
                 # Ensure the window is visible and brought to front
@@ -815,10 +820,22 @@ class TrainManagerUI(tk.Tk):
             controller_type = self.controller_type_var.get()
             
             if controller_type == "software":
-                train_id = self.manager.add_train(create_uis=True, use_hardware=False, is_remote=False)
+                # Get server IP for software controller (use server mode)
+                import socket
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    server_ip = s.getsockname()[0]
+                    s.close()
+                except:
+                    server_ip = "localhost"
+                
+                server_url = f"http://{server_ip}:5000"
+                
+                train_id = self.manager.add_train(create_uis=True, use_hardware=False, is_remote=False, server_url=server_url)
                 self.update_train_list()
-                self.update_status(f"Train {train_id} added with SOFTWARE controller")
-                print(f"Train {train_id} created with SOFTWARE controller")
+                self.update_status(f"Train {train_id} added with SOFTWARE controller (using server)")
+                print(f"Train {train_id} created with SOFTWARE controller (server: {server_url})")
                 
             elif controller_type == "hardware_remote":
                 # Get server IP for remote mode

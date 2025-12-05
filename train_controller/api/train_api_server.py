@@ -477,6 +477,285 @@ def delete_train(train_id):
     else:
         return jsonify({"error": f"Train {train_id} not found"}), 404
 
+# ========== Train Physics Endpoints (for Train Model) ==========
+
+@app.route('/api/train/<int:train_id>/physics', methods=['GET'])
+def get_train_physics(train_id):
+    """Get train physics data from train_data.json.
+    
+    Returns physics outputs: velocity, acceleration, position, temperature, etc.
+    This is used by Train Model UI to display current state.
+    """
+    train_data = read_json_file(TRAIN_DATA_FILE)
+    train_key = f"train_{train_id}"
+    
+    if train_key in train_data:
+        section = train_data[train_key]
+        physics = section.get("outputs", {})
+        return jsonify(physics), 200
+    else:
+        return jsonify({"error": f"Train {train_id} physics data not found"}), 404
+
+@app.route('/api/train/<int:train_id>/physics', methods=['POST'])
+def update_train_physics(train_id):
+    """Update train physics outputs from Train Model.
+    
+    Train Model writes its physics simulation results here:
+    - velocity_mph, acceleration_ftps2, position_yds
+    - temperature_F, passengers_onboard, door states, etc.
+    """
+    updates = request.json
+    if not updates:
+        return jsonify({"error": "No data provided"}), 400
+    
+    train_data = read_json_file(TRAIN_DATA_FILE)
+    train_key = f"train_{train_id}"
+    
+    # Initialize train physics section if it doesn't exist
+    if train_key not in train_data:
+        train_data[train_key] = {"inputs": {}, "outputs": {}, "specs": {}}
+    
+    if "outputs" not in train_data[train_key]:
+        train_data[train_key]["outputs"] = {}
+    
+    # Update outputs section with physics data
+    train_data[train_key]["outputs"].update(updates)
+    
+    write_json_file(TRAIN_DATA_FILE, train_data)
+    
+    print(f"[Server] Train {train_id} physics updated: {list(updates.keys())}")
+    return jsonify({"message": "Physics updated", "physics": train_data[train_key]["outputs"]}), 200
+
+@app.route('/api/train/<int:train_id>/inputs', methods=['GET'])
+def get_train_inputs(train_id):
+    """Get train inputs from train_data.json.
+    
+    Returns controller commands: power_command, brake states, door commands, etc.
+    Train Model reads these to control the train simulation.
+    """
+    train_data = read_json_file(TRAIN_DATA_FILE)
+    train_key = f"train_{train_id}"
+    
+    if train_key in train_data:
+        section = train_data[train_key]
+        inputs = section.get("inputs", {})
+        return jsonify(inputs), 200
+    else:
+        return jsonify({"error": f"Train {train_id} inputs not found"}), 404
+
+# ========== CTC Endpoints ==========
+
+@app.route('/api/ctc/trains', methods=['GET'])
+def get_ctc_trains():
+    """Get all CTC train dispatch data.
+    
+    Returns train commands, speeds, authorities, stations, etc.
+    """
+    try:
+        ctc_data_file = os.path.join(os.path.dirname(os.path.dirname(DATA_DIR)), "ctc_data.json")
+        ctc_data = read_json_file(ctc_data_file)
+        
+        # Return dispatcher trains section
+        trains = ctc_data.get("Dispatcher", {}).get("Trains", {})
+        return jsonify(trains), 200
+    except Exception as e:
+        print(f"[Server] Error reading CTC data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ctc/train/<int:train_id>/command', methods=['POST'])
+def send_ctc_command(train_id):
+    """Send CTC command to train (speed, authority).
+    
+    CTC uses this to command trains with suggested speed and authority.
+    Updates train_states.json inputs section.
+    """
+    command = request.json
+    if not command:
+        return jsonify({"error": "No command provided"}), 400
+    
+    # Extract speed and authority
+    commanded_speed = command.get('commanded_speed', command.get('speed'))
+    commanded_authority = command.get('commanded_authority', command.get('authority'))
+    
+    if commanded_speed is None or commanded_authority is None:
+        return jsonify({"error": "Must provide commanded_speed and commanded_authority"}), 400
+    
+    # Update train state
+    data = read_json_file(TRAIN_STATES_FILE)
+    train_key = f"train_{train_id}"
+    
+    if train_key not in data:
+        return jsonify({"error": f"Train {train_id} not found"}), 404
+    
+    # Update inputs section
+    if "inputs" not in data[train_key]:
+        data[train_key]["inputs"] = {}
+    
+    data[train_key]["inputs"]["commanded_speed"] = float(commanded_speed)
+    data[train_key]["inputs"]["commanded_authority"] = float(commanded_authority)
+    
+    write_json_file(TRAIN_STATES_FILE, data)
+    
+    print(f"[Server] CTC command sent to Train {train_id}: speed={commanded_speed}, authority={commanded_authority}")
+    return jsonify({"message": "Command sent", "train_id": train_id}), 200
+
+@app.route('/api/ctc/dispatch', methods=['POST'])
+def dispatch_train_ctc():
+    """Dispatch new train from CTC.
+    
+    Creates new train entry with specified line, station, and arrival time.
+    """
+    dispatch_data = request.json
+    if not dispatch_data:
+        return jsonify({"error": "No dispatch data provided"}), 400
+    
+    try:
+        ctc_data_file = os.path.join(os.path.dirname(os.path.dirname(DATA_DIR)), "ctc_data.json")
+        ctc_data = read_json_file(ctc_data_file)
+        
+        if "Dispatcher" not in ctc_data:
+            ctc_data["Dispatcher"] = {}
+        if "Trains" not in ctc_data["Dispatcher"]:
+            ctc_data["Dispatcher"]["Trains"] = {}
+        
+        train_name = dispatch_data.get("train", "Train 1")
+        ctc_data["Dispatcher"]["Trains"][train_name] = {
+            "Line": dispatch_data.get("line", ""),
+            "Suggested Speed": dispatch_data.get("speed", ""),
+            "Authority": dispatch_data.get("authority", ""),
+            "Station Destination": dispatch_data.get("station", ""),
+            "Arrival Time": dispatch_data.get("arrival_time", ""),
+            "Position": "",
+            "State": "",
+            "Current Station": ""
+        }
+        
+        write_json_file(ctc_data_file, ctc_data)
+        
+        print(f"[Server] Train dispatched: {train_name}")
+        return jsonify({"message": "Train dispatched", "train": train_name}), 200
+    except Exception as e:
+        print(f"[Server] Error dispatching train: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ctc/occupancy', methods=['GET'])
+def get_ctc_occupancy():
+    """Get track occupancy from wayside controllers.
+    
+    Returns array of occupied blocks for CTC display.
+    """
+    try:
+        ctc_input_file = os.path.join(os.path.dirname(os.path.dirname(DATA_DIR)), "hw_wayside_to_ctc.json")
+        ctc_data = read_json_file(ctc_input_file)
+        
+        occupancy = ctc_data.get("G-Occupancy", [])
+        return jsonify({"occupancy": occupancy}), 200
+    except Exception as e:
+        print(f"[Server] Error reading occupancy: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ========== Wayside/Track Controller Endpoints ==========
+
+@app.route('/api/wayside/state', methods=['GET'])
+def get_wayside_state():
+    """Get all wayside controller state.
+    
+    Returns switches, lights, gates, and occupancy for all wayside controllers.
+    """
+    try:
+        # Read from track model output file
+        wayside_file = os.path.join(os.path.dirname(os.path.dirname(DATA_DIR)), "track_controller", "New_SW_Code", "track_to_wayside.json")
+        wayside_data = read_json_file(wayside_file)
+        
+        return jsonify(wayside_data), 200
+    except Exception as e:
+        print(f"[Server] Error reading wayside state: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/wayside/state', methods=['POST'])
+def update_wayside_state():
+    """Update wayside state (switches, lights, gates, occupancy).
+    
+    Wayside controllers use this to report their output state.
+    """
+    updates = request.json
+    if not updates:
+        return jsonify({"error": "No data provided"}), 400
+    
+    try:
+        # Write to wayside output file
+        wayside_file = os.path.join(os.path.dirname(os.path.dirname(DATA_DIR)), "hw_wayside_to_track.json")
+        wayside_data = read_json_file(wayside_file)
+        
+        # Update with new data
+        wayside_data.update(updates)
+        
+        write_json_file(wayside_file, wayside_data)
+        
+        print(f"[Server] Wayside state updated: {list(updates.keys())}")
+        return jsonify({"message": "Wayside state updated"}), 200
+    except Exception as e:
+        print(f"[Server] Error updating wayside state: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/wayside/switches', methods=['POST'])
+def update_wayside_switches():
+    """Update switch positions.
+    
+    Wayside controllers use this to report switch state changes.
+    """
+    switch_data = request.json
+    if not switch_data:
+        return jsonify({"error": "No switch data provided"}), 400
+    
+    try:
+        wayside_file = os.path.join(os.path.dirname(os.path.dirname(DATA_DIR)), "hw_wayside_to_track.json")
+        wayside_data = read_json_file(wayside_file)
+        
+        if "G-switches" not in wayside_data:
+            wayside_data["G-switches"] = []
+        
+        # Update switches
+        switches = switch_data.get("switches", [])
+        wayside_data["G-switches"] = switches
+        
+        write_json_file(wayside_file, wayside_data)
+        
+        print(f"[Server] Switches updated: {len(switches)} switches")
+        return jsonify({"message": "Switches updated"}), 200
+    except Exception as e:
+        print(f"[Server] Error updating switches: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/wayside/lights', methods=['POST'])
+def update_wayside_lights():
+    """Update light states.
+    
+    Wayside controllers use this to report light state changes.
+    """
+    light_data = request.json
+    if not light_data:
+        return jsonify({"error": "No light data provided"}), 400
+    
+    try:
+        wayside_file = os.path.join(os.path.dirname(os.path.dirname(DATA_DIR)), "hw_wayside_to_track.json")
+        wayside_data = read_json_file(wayside_file)
+        
+        if "G-lights" not in wayside_data:
+            wayside_data["G-lights"] = []
+        
+        # Update lights
+        lights = light_data.get("lights", [])
+        wayside_data["G-lights"] = lights
+        
+        write_json_file(wayside_file, wayside_data)
+        
+        print(f"[Server] Lights updated: {len(lights)} lights")
+        return jsonify({"message": "Lights updated"}), 200
+    except Exception as e:
+        print(f"[Server] Error updating lights: {e}")
+        return jsonify({"error": str(e)}), 500
+
 # ========== Health Check ==========
 
 @app.route('/api/health', methods=['GET'])
@@ -493,32 +772,53 @@ def root():
     """Root endpoint with API information."""
     return jsonify({
         "name": "Train System REST API Server",
-        "version": "1.0",
+        "version": "2.0",
         "endpoints": {
             "GET /api/health": "Server health check",
             "GET /api/trains": "Get all train states",
             "GET /api/train/<id>/state": "Get specific train state",
             "POST /api/train/<id>/state": "Update train state",
             "POST /api/train/<id>/reset": "Reset train to defaults",
-            "DELETE /api/train/<id>": "Delete train"
+            "DELETE /api/train/<id>": "Delete train",
+            "GET /api/train/<id>/physics": "Get train physics data",
+            "POST /api/train/<id>/physics": "Update train physics",
+            "GET /api/train/<id>/inputs": "Get train controller inputs",
+            "GET /api/ctc/trains": "Get all CTC trains",
+            "POST /api/ctc/train/<id>/command": "Send CTC command",
+            "POST /api/ctc/dispatch": "Dispatch new train",
+            "GET /api/ctc/occupancy": "Get track occupancy",
+            "GET /api/wayside/state": "Get wayside state",
+            "POST /api/wayside/state": "Update wayside state",
+            "POST /api/wayside/switches": "Update switches",
+            "POST /api/wayside/lights": "Update lights"
         }
     }), 200
 
 if __name__ == '__main__':
     print("=" * 70)
-    print("  TRAIN SYSTEM REST API SERVER")
+    print("  TRAIN SYSTEM REST API SERVER v2.0")
     print("=" * 70)
     print(f"\nData directory: {DATA_DIR}")
     print(f"State file: {TRAIN_STATES_FILE}")
     print(f"Train data file: {TRAIN_DATA_FILE}")
     print("\nServer starting on http://0.0.0.0:5000")
-    print("Raspberry Pis should connect to: http://<server-ip>:5000\n")
+    print("All components should connect to: http://<server-ip>:5000\n")
     print("Available endpoints:")
-    print("  GET  /api/health              - Server health check")
-    print("  GET  /api/trains              - Get all trains")
-    print("  GET  /api/train/<id>/state    - Get train state")
-    print("  POST /api/train/<id>/state    - Update train state")
-    print("  POST /api/train/<id>/reset    - Reset train state")
+    print("  Train Controller:")
+    print("    GET  /api/train/<id>/state    - Get train state")
+    print("    POST /api/train/<id>/state    - Update train state")
+    print("  Train Model:")
+    print("    GET  /api/train/<id>/physics  - Get physics data")
+    print("    POST /api/train/<id>/physics  - Update physics")
+    print("    GET  /api/train/<id>/inputs   - Get controller inputs")
+    print("  CTC:")
+    print("    GET  /api/ctc/trains          - Get all trains")
+    print("    POST /api/ctc/train/<id>/cmd  - Send command")
+    print("    POST /api/ctc/dispatch        - Dispatch train")
+    print("    GET  /api/ctc/occupancy       - Get occupancy")
+    print("  Wayside:")
+    print("    GET  /api/wayside/state       - Get wayside state")
+    print("    POST /api/wayside/state       - Update state")
     print("=" * 70)
     
     # Start background sync thread

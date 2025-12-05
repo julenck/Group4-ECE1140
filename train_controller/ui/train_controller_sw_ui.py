@@ -590,18 +590,31 @@ class train_controller_ui(tk.Tk):
         emergency_brake_release_timer: Timer ID for emergency brake auto-release.
     """
     
-    def __init__(self, train_id=None):
+    def __init__(self, train_id=None, server_url=None, timeout=5.0):
         """Initialize the driver interface.
         
         Args:
             train_id: Optional train ID for multi-train support. If None, uses root level (legacy).
+            server_url: If provided, uses REST API client to connect to remote server.
+                       If None, uses local file-based API (default).
+                       Example: "http://192.168.1.100:5000" or "http://localhost:5000"
+            timeout: Network timeout in seconds for remote API (default: 5.0).
         """
         super().__init__()
         
         self.train_id = train_id
+        self.server_url = server_url
         
-        # Initialize API with train_id
-        self.api = train_controller_api(train_id=train_id)
+        # Initialize API based on server_url parameter (same as hardware controller)
+        if server_url:
+            # Remote mode - use client API
+            from api.train_controller_api_client import train_controller_api_client
+            self.api = train_controller_api_client(train_id=train_id, server_url=server_url, timeout=timeout)
+            print(f"[SW UI] Using REMOTE API: {server_url} (timeout: {timeout}s)")
+        else:
+            # Local mode - use file-based API
+            self.api = train_controller_api(train_id=train_id)
+            print(f"[SW UI] Using LOCAL API (file-based)")
         
         # Create controller instance with shared API
         self.controller = train_controller(self.api)
@@ -615,6 +628,8 @@ class train_controller_ui(tk.Tk):
         
         # Configure window
         title = f"Train {train_id} - Train Controller" if train_id else "Train Controller - Driver Interface"
+        if server_url:
+            title += " [SERVER MODE]"
         self.title(title)
         self.geometry("1200x800")
         self.configure(bg='lightgray')
