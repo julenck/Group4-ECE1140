@@ -514,6 +514,15 @@ class sw_wayside_controller:
                     # Don't remove from cmd_trains yet - CTC will reactivate with new authority
                     # Continue to next train
                     continue
+                elif is_active == 1 and self.cmd_trains[cmd_train]["cmd auth"] == 0:
+                    # CTC reactivated train after dwell time - update with new authority and speed
+                    new_auth = self.active_trains[cmd_train]["Suggested Authority"]
+                    new_speed = self.active_trains[cmd_train]["Suggested Speed"]
+                    self.cmd_trains[cmd_train]["cmd auth"] = new_auth
+                    self.cmd_trains[cmd_train]["cmd speed"] = new_speed
+                    # Update train_auth_start for proper distance tracking
+                    self.train_auth_start[cmd_train] = new_auth
+                    print(f"[Wayside] Reactivated {cmd_train} with auth={new_auth}m, speed={new_speed}m/s")
             
             auth = self.cmd_trains[cmd_train]["cmd auth"]
             speed = self.cmd_trains[cmd_train]["cmd speed"]
