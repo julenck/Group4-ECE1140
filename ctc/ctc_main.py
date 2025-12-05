@@ -194,12 +194,15 @@ try:
 
         print(f"Train arrived at {test}")
         
-        # Set Active = 0 so train stops at station
-        with open(data_file_track_cont, "r") as f_updates: 
-            updates = json.load(f_updates)
-        updates["Trains"][train]["Active"] = 0
-        with open(data_file_track_cont, "w") as f_updates: 
-            json.dump(updates, f_updates, indent=4)
+        # Wait for track controller to set Active = 0 (when authority exhausted)
+        print(f"[CTC] Waiting for {train} to stop at station (authority exhausted)...")
+        while True:
+            with open(data_file_track_cont, "r") as f_updates:
+                updates = json.load(f_updates)
+            if updates["Trains"][train]["Active"] == 0:
+                print(f"[CTC] {train} has stopped at station (Active=0 by track controller)")
+                break
+            time.sleep(0.5)
 
         # Wait for dwell time
         time.sleep(dwell_time_s)

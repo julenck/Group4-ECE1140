@@ -646,17 +646,18 @@ class sw_wayside_controller:
                 self.cmd_trains[cmd_train]["cmd speed"] = 0  # Stop the train
                 final_pos = self.cmd_trains[cmd_train]["pos"]  # Get final position from cmd_trains
 
-                # Update position in CTC JSON but DON'T set Active=0 (let CTC handle that)
-                # CTC will detect arrival and set Active=0 itself
+                # Update position AND set Active=0 in CTC JSON (track controller manages Active based on authority)
+                # CTC will detect Active=0 and provide new authority after dwell time
                 max_retries = 3
                 for retry in range(max_retries):
                     try:
                         with self.file_lock:
                             with open(self.ctc_comm_file,'r') as f:
                                 data = json.load(f)
-                            # Only update position, NOT Active status (CTC manages Active)
+                            # Update position AND set Active=0 when authority is exhausted
                             data["Trains"][cmd_train]["Train Position"] = final_pos
-                            print(f"DEBUG: {cmd_train} authority exhausted at position {final_pos}, waiting for CTC")
+                            data["Trains"][cmd_train]["Active"] = 0
+                            print(f"[Wayside] {cmd_train} authority exhausted at position {final_pos}, set Active=0")
                             with open(self.ctc_comm_file,'w') as f:
                                 json.dump(data,f,indent=4)
                         break
