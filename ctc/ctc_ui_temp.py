@@ -260,13 +260,13 @@ class CTCUI:
         line = self.manual_line_box.get()
         dest = self.manual_dest_box.get()
         arrival = self.manual_time_box.get()
-        with open('ctc\\ctc_ui_inputs.json', "r") as f1:
+        with open(self.os.path.join('ctc', 'ctc_ui_inputs.json'), "r") as f1:
             data1 = self.json.load(f1)
         data1["Train"] = train
         data1["Line"] = line
         data1["Station"] = dest
         data1["Arrival Time"] = arrival
-        with open('ctc\\ctc_ui_inputs.json', "w") as f1:
+        with open(self.os.path.join('ctc', 'ctc_ui_inputs.json'), "w") as f1:
             self.json.dump(data1, f1, indent=4)
         self.update_active_trains_table()
         
