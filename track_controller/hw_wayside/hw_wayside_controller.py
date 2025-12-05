@@ -206,12 +206,23 @@ class HW_Wayside_Controller:
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
         
-        # managed/visible blocks default to the controller's block_ids
+        # managed_blocks: blocks this controller writes commands for
+        # visible_blocks: blocks this controller can track (extends for smooth handoffs)
         try:
             self.managed_blocks = set(int(b) for b in self.block_ids)
         except Exception:
             self.managed_blocks = set()
-        self.visible_blocks = set(self.managed_blocks)
+        
+        # Extend visible_blocks for handoff overlap (can see trains slightly outside managed range)
+        # HW Wayside B (XandLdown): managed 70-143, visible 67-146
+        # This allows tracking trains a few blocks before/after handoff boundaries
+        if self.managed_blocks:
+            min_block = min(self.managed_blocks)
+            max_block = max(self.managed_blocks)
+            # Extend visibility by 3 blocks on each side (similar to SW Wayside 1's overlap)
+            self.visible_blocks = set(range(max(0, min_block - 3), min(152, max_block + 4)))
+        else:
+            self.visible_blocks = set(self.managed_blocks)
 
     # -------------------------- helpers --------------------------
 
