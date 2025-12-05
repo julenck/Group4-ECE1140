@@ -203,6 +203,7 @@ class HW_Wayside_Controller:
         self.train_direction: Dict[str, str] = {}
         self.last_seen_position: Dict[str, int] = {}
         self.cumulative_distance: Dict[str, float] = {}
+        self.last_ctc_authority: Dict[str, float] = {}  # Track last CTC authority for reactivation detection
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
         
@@ -874,6 +875,9 @@ class HW_Wayside_Controller:
                         'cmd speed': speed_to_use,
                         'pos': pos,
                     }
+                    
+                    # Track CTC authority for reactivation detection (matching SW behavior)
+                    self.last_ctc_authority[tname] = auth_to_use
 
                     # Initialize per-train tracking
                     if pos in self.green_order:
@@ -903,6 +907,36 @@ class HW_Wayside_Controller:
                 auth = float(state.get('cmd auth', 0.0))
                 speed = float(state.get('cmd speed', 0.0))
                 pos = int(state.get('pos', 0))
+                
+                # Check CTC active status and handle deactivation/reactivation (matching SW behavior)
+                tinfo = self.active_trains.get(tname, {})
+                is_active = int(tinfo.get('Active', 0) or 0)
+                
+                if is_active == 0 and tname in self.cmd_trains:
+                    # CTC deactivated train - set speed and authority to 0
+                    state['cmd auth'] = 0.0
+                    state['cmd speed'] = 0.0
+                    # Reset last_ctc_authority so ANY new authority from CTC will trigger reactivation
+                    self.last_ctc_authority[tname] = 0.0
+                    # Don't remove from cmd_trains yet - CTC may reactivate with new authority
+                    continue
+                elif is_active == 1 and state.get('cmd auth', 0) == 0:
+                    # Train has exhausted authority but CTC shows active - check for reactivation
+                    new_auth = float(tinfo.get('Suggested Authority', 0) or 0)
+                    last_auth = self.last_ctc_authority.get(tname, 0)
+                    
+                    # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
+                    if new_auth > last_auth:
+                        new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
+                        state['cmd auth'] = new_auth
+                        state['cmd speed'] = new_speed
+                        # Update tracking for proper distance calculation
+                        self.train_auth_start[tname] = new_auth
+                        self.last_ctc_authority[tname] = new_auth
+                        # Reset cumulative distance - train is at station (end of current block)
+                        self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
+                        auth = new_auth
+                        speed = new_speed
 
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
@@ -1070,6 +1104,9 @@ class HW_Wayside_Controller:
                     self.train_pos_start.pop(tr, None)
                 if tr in self.train_auth_start:
                     self.train_auth_start.pop(tr, None)
+                # Don't remove train_direction - preserve it for reactivation (matching SW behavior)
+                # if tr in self.train_direction:
+                #     self.train_direction.pop(tr, None)
 
             # Handle handoff removals
             if self.trains_to_handoff:
