@@ -193,7 +193,15 @@ def _discover_block_count() -> int:
     return 152
 
 def _discover_blocks_B() -> List[str]:
+    """Return block IDs for Wayside B (XandLdown).
     
+    Block ranges for command authority (managed_blocks):
+    - SW Wayside 1 (XandLup): 0-69, 144-150
+    - HW Wayside B (XandLdown): 70-143
+    
+    These are the MANAGED blocks (what we write commands for).
+    visible_blocks can extend further for handoff tracking.
+    """
     n = _discover_block_count()
 
     def clamp_range(start: int, end_excl: int) -> List[int]:
@@ -202,7 +210,8 @@ def _discover_blocks_B() -> List[str]:
         end_excl = min(n, end_excl)
         return list(range(start, end_excl))
 
-    down = clamp_range(70, 146)  # 70..145
+    # Managed blocks: 70-143 (no overlap with SW1's 144-150)
+    down = clamp_range(70, 144)  # 70..143
     return [str(i) for i in down]
 
 # ------------------------------------------------------------------------------------
