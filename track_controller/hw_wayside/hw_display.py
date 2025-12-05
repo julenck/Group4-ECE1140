@@ -3,13 +3,15 @@ Very small Tkinter display helper for the HW UI.
 This keeps existing public methods stable and adds two safe helpers:
 - set_blocks(block_ids)
 - bind_on_select(callback: Callable[[str], None])
+- set_active_trains(trains) for the train status table
 """
 
 from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable, List, Dict, Any
+from typing import Callable, List, Dict, Any, Optional
 import math
+import time as time_module
 
 
 class HW_Display(ttk.Frame):
@@ -22,14 +24,31 @@ class HW_Display(ttk.Frame):
         self._on_set_switch = None
         self._on_toggle_maintenance = None
 
-        # left: block picker
-        left = ttk.Frame(self)
-        ttk.Label(left, text="Blocks").pack(anchor="w")
+        # Main content frame (map + details on right, block list on left)
+        content_frame = ttk.Frame(self)
+        content_frame.pack(fill="both", expand=True)
+
+        # ========== LEFT SIDE: Block picker ==========
+        left = ttk.Frame(content_frame)
+        ttk.Label(left, text="Blocks", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
 
         list_frame = ttk.Frame(left)
         list_frame.pack(fill="both", expand=True)
 
-        self.block_list = tk.Listbox(list_frame, height=12, exportselection=False)
+        # Dark themed listbox
+        self.block_list = tk.Listbox(
+            list_frame, 
+            height=18, 
+            width=10,
+            exportselection=False,
+            bg="#33363b",
+            fg="#f2f3f4",
+            selectbackground="#4e9af1",
+            selectforeground="#ffffff",
+            highlightthickness=0,
+            relief="flat",
+            font=("TkDefaultFont", 11)
+        )
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.block_list.yview)
         self.block_list.configure(yscrollcommand=vsb.set)
 
@@ -39,8 +58,6 @@ class HW_Display(ttk.Frame):
         left.pack(side="left", fill="y", padx=(0, 8))
 
         # Switch control buttons live under the block picker (left column)
-        # so they don't overlap the map. Keep them near the block list for
-        # convenient manual operation.
         sw_btns = ttk.Frame(left)
         self._btn_switch_left = ttk.Button(sw_btns, text="Switch -> Straight (0)", command=lambda: self._emit_set_switch('0'))
         self._btn_switch_right = ttk.Button(sw_btns, text="Switch -> Diverge (1)", command=lambda: self._emit_set_switch('1'))
@@ -48,14 +65,30 @@ class HW_Display(ttk.Frame):
         self._btn_switch_right.pack(side="left", pady=(6,0))
         sw_btns.pack(fill="x")
 
-        # right: details
-        right = ttk.Frame(self)
-        # optional top map image area and detail vars
-        self._map_label = None
+        # ========== RIGHT SIDE: Map image + details ==========
+        right = ttk.Frame(content_frame)
+        
+        # Frame to hold map image (center) and details panel (right of map)
+        top_right = ttk.Frame(right)
+        top_right.pack(fill="both", expand=True)
+
+        # Map frame in center-right area
+        map_frame = ttk.Frame(top_right)
+        map_frame.pack(side="left", fill="both", expand=True, padx=(0, 8))
+        self._map_label = ttk.Label(map_frame)
+        self._map_label.pack()
         self._map_image_ref = None
+
+        # Details panel on right side
+        details_frame = ttk.Frame(top_right)
+        details_frame.pack(side="right", fill="y", anchor="ne")
+
+        # Section header for block data
+        ttk.Label(details_frame, text="Selected Block Data", style="Header.TLabel").pack(anchor="w", pady=(0, 8))
 
         self.vars = {
             "block": tk.StringVar(value="-"),
+            "time": tk.StringVar(value="00:00"),
             "speed": tk.StringVar(value="0.0"),
             "authority": tk.StringVar(value="0"),
             "occupied": tk.StringVar(value="False"),
@@ -65,29 +98,89 @@ class HW_Display(ttk.Frame):
             "gate": tk.StringVar(value="-"),
             "status": tk.StringVar(value="OK"),
         }
-        # map frame to the right of details (will hold track_map image if provided)
-        map_frame = ttk.Frame(right)
-        map_frame.pack(side="right", fill="y", padx=(6, 6), pady=(0, 8))
-        self._map_label = ttk.Label(map_frame)
-        self._map_label.pack()
 
-        grid = ttk.Frame(right)
+        # Create detail rows
+        grid = ttk.Frame(details_frame)
         def row(lbl, key):
             r = ttk.Frame(grid)
-            ttk.Label(r, text=f"{lbl}: ", width=12).pack(side="left")
-            ttk.Label(r, textvariable=self.vars[key], width=18).pack(side="left")
-            r.pack(anchor="w")
+            ttk.Label(r, text=f"{lbl}:", width=14, anchor="w").pack(side="left")
+            ttk.Label(r, textvariable=self.vars[key], width=12, anchor="w").pack(side="left")
+            r.pack(anchor="w", pady=1)
+
         row("Block", "block")
+        row("Time", "time")
         row("Speed (mph)", "speed")
         row("Authority (yd)", "authority")
         row("Occupied", "occupied")
         row("Switch", "switch")
         row("Switch Map", "switch_map")
-        ttk.Separator(grid, orient="horizontal").pack(fill="x", pady=6)
-        ttk.Label(grid, textvariable=self.vars["status"]).pack(anchor="w")
-        grid.pack(side="left", anchor="nw", fill="both", expand=True)
-        # no duplicate switch buttons here; controls live under the block list
+
+        grid.pack(anchor="nw", fill="both", expand=True)
+
         right.pack(side="left", fill="both", expand=True)
+
+        # ========== BOTTOM: Active Trains Section ==========
+        trains_section = ttk.Frame(self)
+        trains_section.pack(fill="x", pady=(12, 0))
+
+        # Header label
+        ttk.Label(trains_section, text="Active Trains", style="Header.TLabel").pack(anchor="w")
+        
+        # Simulation time display (hidden by default, only shown when time is available)
+        self._sim_time_var = tk.StringVar(value="")
+
+        # Treeview for trains table
+        columns = ("train", "block", "next_station", "cmd_spd", "auth", "eta")
+        self.train_tree = ttk.Treeview(
+            trains_section,
+            columns=columns,
+            show="headings",
+            height=5,
+            selectmode="browse"
+        )
+
+        # Define column headings and widths
+        self.train_tree.heading("train", text="Train")
+        self.train_tree.heading("block", text="Block")
+        self.train_tree.heading("next_station", text="Next Station")
+        self.train_tree.heading("cmd_spd", text="Cmd Spd")
+        self.train_tree.heading("auth", text="Auth")
+        self.train_tree.heading("eta", text="ETA")
+
+        self.train_tree.column("train", width=120, anchor="w")
+        self.train_tree.column("block", width=80, anchor="center")
+        self.train_tree.column("next_station", width=160, anchor="w")
+        self.train_tree.column("cmd_spd", width=80, anchor="center")
+        self.train_tree.column("auth", width=100, anchor="center")
+        self.train_tree.column("eta", width=100, anchor="center")
+
+        # Add scrollbar for train tree
+        train_scroll = ttk.Scrollbar(trains_section, orient="vertical", command=self.train_tree.yview)
+        self.train_tree.configure(yscrollcommand=train_scroll.set)
+
+        self.train_tree.pack(side="left", fill="x", expand=True)
+        train_scroll.pack(side="right", fill="y")
+
+        # Style the treeview for dark theme
+        try:
+            style = ttk.Style()
+            style.configure("Treeview",
+                background="#33363b",
+                foreground="#f2f3f4",
+                fieldbackground="#33363b",
+                rowheight=25
+            )
+            style.configure("Treeview.Heading",
+                background="#2a2d31",
+                foreground="#f2f3f4",
+                relief="flat"
+            )
+            style.map("Treeview",
+                background=[("selected", "#4e9af1")],
+                foreground=[("selected", "#ffffff")]
+            )
+        except Exception:
+            pass
 
         # bindings
         self.block_list.bind("<<ListboxSelect>>", self._emit_select)
@@ -95,9 +188,86 @@ class HW_Display(ttk.Frame):
     # ---------------- public, stable APIs ----------------
 
     def set_blocks(self, block_ids: List[str]):
+        """Populate the block list with the given block IDs."""
         self.block_list.delete(0, tk.END)
         for b in block_ids:
             self.block_list.insert(tk.END, str(b))
+
+    def set_active_trains(self, trains: List[Dict[str, Any]]):
+        """Update the Active Trains table with current train data.
+        
+        Each train dict should have: name, active, position, cmd_speed, cmd_auth, next_station
+        """
+        # Clear existing rows
+        for item in self.train_tree.get_children():
+            self.train_tree.delete(item)
+
+        if not trains:
+            return
+
+        # Get current time for ETA calculation
+        now = time_module.time()
+
+        for train in trains:
+            try:
+                name = train.get('name', '-')
+                active = train.get('active', False)
+                
+                # Only show active trains
+                if not active:
+                    continue
+
+                position = train.get('position', '-')
+                if position is None:
+                    position = '-'
+                
+                cmd_speed = train.get('cmd_speed', 0)
+                cmd_auth = train.get('cmd_auth', 0)
+                next_station = train.get('next_station', '-')
+
+                # Format speed and authority
+                try:
+                    speed_str = f"{float(cmd_speed):.0f}"
+                except:
+                    speed_str = str(cmd_speed)
+
+                try:
+                    auth_str = f"{int(cmd_auth):,}"
+                except:
+                    auth_str = str(cmd_auth)
+
+                # Calculate ETA if we have speed and authority
+                eta_str = "--:--:--"
+                try:
+                    if float(cmd_speed) > 0 and float(cmd_auth) > 0:
+                        # yards / (mph * 1760 yards/mile / 3600 sec/hour) = seconds
+                        yards_per_sec = float(cmd_speed) * 1760.0 / 3600.0
+                        if yards_per_sec > 0:
+                            seconds_remaining = float(cmd_auth) / yards_per_sec
+                            eta_time = now + seconds_remaining
+                            eta_str = time_module.strftime("%H:%M:%S", time_module.localtime(eta_time))
+                except:
+                    pass
+
+                # Insert row
+                self.train_tree.insert("", "end", values=(
+                    name,
+                    str(position),
+                    str(next_station) if next_station else '-',
+                    speed_str,
+                    auth_str,
+                    eta_str
+                ))
+
+            except Exception:
+                continue
+
+    def show_time(self, sim_time: str):
+        """Update the simulation time display."""
+        try:
+            self._sim_time_var.set(str(sim_time) if sim_time else "--:--:--")
+        except Exception:
+            pass
 
     # ---- compatibility wrappers used by older UI code -----------------
     def set_handlers(self, on_upload_plc=None, on_select_block=None, on_set_switch=None, on_toggle_maintenance=None):
@@ -114,7 +284,7 @@ class HW_Display(ttk.Frame):
             if not path:
                 return False
             # Prefer Pillow for robust resizing; fall back to Tk PhotoImage.
-            max_w, max_h = 360, 400
+            max_w, max_h = 420, 480
             try:
                 from PIL import Image, ImageTk
                 pil = Image.open(path)
@@ -211,13 +381,18 @@ class HW_Display(ttk.Frame):
             pass
 
     def update_details(self, state: Dict[str, Any]):
-        # state keys: block_id, speed_mph, authority_yards, occupied, switch, light, gate, status
+        """Update the details panel with block state info."""
         self.vars["block"].set(str(state.get("block_id", "-")))
+        
+        # Update time if provided
+        if "time" in state:
+            self.vars["time"].set(str(state.get("time", "00:00")))
+        
         self.vars["speed"].set(f"{float(state.get('speed_mph', 0.0)):.1f}")
         self.vars["authority"].set(str(int(state.get("authority_yards", 0))))
         self.vars["occupied"].set(str(bool(state.get("occupied", False))))
-        # no extra occupied list field — keep occupied flag only
         self.vars["switch"].set(str(state.get("switch", "-")))
+        
         try:
             sm = state.get("switch_map")
             if sm:
@@ -228,7 +403,7 @@ class HW_Display(ttk.Frame):
         except Exception:
             s = ""
         self.vars["switch_map"].set(s)
-        # switch now contains the effective display value (target block or state)
+        
         self.vars["light"].set(str(state.get("light", "-")))
         self.vars["gate"].set(str(state.get("gate", "-")))
         self.vars["status"].set(str(state.get("status", "OK")))

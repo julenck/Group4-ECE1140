@@ -1,0 +1,16 @@
+{
+  "Trains": {
+    "Train 1": {
+      "Active": 1,
+      "Train Position": 42,
+      "Suggested Authority": 500,
+      "Suggested Speed": 10
+    },
+    "Train 2": {
+      "Active": 0,
+      "Train Position": 0,
+      "Suggested Authority": 0,
+      "Suggested Speed": 0
+    }
+  }
+}

@@ -1,9 +1,9 @@
 {
     "Trains": {
         "Train 1": {
-            "Active": 0,
-            "Suggested Speed": 10,
-            "Suggested Authority": 500,
+            "Active": 1,
+            "Suggested Speed": -1,
+            "Suggested Authority": 900,
             "Train Position": 65,
             "Train State": 0
         },

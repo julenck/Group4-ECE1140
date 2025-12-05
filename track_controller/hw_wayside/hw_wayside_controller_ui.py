@@ -15,6 +15,12 @@ from typing import Optional
 from hw_display import HW_Display
 from hw_wayside_controller import HW_Wayside_Controller
 
+# optional time controller integration
+try:
+    from time_controller import get_time_controller
+except Exception:
+    get_time_controller = None
+
 # optional LCD
 try:
     from lcd_i2c import I2CLcd
@@ -61,6 +67,12 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         style.map("Good.TButton", background=[("active", "#388e3c")])
         style.configure("Bad.TButton", background=BAD, foreground="#ffffff", padding=6)
         style.map("Bad.TButton", background=[("active", "#c62828")])
+        # Accent style for toggle
+        try:
+            style.configure("Accent.TButton", background=ACCENT, foreground="#ffffff", padding=6)
+            style.map("Accent.TButton", background=[("active", ACCENT)])
+        except Exception:
+            pass
 
         # slightly larger default font for readability
         try:
@@ -87,10 +99,19 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         self.btn_load.pack(side="left", padx=(0, 8))
 
         self.var_maint = tk.BooleanVar(value=False)
-        ttk.Checkbutton(bar, text="Maintenance", variable=self.var_maint,
-                        command=self._on_toggle_maint).pack(side="left", padx=8)
+        # Clear maintenance mode toggle button
+        self.btn_maint = ttk.Button(bar, text="Maintenance Mode: OFF", command=self._on_toggle_maint_button, style="TButton", width=24)
+        self.btn_maint.pack(side="left", padx=8)
 
         bar.pack(fill="x", pady=(0, 6))
+
+        # Real-time clock on the far right of the toolbar
+        try:
+            self._now_var = tk.StringVar(value="--:--:--")
+            lbl_now = ttk.Label(bar, textvariable=self._now_var)
+            lbl_now.pack(side="right", padx=(8, 0))
+        except Exception:
+            self._now_var = None
 
         self._selected_block: Optional[str] = None
         self._last_lcd_tuple: Optional[tuple] = None  # <-- make sure this exists early
@@ -125,7 +146,11 @@ class HW_Wayside_Controller_UI(ttk.Frame):
                 ids = self.controller.get_ui_block_list()
             except Exception:
                 ids = []
-        self.display.set_blocks(ids)
+        # Ensure the display is populated with the controller's block ids
+        try:
+            self.display.set_blocks(ids)
+        except Exception:
+            pass
         self.display.bind_on_select(self._on_select_block)
 
         # (Removed) occupancy debug button: keep UI minimal and stable
@@ -137,6 +162,23 @@ class HW_Wayside_Controller_UI(ttk.Frame):
 
         # now it's safe to render once
         self._push_to_display()
+
+        # Start periodic refresh for real-time updates
+        self._refresh_period_ms = 500  # 500ms = 2Hz refresh
+        self._schedule_refresh()
+
+    # -------- periodic refresh timer --------
+    def _schedule_refresh(self):
+        """Schedule the next periodic refresh."""
+        try:
+            self._push_to_display()
+        except Exception:
+            pass
+        # Schedule next refresh
+        try:
+            self.after(self._refresh_period_ms, self._schedule_refresh)
+        except Exception:
+            pass
 
     # -------- public compatibility method (SW parity) --------
     def update_display(self, *, emergency: bool, speed_mph: float, authority_yards: int):
@@ -161,9 +203,9 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         ok = self.controller.load_plc(path)
         if ok:
             self.controller.change_plc(True)
-            messagebox.showinfo("PLC", f"Loaded: {path}")
+            messagebox.showinfo("PLC Upload", "PLC successfully loaded!")
         else:
-            messagebox.showerror("PLC", "Failed to load PLC")
+            messagebox.showerror("PLC Upload", "Error: Could not load PLC file.")
 
     def _on_toggle_maint(self):
 
@@ -172,6 +214,30 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         # Enable/disable PLC upload button based on Maintenance
         try:
             self.btn_load.configure(state=("normal" if on else "disabled"))
+        except Exception:
+            pass
+
+    def _on_toggle_maint_button(self):
+        # flip the boolean and delegate to existing handler
+        try:
+            self.var_maint.set(not bool(self.var_maint.get()))
+        except Exception:
+            self.var_maint.set(True)
+        # update appearance first
+        self._update_maint_button_appearance()
+        # call the original handler to set controller state and upload-button state
+        try:
+            self._on_toggle_maint()
+        except Exception:
+            pass
+
+    def _update_maint_button_appearance(self):
+        try:
+            on = bool(self.var_maint.get())
+            if on:
+                self.btn_maint.configure(text="Maintenance Mode: ON", style="Accent.TButton")
+            else:
+                self.btn_maint.configure(text="Maintenance Mode: OFF", style="TButton")
         except Exception:
             pass
 
@@ -189,13 +255,30 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         try:
             ok, reason = self.controller.request_switch_change(block_id, new_state)
             if not ok:
-                messagebox.showwarning("Switch denied", f"Switch change denied: {reason}")
+                messagebox.showwarning("Switch Change Denied", f"{reason}")
             else:
-                messagebox.showinfo("Switch staged", f"Switch change staged: {block_id} -> {new_state}")
+                # Get the target block from switch_map for a friendly message
+                target_block = None
+                try:
+                    sm = getattr(self.controller, 'switch_map', {}) or {}
+                    entry = sm.get(str(block_id)) or {}
+                    target_block = entry.get(str(new_state)) or entry.get(new_state)
+                except Exception:
+                    pass
+                
+                if new_state == '0' or str(new_state).upper().startswith('L'):
+                    direction = "straight"
+                else:
+                    direction = "diverging"
+                
+                if target_block:
+                    messagebox.showinfo("Switch Changed", f"Switch now {direction} to block {target_block}")
+                else:
+                    messagebox.showinfo("Switch Changed", f"Switch now set to {direction}")
                 # refresh display
                 self._push_to_display()
         except Exception as e:
-            messagebox.showerror("Switch error", f"Error changing switch: {e}")
+            messagebox.showerror("Switch Error", f"Error changing switch: {e}")
 
     # -------- periodic refresh --------
     def _push_to_display(self):
@@ -207,6 +290,36 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             ids = self.controller.get_block_ids()
         except Exception:
             ids = []
+
+        # If the controller's block list changed and the current selection
+        # is missing, refresh the UI block list. This avoids stomping a
+        # user's selection when it's still valid, but ensures the UI will
+        # show new blocks (e.g., when switching PLC variants or partitions).
+        try:
+            current = list(self.display.block_list.get(0, tk.END))
+            if set(str(x) for x in ids) != set(current):
+                # Only refresh if the currently selected block is not in the
+                # new set (to avoid stomping a user's selection), or if the
+                # display is empty.
+                sel = None
+                try:
+                    sel_idx = self.display.block_list.curselection()
+                    if sel_idx:
+                        sel = self.display.block_list.get(sel_idx[0])
+                except Exception:
+                    sel = None
+                if not sel or str(sel) not in set(str(x) for x in ids):
+                    self.display.set_blocks(ids)
+                    # preserve selection if possible
+                    if ids:
+                        self._selected_block = ids[0]
+                        self.display.select_block(ids[0])
+        except Exception:
+            # Fallback: set blocks unconditionally if anything goes wrong
+            try:
+                self.display.set_blocks(ids)
+            except Exception:
+                pass
 
         if self._selected_block is None and ids:
             self._selected_block = ids[0]
@@ -255,6 +368,47 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             self._set_emergency(is_emerg, fault_block)
 
             self._update_lcd_tuple(state)
+
+            # Update Active Trains panel
+            try:
+                trains = []
+                try:
+                    trains = self.controller.get_active_trains()
+                except Exception:
+                    trains = []
+                self.display.set_active_trains(trains)
+                # lightweight redraw of the left block Treeview if present
+                try:
+                    bt = getattr(self.display, 'block_tree', None)
+                    if bt is not None:
+                        bt.update_idletasks()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # Update the top-right clock every push
+        try:
+            if getattr(self, '_now_var', None) is not None:
+                try:
+                    now = time.strftime("%H:%M:%S", time.localtime(time.time()))
+                    self._now_var.set(now)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Update simulation time if time controller available
+        try:
+            if get_time_controller:
+                tc = get_time_controller()
+                try:
+                    sim = tc.get_sim_time()
+                    self.display.show_time(sim)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     # -------- emergency indicator helper --------
     def _set_emergency(self, is_emergency: bool, block_id: Optional[str] = None):

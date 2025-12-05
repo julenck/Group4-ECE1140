@@ -157,6 +157,8 @@ class HW_Wayside_Controller:
         self.block_distances: Dict[int, float] = {}
         self.block_lengths: Dict[int, float] = {}
         self.station_blocks: set = set()
+        self.block_speed_limits: Dict[int, float] = {}  # Speed limits in m/s per block
+        self.station_names: Dict[int, str] = {}  # Block -> Station name mapping
 
         self.direction_transitions = [
 
@@ -541,6 +543,12 @@ class HW_Wayside_Controller:
                     has_station = row[6] if len(row) > 6 else '0'
                     speed_limit_ms = row[8] if len(row) > 8 else '0'
 
+                    # Get speed limit (column 8 is m/s, column 7 is mph)
+                    try:
+                        speed_limit_ms = float(row[8]) if len(row) > 8 and row[8].strip() else 19.44  # default ~43 mph
+                    except:
+                        speed_limit_ms = 19.44
+                    
                     cumulative += length
                     self.block_graph[block_num] = {
                         'length': length,
@@ -548,11 +556,15 @@ class HW_Wayside_Controller:
                         'reverse_next': reverse_next,
                         'bidirectional': False,
                         'cumulative_distance': cumulative,
+                        'speed_limit_ms': speed_limit_ms,
                     }
                     self.block_lengths[block_num] = length
                     self.block_distances[block_num] = cumulative
+                    self.block_speed_limits[block_num] = speed_limit_ms
                     if has_station.strip() == '1':
                         self.station_blocks.add(block_num)
+                        # Map station names based on section
+                        self.station_names[block_num] = f"Station {section}-{block_num}"
         except Exception:
             self._load_fallback_data()
 
@@ -748,30 +760,44 @@ class HW_Wayside_Controller:
                         self.last_seen_position[tname] = pos
                         continue
 
-                    sug_auth = float(tinfo.get('Suggested Authority', 0) or 0)
-                    sug_speed = float(tinfo.get('Suggested Speed', 0) or 0)
+                    # CTC sends authority in meters and speed in mph
+                    sug_auth_m = float(tinfo.get('Suggested Authority', 0) or 0)  # meters
+                    sug_speed_mph = float(tinfo.get('Suggested Speed', 0) or 0)  # mph
+                    sug_speed_ms = sug_speed_mph * 0.44704  # Convert mph to m/s for internal use
 
                     # Determine if this is a handoff: last seen outside our managed_blocks and now inside
-                    current_last = self.last_seen_position.get(tname, 0)
-                    last_in_section = (current_last in self.managed_blocks) or (current_last == 0)
+                    # OR if we've never seen this train before but it's now in our range (first pickup)
+                    current_last = self.last_seen_position.get(tname, None)
+                    
+                    # Check if this is a handoff or first-time pickup
                     now_in_section = (pos in self.managed_blocks)
-                    is_handoff = (not last_in_section) and now_in_section and current_last != 0
+                    
+                    if current_last is None:
+                        # First time seeing this train - check if it's coming from outside our range
+                        # This is a handoff if the train is in our section but we never tracked it
+                        is_handoff = now_in_section and pos != 0
+                    else:
+                        last_in_section = (current_last in self.managed_blocks) or (current_last == 0)
+                        is_handoff = (not last_in_section) and now_in_section and current_last != 0
 
                     if is_handoff:
                         # Read prior controller outputs (wayside_to_train) to obtain remaining auth/speed
                         try:
                             with open(self.train_comm_file, 'r', encoding='utf-8') as f:
                                 train_data = json.load(f)
-                                current_auth = train_data.get(tname, {}).get('Commanded Authority', sug_auth)
-                                current_speed = train_data.get(tname, {}).get('Commanded Speed', sug_speed)
+                                # File stores in mph/yards, convert to m/s and meters
+                                current_auth_yds = train_data.get(tname, {}).get('Commanded Authority', sug_auth_m * 1.09361)
+                                current_speed_mph = train_data.get(tname, {}).get('Commanded Speed', sug_speed_mph)
+                                current_auth = float(current_auth_yds) * 0.9144  # yards to meters
+                                current_speed = float(current_speed_mph) * 0.44704  # mph to m/s
                         except Exception:
-                            current_auth = sug_auth
-                            current_speed = sug_speed
+                            current_auth = sug_auth_m
+                            current_speed = sug_speed_ms
                         auth_to_use = float(current_auth)
                         speed_to_use = float(current_speed)
                     else:
-                        auth_to_use = float(sug_auth)
-                        speed_to_use = float(sug_speed)
+                        auth_to_use = float(sug_auth_m)  # meters
+                        speed_to_use = float(sug_speed_ms)  # m/s
 
                     # Initialize commanded train entry
                     self.cmd_trains[tname] = {
@@ -786,13 +812,13 @@ class HW_Wayside_Controller:
                     else:
                         self.train_idx[tname] = 0
                     self.train_pos_start[tname] = self.train_idx[tname]
-                    # For handoff, set auth_start to suggested authority from CTC
+                    # For handoff, set auth_start to suggested authority from CTC (in meters)
                     if is_handoff:
-                        self.train_auth_start[tname] = float(tinfo.get('Suggested Authority', auth_to_use))
-                        traveled_before = float(tinfo.get('Suggested Authority', 0)) - auth_to_use
+                        self.train_auth_start[tname] = float(sug_auth_m)
+                        traveled_before = float(sug_auth_m) - auth_to_use
                         self.cumulative_distance[tname] = traveled_before
                     else:
-                        self.train_auth_start[tname] = auth_to_use
+                        self.train_auth_start[tname] = auth_to_use  # meters
                         # initialize cumulative distance heuristics
                         if pos == 0:
                             self.cumulative_distance[tname] = 0.0
@@ -811,6 +837,41 @@ class HW_Wayside_Controller:
 
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
+
+                # Get suggested speed from CTC and speed limit for current block
+                sug_speed = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed) or speed)
+                speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
+                
+                # Calculate target speed based on authority remaining (like SW does)
+                # When authority is low, reduce speed to help train stop
+                DECEL_THRESHOLD = 150  # Start decelerating when less than 150m authority
+                MIN_SPEED_THRESHOLD = 40  # Start dropping below 10 m/s at 40m authority
+                MIN_SPEED = 10  # Don't go below 10 m/s until MIN_SPEED_THRESHOLD
+                FINAL_MIN_SPEED = 1  # Final minimum speed before stopping
+                
+                if auth <= 0:
+                    target_speed = 0
+                elif auth < MIN_SPEED_THRESHOLD:
+                    # Very low authority - reduce to final minimum
+                    target_speed = FINAL_MIN_SPEED
+                elif auth < DECEL_THRESHOLD:
+                    # Low authority - linear interpolation from MIN_SPEED to sug_speed
+                    ratio = (auth - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
+                    target_speed = MIN_SPEED + ratio * (min(sug_speed, speed_limit) - MIN_SPEED)
+                else:
+                    # Normal operation - use min of suggested speed and block limit
+                    target_speed = min(sug_speed, speed_limit)
+                
+                # Smoothly adjust commanded speed toward target
+                ACCEL_RATE = 2.0  # m/s per tick acceleration
+                DECEL_RATE = 5.0  # m/s per tick deceleration
+                
+                if speed < target_speed:
+                    speed = min(speed + ACCEL_RATE, target_speed)
+                elif speed > target_speed:
+                    speed = max(speed - DECEL_RATE, target_speed)
+                
+                state['cmd speed'] = speed
 
                 # Decrement authority by distance traveled in this period
                 # assume _trains_period is seconds between ticks
@@ -1357,6 +1418,26 @@ class HW_Wayside_Controller:
         with self._lock:
             return self._train_block
 
+    def get_next_station_for_block(self, block: int) -> str:
+        """Find the next station block ahead of the given block position."""
+        try:
+            # Find position in green_order
+            if block not in self.green_order:
+                return "-"
+            idx = self.green_order.index(block)
+            
+            # Search forward through the route for next station
+            for i in range(idx + 1, min(idx + 50, len(self.green_order))):  # Look up to 50 blocks ahead
+                check_block = self.green_order[i]
+                if check_block in self.station_blocks:
+                    # Return station name if we have one
+                    if check_block in self.station_names:
+                        return self.station_names[check_block]
+                    return f"Block {check_block}"
+            return "-"
+        except Exception:
+            return "-"
+
     def get_block_ids(self) -> List[str]:
         return list(self.block_ids)
 
@@ -1518,6 +1599,78 @@ class HW_Wayside_Controller:
             "occupied": st.get("occupied"),
             "closed": (block_id in self._closed),
         }
+
+    def get_active_trains(self) -> List[Dict[str, Any]]:
+        """Return a list of active train summaries for the UI.
+
+        Each entry contains: name, active (bool), position (int or None),
+        cmd_speed, cmd_auth.
+        """
+        out: List[Dict[str, Any]] = []
+        with self._lock:
+            # Prefer visible trains from CTC active_trains dict; include up to 5 logical trains
+            seen = set()
+            # First, include any trains from active_trains (CTC view)
+            for tname, info in (self.active_trains or {}).items():
+                try:
+                    active = int(info.get('Active', 0)) == 1
+                except Exception:
+                    active = False
+                try:
+                    pos = int(info.get('Train Position'))
+                except Exception:
+                    pos = None
+                cmd = self.cmd_trains.get(tname, {})
+                # Calculate next station based on train position
+                next_station = '-'
+                try:
+                    if pos is not None:
+                        next_station = self.get_next_station_for_block(pos)
+                except Exception:
+                    next_station = '-'
+                # Prefer controller's per-train commanded values if available,
+                # otherwise fall back to wayside-wide values.
+                if cmd and (cmd.get('cmd speed', None) is not None):
+                    try:
+                        cmd_speed_mph = float(cmd.get('cmd speed', 0.0)) * 2.23694
+                    except Exception:
+                        cmd_speed_mph = float(self._speed_mph)
+                else:
+                    cmd_speed_mph = float(self._speed_mph)
+
+                if cmd and (cmd.get('cmd auth', None) is not None):
+                    try:
+                        # cmd auth is stored internally in meters; convert to yards
+                        cmd_auth_yds = int(float(cmd.get('cmd auth', 0.0)) * 1.09361)
+                    except Exception:
+                        cmd_auth_yds = int(self._authority_yds)
+                else:
+                    cmd_auth_yds = int(self._authority_yds)
+
+                out.append({
+                    'name': tname,
+                    'active': active,
+                    'position': pos,
+                    'cmd_speed': cmd_speed_mph,
+                    'cmd_auth': cmd_auth_yds,
+                    'next_station': next_station,
+                })
+                seen.add(tname)
+
+            # Fill in any remaining known commanded trains that CTC didn't list
+            for tname, cmd in (self.cmd_trains or {}).items():
+                if tname in seen:
+                    continue
+                out.append({
+                    'name': tname,
+                    'active': False,
+                    'position': cmd.get('pos'),
+                    'cmd_speed': cmd.get('cmd speed', 0),
+                    'cmd_auth': cmd.get('cmd auth', 0),
+                    'next_station': cmd.get('next_station') or cmd.get('beacon') or '-',
+                })
+
+        return out
 
     def has_switch(self, block_id: str) -> bool:
         """Return True if this block is a hardware switch managed by this wayside.
