@@ -87,8 +87,8 @@ class train_controller:
         # build a vital_train_controls candidate from current state + changes
         state = self.api.get_state().copy()
         candidate = vital_train_controls(
-            kp = changes.get('kp', state.get('kp', 0.0)),
-            ki = changes.get('ki', state.get('ki', 0.0)),
+            kp = changes.get('kp', state.get('kp') or 0.0),
+            ki = changes.get('ki', state.get('ki') or 0.0),
             train_velocity = changes.get('train_velocity', state.get('train_velocity', 0.0)),
             driver_velocity = changes.get('driver_velocity', state.get('driver_velocity', 0.0)),
             emergency_brake = changes.get('emergency_brake', state.get('emergency_brake', False)),
@@ -119,8 +119,9 @@ class train_controller:
         # Get current values
         train_velocity = state.get('train_velocity', 0.0)
         driver_velocity = state.get('driver_velocity', 0.0)
-        kp = state.get('kp', 5000.0)
-        ki = state.get('ki', 500.0)
+        # Handle None values for kp/ki (server sets them to None by default)
+        kp = state.get('kp') or 5000.0
+        ki = state.get('ki') or 500.0
         
         # Calculate speed error
         velocity_error = driver_velocity - train_velocity
@@ -295,8 +296,9 @@ class train_controller:
         """Calculate power command using PI controller (same logic as SW controller)."""
         driver_velocity = state.get('driver_velocity', 0.0)
         current_velocity = state.get('train_velocity', 0.0)
-        kp = state.get('kp', 5000.0)
-        ki = state.get('ki', 500.0)
+        # Handle None values for kp/ki (server sets them to None by default)
+        kp = state.get('kp') or 5000.0
+        ki = state.get('ki') or 500.0
         
         error = driver_velocity - current_velocity
         self._accumulated_error += error * 0.5  # dt = 0.5 seconds
