@@ -38,123 +38,98 @@ def dispatch_train(train, line, station, arrival_time_str,
     print(f"CTC data file -> {data_file_ctc_data}")
     print(f"Track controller file -> {data_file_track_cont}")
 
-    # ALWAYS reset both JSON files to default at start of dispatch
-    # This ensures clean state for each new dispatch operation
-    print("Resetting CTC JSON files to default state...")
+    # MODIFIED: Only reset the SPECIFIC train being dispatched, not ALL trains
+    # This allows multiple trains to coexist
+    print(f"[CTC Dispatch] Resetting {train} to clean state...")
     
-    # Reset ctc_data.json
-    default_ctc_data = {
-        "Dispatcher": {
-            "Trains": {}
-        }
-    }
+    # Load existing data (preserve other trains)
+    try:
+        with open(data_file_ctc_data, 'r') as f:
+            ctc_data = json.load(f)
+    except Exception:
+        ctc_data = {"Dispatcher": {"Trains": {}}}
+    
+    # Ensure structure exists
+    if "Dispatcher" not in ctc_data:
+        ctc_data["Dispatcher"] = {}
+    if "Trains" not in ctc_data["Dispatcher"]:
+        ctc_data["Dispatcher"]["Trains"] = {}
+    
+    # Initialize ALL trains if they don't exist (first dispatch)
     for i in range(1, 6):
         tname = f"Train {i}"
-        default_ctc_data["Dispatcher"]["Trains"][tname] = {
-            "Line": "",
-            "Suggested Speed": "",
-            "Authority": "",
-            "Station Destination": "",
-            "Arrival Time": "",
-            "Position": "",
-            "State": "",
-            "Current Station": ""
-        }
-    try:
-        with open(data_file_ctc_data, 'w') as f:
-            json.dump(default_ctc_data, f, indent=4)
-        print("ctc_data.json reset complete")
-    except Exception as e:
-        print(f"Warning: failed to reset ctc_data.json: {e}")
-    
-    # Reset ctc_track_controller.json
-    default_track = {"Trains": {}}
-    for i in range(1, 6):
-        tname = f"Train {i}"
-        default_track["Trains"][tname] = {
-            "Active": 0,
-            "Suggested Speed": 0,
-            "Suggested Authority": 0,
-            "Train Position": 0,
-            "Train State": 0
-        }
-    try:
-        with open(data_file_track_cont, 'w') as f:
-            json.dump(default_track, f, indent=4)
-        print("ctc_track_controller.json reset complete")
-    except Exception as e:
-        print(f"Warning: failed to reset ctc_track_controller.json: {e}")
-
-    # Ensure the track controller file exists (create minimal structure if missing)
-    if not os.path.exists(data_file_track_cont):
-        try:
-            with open(data_file_track_cont, 'w') as f:
-                json.dump(default_track, f, indent=4)
-        except Exception:
-            # If we cannot create the file, let the watcher raise a clear error
-            pass
-
-    # Ensure the ctc data file exists with minimal structure so UI updates succeed
-    if not os.path.exists(data_file_ctc_data):
-        try:
-            with open(data_file_ctc_data, 'w') as f:
-                json.dump({"Dispatcher": {"Trains": {}}}, f, indent=4)
-        except Exception:
-            pass
-
-    # Ensure both files contain default train entries expected by the UI/dispatcher
-    def _ensure_train_entries():
-        trains = [f"Train {i}" for i in range(1, 6)]
-        # ctc_data: ensure Dispatcher->Trains has entries
-        try:
-            with open(data_file_ctc_data, 'r') as f:
-                ctc_data = json.load(f)
-        except Exception:
-            ctc_data = {"Dispatcher": {"Trains": {}}}
-
-        dispatcher_trains = ctc_data.setdefault("Dispatcher", {}).setdefault("Trains", {})
-        for t in trains:
-            dispatcher_trains.setdefault(t, {
+        if tname not in ctc_data["Dispatcher"]["Trains"]:
+            ctc_data["Dispatcher"]["Trains"][tname] = {
                 "Line": "",
                 "Suggested Speed": "",
                 "Authority": "",
                 "Station Destination": "",
                 "Arrival Time": "",
-                "Position": "",
-                "State": "",
+                "Position": 0,
+                "State": 0,
                 "Current Station": ""
-            })
-
-        try:
-            with open(data_file_ctc_data, 'w') as f:
-                json.dump(ctc_data, f, indent=4)
-        except Exception:
-            pass
-
-        # track controller file: ensure Trains has entries
-        try:
-            with open(data_file_track_cont, 'r') as f:
-                track_updates = json.load(f)
-        except Exception:
-            track_updates = {"Trains": {}}
-
-        trains_dict = track_updates.setdefault("Trains", {})
-        for t in trains:
-            trains_dict.setdefault(t, {
+            }
+    
+    # Reset ONLY the train being dispatched
+    ctc_data["Dispatcher"]["Trains"][train] = {
+        "Line": line,  # Pre-fill with dispatch values
+        "Suggested Speed": "",
+        "Authority": "",
+        "Station Destination": station,
+        "Arrival Time": arrival_time_str,
+        "Position": 0,
+        "State": 0,
+        "Current Station": ""
+    }
+    
+    try:
+        with open(data_file_ctc_data, 'w') as f:
+            json.dump(ctc_data, f, indent=4)
+        print(f"[CTC Dispatch] {train} reset in ctc_data.json (other trains preserved)")
+    except Exception as e:
+        print(f"Warning: failed to update ctc_data.json: {e}")
+    
+    # Load existing track controller data (preserve other trains)
+    try:
+        with open(data_file_track_cont, 'r') as f:
+            track_data = json.load(f)
+    except Exception:
+        track_data = {"Trains": {}}
+    
+    # Ensure structure exists
+    if "Trains" not in track_data:
+        track_data["Trains"] = {}
+    
+    # Initialize ALL trains if they don't exist
+    for i in range(1, 6):
+        tname = f"Train {i}"
+        if tname not in track_data["Trains"]:
+            track_data["Trains"][tname] = {
                 "Active": 0,
-                "Suggested Authority": 0,
                 "Suggested Speed": 0,
-                "Train Position": None,
-                "Train State": ""
-            })
+                "Suggested Authority": 0,
+                "Train Position": 0,
+                "Train State": 0
+            }
+    
+    # Reset ONLY the train being dispatched
+    track_data["Trains"][train] = {
+        "Active": 0,  # Will be set to 1 later
+        "Suggested Speed": 0,
+        "Suggested Authority": 0,
+        "Train Position": 0,
+        "Train State": 0
+    }
+    
+    try:
+        with open(data_file_track_cont, 'w') as f:
+            json.dump(track_data, f, indent=4)
+        print(f"[CTC Dispatch] {train} reset in ctc_track_controller.json (other trains preserved)")
+    except Exception as e:
+        print(f"Warning: failed to update ctc_track_controller.json: {e}")
 
-        try:
-            with open(data_file_track_cont, 'w') as f:
-                json.dump(track_updates, f, indent=4)
-        except Exception:
-            pass
-
-    _ensure_train_entries()
+    # Files are already initialized and updated above - no need for additional resets
+    # (Removed legacy _ensure_train_entries() to prevent overwriting existing train data)
 
     dest_id = route_lookup_via_station[station]["id"]
     print(f"dest id ={dest_id}")
