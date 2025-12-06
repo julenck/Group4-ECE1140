@@ -112,6 +112,10 @@ def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
     allowed, reason = controller.request_switch_change(selected, new_state)
     if allowed:
         print(f"[GPIO] ✓ Switch changed successfully")
+        # Debug: Show what's actually stored
+        with controller._lock:
+            stored = controller._cmd_switch_state.get(selected)
+            print(f"[GPIO] DEBUG: _cmd_switch_state[{selected}] = {stored}")
     else:
         print(f"[GPIO] ✗ Rejected: {reason}")
 
@@ -326,6 +330,12 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
         controller.apply_track_snapshot(track_snapshot, limit_blocks=blocks)
 
         controller.tick_train_progress()
+        
+        # Poll physical switch BEFORE building commanded arrays and updating UI
+        try:
+            apply_physical_switch(controller)
+        except Exception:
+            pass
 
         status = controller.assess_safety(blocks, vital_in)
         # identify this controller in output
@@ -353,13 +363,6 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
     for controller in controllers:
         try:
             controller.write_wayside_to_train()
-        except Exception:
-            pass
-
-    # Poll physical switch and apply to selected block (if GPIO enabled)
-    for controller in controllers:
-        try:
-            apply_physical_switch(controller)
         except Exception:
             pass
 
