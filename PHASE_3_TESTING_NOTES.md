@@ -156,17 +156,42 @@ Now you can dispatch trains and they'll use the REST API! 🎉
 The errors you're seeing are:
 1. **Expected** - Server is not running (that's the test!)
 2. **Handled gracefully** - System falls back to file I/O
-3. **Minor path issue** - TrainManager import (easily fixed by running from project root)
+3. **Minor path issue** - Import errors (easily fixed by running from project root)
 
 **Phase 3 is working as designed!** The whole point is graceful degradation when the server is unavailable, and that's exactly what you're seeing.
+
+---
+
+## Common Issue: Import Errors from Subdirectories
+
+**What You'll See:**
+```
+ModuleNotFoundError: No module named 'track_controller'
+ModuleNotFoundError: No module named 'train_controller'
+```
+
+**Why:** Python can't find modules when you run scripts from subdirectories.
+
+**Solution:** Always run from project root:
+```bash
+# Instead of: cd ctc && python ctc_ui_temp.py
+# Do this:    python -m ctc.ctc_ui_temp
+
+# Instead of: cd track_controller/New_SW_Code && python sw_wayside_controller_ui.py
+# Do this:    python -m track_controller.New_SW_Code.sw_wayside_controller_ui
+
+# OR use the integrated launcher:
+python combine_ctc_wayside_test.py
+```
 
 ---
 
 ## Next Steps
 
 1. ✅ **Test 1.2 PASSED** - CTC works without server (fallback mode)
-2. **Next:** Test 2.2 - Test CTC WITH server running
-3. **Recommendation:** Run all tests from project root for full functionality
+2. ✅ **Test 1.3** - Wayside has expected import issues from subdirectory
+3. **Next:** Test 2.2 - Test CTC WITH server running
+4. **Recommendation:** Use `combine_ctc_wayside_test.py` for integrated testing
 
 **Phase 3 Status:** Ready for full integration testing! 🚀
 

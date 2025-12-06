@@ -61,7 +61,7 @@ python train_model_ui.py
 
 ---
 
-### Test 1.2: CTC (No Server)
+### Test 1.2: CTC (No Server) ✅ Works
 
 **Purpose:** Verify CTC works without REST API server
 
@@ -114,14 +114,36 @@ python -m ctc.ctc_ui_temp
 
 **Purpose:** Verify Wayside works without REST API server
 
-**Steps:**
+**Steps (when run from subdirectory):**
 ```bash
 cd track_controller/New_SW_Code
-python sw_wayside_test.py  # Or however wayside is normally run
+python sw_wayside_controller_ui.py
 # Don't start the REST API server!
 ```
 
-**Expected Console Output:**
+**Expected Console Output (Import Error - Expected!):**
+```
+Traceback (most recent call last):
+  File "sw_wayside_controller_ui.py", line 26, in <module>
+    from track_controller.New_SW_Code import sw_wayside_controller
+ModuleNotFoundError: No module named 'track_controller'
+```
+
+**Note:** This error is EXPECTED when running from the subdirectory! 
+
+**Recommended: Run from Project Root Instead:**
+```bash
+# From project root
+python -m track_controller.New_SW_Code.sw_wayside_controller_ui
+```
+
+**OR use the integrated launcher:**
+```bash
+# Use the full system launcher (CTC + Wayside together)
+python combine_ctc_wayside_test.py
+```
+
+**Expected Console Output (from project root):**
 ```
 [Wayside 1] Using file-based I/O (no server_url)
 ```
@@ -131,6 +153,12 @@ python sw_wayside_test.py  # Or however wayside is normally run
 - ✅ Reads CTC commands from `ctc_track_controller.json`
 - ✅ Reads train speeds from `train_data.json`
 - ✅ No API errors or crashes
+- ✅ Fallback to file I/O works when server unavailable
+
+**Why the Import Error Happens:**
+- `sw_wayside_controller_ui.py` imports using absolute paths: `from track_controller.New_SW_Code import...`
+- When run from the subdirectory, Python can't find the `track_controller` module
+- **Solution:** Always run from project root or use the integrated launcher
 
 ---
 
