@@ -261,9 +261,10 @@ class train_controller_api:
                         'outputs': outputs
                     }
                     
-                    # Direct write (file lock prevents race conditions)
+                    # Direct write with sorted keys to maintain consistent order (file lock prevents race conditions)
+                    sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
                     with open(self.state_file, 'w') as f:
-                        json.dump(all_states, f, indent=4)
+                        json.dump(sorted_states, f, indent=4)
                 else:
                     # Legacy mode: save with inputs/outputs structure at root
                     if os.path.exists(self.state_file):
@@ -284,9 +285,10 @@ class train_controller_api:
                         elif key in self.default_outputs:
                             all_states['outputs'][key] = value
                     
-                    # Direct write (file lock prevents race conditions)
+                    # Direct write with sorted keys to maintain consistent order (file lock prevents race conditions)
+                    sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
                     with open(self.state_file, 'w') as f:
-                        json.dump(all_states, f, indent=4)
+                        json.dump(sorted_states, f, indent=4)
 
             except Exception as e:
                 print(f"[ERROR] Failed to save train state: {e}")

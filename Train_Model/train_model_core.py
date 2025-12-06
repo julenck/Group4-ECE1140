@@ -45,6 +45,10 @@ def safe_read_json(path):
 
 
 def safe_write_json(path, data):
+    # Sort keys if writing to train_states.json to maintain consistent order (train_1, train_2, etc.)
+    if "train_states.json" in path and isinstance(data, dict):
+        data = {k: data[k] for k in sorted(data.keys())}
+    
     payload = json.dumps(data, indent=4)
     out_dir = os.path.dirname(os.path.abspath(path))
     if out_dir and not os.path.exists(out_dir):

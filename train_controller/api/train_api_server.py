@@ -53,10 +53,16 @@ def read_json_file(filepath):
             return {}
 
 def write_json_file(filepath, data):
-    """Thread-safe JSON file write."""
+    """Thread-safe JSON file write with sorted keys for train_states.json."""
     with file_lock:
         try:
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            
+            # Sort keys if writing to train_states.json to maintain consistent order (train_1, train_2, etc.)
+            if 'train_states.json' in filepath and isinstance(data, dict):
+                # Sort top-level keys (train_1, train_2, etc.)
+                data = {k: data[k] for k in sorted(data.keys())}
+            
             with open(filepath, 'w') as f:
                 json.dump(data, f, indent=4)
         except Exception as e:

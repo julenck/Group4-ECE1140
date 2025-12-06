@@ -372,9 +372,10 @@ class TrainManager:
         
         all_states[train_key] = initial_state
         
-        # Write back to file
+        # Write back to file with sorted keys to maintain consistent order (train_1, train_2, etc.)
+        sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
         with open(self.state_file, 'w') as f:
-            json.dump(all_states, f, indent=4)
+            json.dump(sorted_states, f, indent=4)
 
     # --- NEW: helpers to sync train_data.json with track model inputs ---
     def _safe_read_json(self, path: str) -> dict:
@@ -527,8 +528,10 @@ class TrainManager:
         train_key = f"train_{train_id}"
         if train_key in all_states:
             del all_states[train_key]
+        # Write back with sorted keys to maintain consistent order
+        sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
         with open(self.state_file, 'w') as f:
-            json.dump(all_states, f, indent=4)
+            json.dump(sorted_states, f, indent=4)
 
         # Remove matching entry from Train Model/train_data.json
         try:
@@ -588,9 +591,10 @@ class TrainManager:
         if train_key in all_states:
             all_states[train_key].update(state_updates)
         
-        # Write back
+        # Write back with sorted keys to maintain consistent order
+        sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
         with open(self.state_file, 'w') as f:
-            json.dump(all_states, f, indent=4)
+            json.dump(sorted_states, f, indent=4)
         
         return True
     
