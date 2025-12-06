@@ -1,9 +1,33 @@
 
 import json, time, os
+import tempfile
 from datetime import datetime
 from .ctc_main_helper_functions import JSONFileWatcher
 from watchdog.observers import Observer
 from .track.map import route_lookup_via_station, route_lookup_via_id
+
+def safe_write_json(file_path, data):
+    """Thread-safe JSON write with validation to prevent corruption."""
+    try:
+        # Validate structure first
+        test_json = json.dumps(data, indent=4)
+        if test_json.count('{') != test_json.count('}'):
+            print(f"[safe_write_json] ERROR: Imbalanced braces! Not writing {file_path}")
+            return False
+        
+        # Write to temp file first, then atomic rename
+        temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(file_path) or '.', suffix='.json')
+        with os.fdopen(temp_fd, 'w') as f:
+            json.dump(data, f, indent=4)
+        
+        # Atomic rename (replaces old file)
+        os.replace(temp_path, file_path)
+        return True
+    except Exception as e:
+        print(f"[safe_write_json] ERROR writing {file_path}: {e}")
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return False
 
 def track_update_handler(new_data, train, data_file_ctc_data):
     try:
@@ -14,8 +38,7 @@ def track_update_handler(new_data, train, data_file_ctc_data):
             data = json.load(f_data)
         data["Dispatcher"]["Trains"][train]["Position"] = train_pos
         data["Dispatcher"]["Trains"][train]["State"] = train_state
-        with open(data_file_ctc_data, "w") as f_data:
-            json.dump(data, f_data, indent=4)
+        safe_write_json(data_file_ctc_data, data)
     except Exception as e:
         print(f"Train position data missing: {e}")
 
@@ -101,12 +124,10 @@ def dispatch_train(train, line, station, arrival_time_str,
         "Current Station": ""
     }
     
-    try:
-        with open(data_file_ctc_data, 'w') as f:
-            json.dump(ctc_data, f, indent=4)
+    if safe_write_json(data_file_ctc_data, ctc_data):
         print(f"[CTC Dispatch] {train} reset in ctc_data.json (other trains preserved)")
-    except Exception as e:
-        print(f"Warning: failed to update ctc_data.json: {e}")
+    else:
+        print(f"[CTC Dispatch] ERROR: failed to update ctc_data.json")
     
     # Load existing track controller data (preserve other trains)
     try:
@@ -185,8 +206,7 @@ def dispatch_train(train, line, station, arrival_time_str,
                 data = json.load(f_data)
             data["Dispatcher"]["Trains"][train]["Position"] = train_pos
             data["Dispatcher"]["Trains"][train]["State"] = train_state
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
+            safe_write_json(data_file_ctc_data, data)
         except Exception as e:
             print(f"Train position data missing: {e}")
 
@@ -211,8 +231,7 @@ def dispatch_train(train, line, station, arrival_time_str,
             data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_mph
             data["Dispatcher"]["Trains"][train]["Station Destination"] = station
             data["Dispatcher"]["Trains"][train]["Arrival Time"] = arrival_time_str
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
+            safe_write_json(data_file_ctc_data, data)
             with open(data_file_track_cont, "r") as f_updates:
                 updates = json.load(f_updates)
             updates["Trains"][train]["Active"] = 1
@@ -229,8 +248,7 @@ def dispatch_train(train, line, station, arrival_time_str,
             data["Dispatcher"]["Trains"][train]["Current Station"] = current_station
             data["Dispatcher"]["Trains"][train]["Authority"] = authority_yards
             data["Dispatcher"]["Trains"][train]["Suggested Speed"] = speed_mph
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
+            safe_write_json(data_file_ctc_data, data)
             print(f"Train arrived at {test}")
             
             # Wait for track controller to set Active = 0 (when authority exhausted)
@@ -251,8 +269,7 @@ def dispatch_train(train, line, station, arrival_time_str,
             with open(data_file_ctc_data, "r") as f_data:
                 data = json.load(f_data)
             data["Dispatcher"]["Trains"][train]["Current Station"] = "---"
-            with open(data_file_ctc_data, "w") as f_data:
-                json.dump(data, f_data, indent=4)
+            safe_write_json(data_file_ctc_data, data)
             
             # If not at final destination, set Active = 1 with new authority for next leg
             if test != station:

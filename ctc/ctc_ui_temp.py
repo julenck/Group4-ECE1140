@@ -130,8 +130,34 @@ class CTCUI:
         return {}
 
     def save_data(self, data):
-        with open(self.data_file, "w") as f:
-            self.json.dump(data, f, indent=4)
+        """Thread-safe save with validation to prevent corruption."""
+        import tempfile
+        import os
+        
+        # Validate data structure before writing
+        try:
+            # Test serialization first
+            test_json = self.json.dumps(data, indent=4)
+            # Ensure balanced braces
+            if test_json.count('{') != test_json.count('}'):
+                print(f"[CTC UI] ERROR: Imbalanced braces in data! Not writing to file.")
+                return
+        except Exception as e:
+            print(f"[CTC UI] ERROR: Invalid data structure: {e}")
+            return
+        
+        # Write to temp file first, then atomic rename
+        try:
+            temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(self.data_file), suffix='.json')
+            with os.fdopen(temp_fd, 'w') as f:
+                self.json.dump(data, f, indent=4)
+            
+            # Atomic rename (replaces old file)
+            os.replace(temp_path, self.data_file)
+        except Exception as e:
+            print(f"[CTC UI] ERROR writing {self.data_file}: {e}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
 
     def setup_ui(self):
