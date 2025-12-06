@@ -26,28 +26,60 @@ GPIO_SWITCH_PIN = 17  # BCM pin number for the physical switch input
 try:
     import RPi.GPIO as GPIO
     GPIO_AVAILABLE = True
+    GPIO_LIBRARY = "RPi.GPIO"
 except ImportError:
     GPIO_AVAILABLE = False
+    GPIO = None
+    GPIO_LIBRARY = None
     print("[INFO] RPi.GPIO not available - physical switch disabled")
+
+# For Raspberry Pi 5, try lgpio-compatible library
+if not GPIO_AVAILABLE:
+    try:
+        import lgpio
+        GPIO_AVAILABLE = True
+        GPIO_LIBRARY = "lgpio"
+        print("[INFO] Using lgpio for Raspberry Pi 5")
+    except ImportError:
+        print("[INFO] lgpio not available - physical switch disabled")
 
 def setup_gpio():
     """Initialize GPIO for physical switch input."""
+    global GPIO, GPIO_LIBRARY
+    
     if not GPIO_AVAILABLE or not ENABLE_GPIO:
         return False
+    
     try:
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(GPIO_SWITCH_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        print(f"[GPIO] Physical switch initialized on GPIO {GPIO_SWITCH_PIN}")
-        return True
+        if GPIO_LIBRARY == "lgpio":
+            # Pi 5 using lgpio
+            import lgpio
+            GPIO.chip = lgpio.gpiochip_open(4)  # Pi 5 uses gpiochip4
+            GPIO.pin_handle = lgpio.gpio_claim_input(GPIO.chip, GPIO_SWITCH_PIN, lgpio.SET_PULL_UP)
+            print(f"[GPIO] Physical switch initialized on GPIO {GPIO_SWITCH_PIN} (Pi 5/lgpio)")
+            return True
+        else:
+            # Pi 4 and older using RPi.GPIO
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(GPIO_SWITCH_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            print(f"[GPIO] Physical switch initialized on GPIO {GPIO_SWITCH_PIN} (RPi.GPIO)")
+            return True
     except Exception as e:
         print(f"[GPIO] Setup failed: {e}")
+        if GPIO_LIBRARY == "RPi.GPIO":
+            print(f"[GPIO] If on Pi 5, install lgpio: sudo apt install -y python3-lgpio")
         return False
 
 def cleanup_gpio():
     """Clean up GPIO on exit."""
     if GPIO_AVAILABLE and ENABLE_GPIO:
         try:
-            GPIO.cleanup()
+            if GPIO_LIBRARY == "lgpio":
+                import lgpio
+                if hasattr(GPIO, 'chip'):
+                    lgpio.gpiochip_close(GPIO.chip)
+            else:
+                GPIO.cleanup()
         except Exception:
             pass
 
@@ -56,10 +88,17 @@ def read_physical_switch() -> str:
     if not GPIO_AVAILABLE or not ENABLE_GPIO:
         return None
     try:
+        if GPIO_LIBRARY == "lgpio":
+            # Pi 5 using lgpio
+            import lgpio
+            state = lgpio.gpio_read(GPIO.chip, GPIO_SWITCH_PIN)
+        else:
+            # Pi 4 and older using RPi.GPIO
+            state = GPIO.input(GPIO_SWITCH_PIN)
+        
         # With pull-up: LOW (0) = switch connected to GND = "Left"
         #               HIGH (1) = switch open/floating = "Right"
-        state = GPIO.input(GPIO_SWITCH_PIN)
-        return "Right" if state == GPIO.HIGH else "Left"
+        return "Right" if state == 1 else "Left"
     except Exception:
         return None
 
