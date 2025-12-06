@@ -30,30 +30,25 @@ class PhysicalSwitch:
     def __init__(self, pin: int = GPIO_SWITCH_PIN):
         self.pin = pin
         self.chip = None
-        self.last_read_state = None  # Track last state to detect changes
+        self.last_read_state = None
         if lgpio:
             try:
-                self.chip = lgpio.gpiochip_open(4)  # Pi 5 uses chip 4
+                self.chip = lgpio.gpiochip_open(4)
                 lgpio.gpio_claim_input(self.chip, self.pin, lgpio.SET_PULL_UP)
-                print(f"[GPIO] Physical switch initialized on pin {pin}")
-            except Exception as e:
-                print(f"[GPIO] Init failed: {e}")
-                self.chip = None  # fail soft
+            except Exception:
+                self.chip = None
     
     def present(self) -> bool:
-        """Check if GPIO is available."""
         return self.chip is not None
     
     def read_state(self) -> str:
-        """Read switch state. Returns 'Left' or 'Right'."""
+        """Read switch state. Returns '0' or '1' to match UI format."""
         if not self.chip:
             return None
         try:
             state = lgpio.gpio_read(self.chip, self.pin)
-            result = "Right" if state == 1 else "Left"
-            return result
-        except Exception as e:
-            print(f"[GPIO] Read error: {e}")
+            return "1" if state == 1 else "0"
+        except Exception:
             return None
     
     def check_for_change(self) -> str:
@@ -62,18 +57,15 @@ class PhysicalSwitch:
         if current is None:
             return None
         
-        # First time reading or state changed
         if self.last_read_state is None:
             self.last_read_state = current
-            print(f"[GPIO] Initial state: {current}")
-            return None  # Don't trigger on first read
+            return None
         
         if current != self.last_read_state:
-            print(f"[GPIO] State changed: {self.last_read_state} → {current}")
             self.last_read_state = current
-            return current  # Return new state only on change
+            return current
         
-        return None  # No change
+        return None
 
 # Global switch instance (like LCD)
 _physical_switch = PhysicalSwitch()
@@ -83,41 +75,18 @@ def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
     if not _physical_switch.present():
         return
     
-    # Always check for switch changes first, then validate conditions
     new_state = _physical_switch.check_for_change()
     if not new_state:
-        return  # No change detected
+        return
     
-    # Physical switch changed! Now check if we can apply it
-    print(f"[GPIO] Physical switch flipped to: {new_state}")
-    
-    # Check maintenance mode
     if not controller.maintenance_active:
-        print("[GPIO] Ignored - not in maintenance mode")
         return
     
-    # Check selected block
     selected = controller.get_selected_block()
-    if not selected:
-        print("[GPIO] Ignored - no block selected")
+    if not selected or not controller.has_switch(selected):
         return
     
-    # Check if block has switch
-    if not controller.has_switch(selected):
-        print(f"[GPIO] Ignored - block {selected} has no switch")
-        return
-    
-    # All checks passed - apply it!
-    print(f"[GPIO] Applying to block {selected}")
-    allowed, reason = controller.request_switch_change(selected, new_state)
-    if allowed:
-        print(f"[GPIO] ✓ Switch changed successfully")
-        # Debug: Show what's actually stored
-        with controller._lock:
-            stored = controller._cmd_switch_state.get(selected)
-            print(f"[GPIO] DEBUG: _cmd_switch_state[{selected}] = {stored}")
-    else:
-        print(f"[GPIO] ✗ Rejected: {reason}")
+    controller.request_switch_change(selected, new_state)
 
 # ---------------------------------------------------------------------
 # Config
