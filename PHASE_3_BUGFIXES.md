@@ -86,6 +86,54 @@ else:
 
 ---
 
+### Issue 3: Missing Response Validation in `dispatch_train()`
+**Severity:** MEDIUM (Misleading success messages)
+
+**Problem:**
+```python
+# BEFORE (No validation)
+if response.status_code == 200:
+    result = response.json()
+    train_name = result.get('train')  # Could be None!
+    print(f"✓ Train '{train_name}' dispatched successfully")  # "Train 'None' dispatched successfully"!
+    return train_name  # Returns None even though status was 200
+```
+
+**Scenario:**
+1. Server responds with status 200 but malformed JSON (missing `train` field)
+2. `train_name` becomes `None`
+3. Code prints "Train 'None' dispatched successfully" ❌ (misleading!)
+4. Returns `None` to caller, who thinks dispatch failed
+5. Docstring promises `str` on success, but returns `None`
+
+**Fix Applied:**
+```python
+# AFTER (Validates response)
+if response.status_code == 200:
+    result = response.json()
+    train_name = result.get('train')
+    if train_name:
+        print(f"✓ Train '{train_name}' dispatched successfully")
+        return train_name
+    else:
+        # Treat missing field as error
+        if attempt == self.max_retries - 1:
+            print(f"Dispatch failed: server returned 200 but missing 'train' field in response")
+```
+
+**Files Fixed:**
+- `ctc/api/ctc_api_client.py` line 118-123
+
+**Commit:** TBD
+
+**Benefits:**
+- ✅ No misleading success messages when response is malformed
+- ✅ Clear error message identifies the actual problem
+- ✅ Retries on malformed response (maybe server had a glitch)
+- ✅ Return value matches docstring contract (str or None)
+
+---
+
 ## Testing
 
 ### Before Fixes:
@@ -93,6 +141,7 @@ else:
 ❌ TypeError on update_beacon_data() call (7 args vs 3 params)
 ❌ Silent data loss if beacon API fails but physics succeeds
 ❌ No visibility into which API call failed
+❌ Misleading "Train 'None' dispatched successfully" message on malformed response
 ```
 
 ### After Fixes:
@@ -101,6 +150,8 @@ else:
 ✅ Both API calls checked for success before skipping file I/O
 ✅ Logs indicate which update failed: "API update incomplete (physics=True, beacon=False)"
 ✅ File I/O fallback ensures no data is ever lost
+✅ Response validation prevents misleading success messages
+✅ Clear error messages for malformed API responses
 ```
 
 ### Test Scenarios
@@ -164,6 +215,17 @@ else:
 - ✅ **Impact:** None (falls back to file I/O)
 - ✅ **Detection:** Logged warnings show which API failed
 - ✅ **Data Loss:** None (fallback ensures data is saved)
+
+### Issue 3: Missing Response Validation
+**Before Fix:**
+- ⚠️ **Impact:** Misleading success messages on malformed responses
+- ⚠️ **Detection:** User sees "Train 'None' dispatched" but no train appears
+- ⚠️ **User Experience:** Confusing (looks like success but actually failed)
+
+**After Fix:**
+- ✅ **Impact:** Clear error messages for malformed responses
+- ✅ **Detection:** Explicit error: "missing 'train' field in response"
+- ✅ **User Experience:** Clear failure indication, can retry
 
 ---
 
@@ -252,6 +314,7 @@ else:
 |------|-------|--------------|--------|
 | `Train_Model/train_model_ui.py` | Parameter mismatch | 7 lines | `b19d9c2` |
 | `Train_Model/train_model_ui.py` | Return value checking | 8 lines | `f6c8db8` |
+| `ctc/api/ctc_api_client.py` | Response validation | 5 lines | TBD |
 
 ---
 

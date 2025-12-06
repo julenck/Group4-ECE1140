@@ -116,8 +116,12 @@ class CTCAPIClient:
                     result = response.json()
                     # Server returns "train" (train name), not "train_id"
                     train_name = result.get('train')
-                    print(f"[CTC API] ✓ Train '{train_name}' dispatched successfully")
-                    return train_name
+                    if train_name:
+                        print(f"[CTC API] ✓ Train '{train_name}' dispatched successfully")
+                        return train_name
+                    else:
+                        if attempt == self.max_retries - 1:
+                            print(f"[CTC API] Dispatch failed: server returned 200 but missing 'train' field in response")
                 else:
                     if attempt == self.max_retries - 1:
                         print(f"[CTC API] Dispatch failed with status {response.status_code}")
