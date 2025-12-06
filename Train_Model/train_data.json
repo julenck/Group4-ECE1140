@@ -1,38 +1,45 @@
 {
-    "specs": {
-        "length_ft": 66.0,
-        "width_ft": 10.0,
-        "height_ft": 11.5,
-        "mass_lbs": 90100,
-        "max_power_hp": 169,
-        "max_accel_ftps2": 1.64,
-        "service_brake_ftps2": -3.94,
-        "emergency_brake_ftps2": -8.86,
-        "capacity": 222,
-        "crew_count": 2
-    },
-    "inputs": {
-        "commanded speed": 40,
-        "commanded authority": 100,
-        "speed limit": 30,
-        "current station": "Central Station",
-        "next station": "Park Street",
-        "side_door": "Right",
-        "passengers_boarding": 15,
-        "engine_failure": false,
-        "signal_failure": false,
-        "brake_failure": false,
-        "emergency_brake": false,
-        "train_model_engine_failure": false,
-        "train_model_signal_failure": false,
-        "train_model_brake_failure": false
-    },
-    "outputs": {
-        "velocity_mph": 0.0,
-        "acceleration_ftps2": 0.0,
-        "position_yds": 0.0,
-        "authority_yds": 0.0,
-        "temperature_F": 70.0
+    "train_1": {
+        "specs": {
+            "length_ft": 66.0,
+            "width_ft": 10.0,
+            "height_ft": 11.5,
+            "mass_lbs": 90100,
+            "max_power_hp": 169,
+            "max_accel_ftps2": 1.64,
+            "service_brake_ftps2": -3.94,
+            "emergency_brake_ftps2": -8.86,
+            "capacity": 222,
+            "crew_count": 2
+        },
+        "inputs": {
+            "commanded speed": 30.0,
+            "commanded authority": 100.0,
+            "current station": "Station A",
+            "next station": "Station B",
+            "power_command": 0.0,
+            "service_brake": false,
+            "emergency_brake": false,
+            "left_door": false,
+            "right_door": false,
+            "interior_lights": true,
+            "exterior_lights": true,
+            "set_temperature": 70.0
+        },
+        "outputs": {
+            "velocity_mph": 0.0,
+            "acceleration_ftps2": 0.0,
+            "position_yds": 0.0,
+            "authority_yds": 100.0,
+            "temperature_F": 70.0,
+            "station_name": "Station A",
+            "next_station": "Station B",
+            "left_door_open": false,
+            "right_door_open": false,
+            "door_side": "",
+            "commanded_speed": 30.0,
+            "speed_limit": 0.0
+        }
     },
     "train_2": {
         "specs": {
@@ -149,47 +156,5 @@
             "set_temperature": 70.0
         },
         "outputs": {}
-    },
-    "train_1": {
-        "specs": {
-            "length_ft": 66.0,
-            "width_ft": 10.0,
-            "height_ft": 11.5,
-            "mass_lbs": 90100,
-            "max_power_hp": 169,
-            "max_accel_ftps2": 1.64,
-            "service_brake_ftps2": -3.94,
-            "emergency_brake_ftps2": -8.86,
-            "capacity": 222,
-            "crew_count": 2
-        },
-        "inputs": {
-            "commanded speed": 30.0,
-            "commanded authority": 100.0,
-            "current station": "Station A",
-            "next station": "Station B",
-            "power_command": 0.0,
-            "service_brake": false,
-            "emergency_brake": false,
-            "left_door": false,
-            "right_door": false,
-            "interior_lights": true,
-            "exterior_lights": true,
-            "set_temperature": 70.0
-        },
-        "outputs": {
-            "velocity_mph": 0.0,
-            "acceleration_ftps2": 0.0,
-            "position_yds": 0.0,
-            "authority_yds": 100.0,
-            "temperature_F": 70.0,
-            "station_name": "Station A",
-            "next_station": "Station B",
-            "left_door_open": false,
-            "right_door_open": false,
-            "door_side": "",
-            "commanded_speed": 30.0,
-            "speed_limit": 0.0
-        }
     }
 }

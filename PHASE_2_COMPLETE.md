@@ -392,3 +392,16 @@ Command: FAILED (train may not exist...)     # ⚠️  Fails if train not in tra
 
 All API clients are now ready to use! 🎉
 
+## Phase 2 Bug Fixes
+
+### Malformed Train Key Handling (Wayside API)
+- **Issue:** `get_train_speeds()` had unprotected `int()` conversions that could crash on malformed keys
+- **Fix:** Added try-except blocks to catch `ValueError` and `IndexError`
+- **Impact:** Wayside API now gracefully skips malformed train keys and logs warnings
+- **Documentation:** See `PHASE_2_BUGFIX_MALFORMED_KEYS.md` for details
+
+### train_data.json Structure Cleanup
+- **Issue:** File had legacy root-level train data mixed with named trains
+- **Fix:** Removed root-level specs/inputs/outputs, keeping only named trains (train_1 through train_5)
+- **Impact:** Clean, consistent structure for all API clients to consume
+

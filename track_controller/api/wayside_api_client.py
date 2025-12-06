@@ -241,12 +241,17 @@ class WaysideAPIClient:
                     train_speeds = {}
                     for key, data in train_data.items():
                         if key.startswith('train_'):
-                            train_id = int(key.split('_')[1])
-                            train_name = f"Train {train_id}"
-                            outputs = data.get('outputs', {})
-                            # Get velocity in mph (wayside converts to m/s internally if needed)
-                            velocity_mph = outputs.get('velocity_mph', 0.0)
-                            train_speeds[train_name] = velocity_mph
+                            try:
+                                train_id = int(key.split('_')[1])
+                                train_name = f"Train {train_id}"
+                                outputs = data.get('outputs', {})
+                                # Get velocity in mph (wayside converts to m/s internally if needed)
+                                velocity_mph = outputs.get('velocity_mph', 0.0)
+                                train_speeds[train_name] = velocity_mph
+                            except (ValueError, IndexError) as e:
+                                # Skip malformed train keys (e.g., "train_", "train_abc")
+                                print(f"[Wayside API] Warning: Skipping malformed train key '{key}': {e}")
+                                continue
                     return train_speeds
                 else:
                     if attempt == self.max_retries - 1:
@@ -267,11 +272,16 @@ class WaysideAPIClient:
             train_speeds = {}
             for key, data in self._cached_trains.items():
                 if key.startswith('train_'):
-                    train_id = int(key.split('_')[1])
-                    train_name = f"Train {train_id}"
-                    outputs = data.get('outputs', {})
-                    velocity_mph = outputs.get('velocity_mph', 0.0)
-                    train_speeds[train_name] = velocity_mph
+                    try:
+                        train_id = int(key.split('_')[1])
+                        train_name = f"Train {train_id}"
+                        outputs = data.get('outputs', {})
+                        velocity_mph = outputs.get('velocity_mph', 0.0)
+                        train_speeds[train_name] = velocity_mph
+                    except (ValueError, IndexError) as e:
+                        # Skip malformed train keys (e.g., "train_", "train_abc")
+                        print(f"[Wayside API] Warning: Skipping malformed cached train key '{key}': {e}")
+                        continue
             return train_speeds
         return None
     
