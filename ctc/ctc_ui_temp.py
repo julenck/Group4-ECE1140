@@ -284,6 +284,26 @@ class CTCUI:
         line = self.manual_line_box.get()
         dest = self.manual_dest_box.get()
         arrival = self.manual_time_box.get()
+        
+        # Phase 3: Dispatch train via REST API if available
+        if self.ctc_api:
+            try:
+                # Use CTC API to dispatch train
+                train_name = self.ctc_api.dispatch_train(
+                    line=line,
+                    station=dest,
+                    arrival_time=arrival
+                )
+                if train_name:
+                    print(f"[CTC] ✓ Train '{train_name}' dispatched via REST API")
+                else:
+                    print(f"[CTC] ✗ Train dispatch via API failed, falling back to file I/O")
+                    # Fall through to file I/O below
+            except Exception as e:
+                print(f"[CTC] API dispatch error: {e}, falling back to file I/O")
+                # Fall through to file I/O below
+        
+        # Legacy file I/O (fallback or when API not available)
         with open(self.os.path.join('ctc', 'ctc_ui_inputs.json'), "r") as f1:
             data1 = self.json.load(f1)
         data1["Train"] = train
