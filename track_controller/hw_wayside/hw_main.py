@@ -18,7 +18,7 @@ from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 # GPIO Setup for Physical Switch Control
 # ---------------------------------------------------------------------
 # Set to True when running on Raspberry Pi with GPIO connected
-ENABLE_GPIO = False
+ENABLE_GPIO = True
 
 GPIO_SWITCH_PIN = 17  # BCM pin number for the physical switch input
 
