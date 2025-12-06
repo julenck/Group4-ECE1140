@@ -419,15 +419,11 @@ class TrainModelUI(ttk.Frame):
                     acceleration=outputs_to_write["acceleration_ftps2"],
                     temperature=outputs_to_write["temperature_F"]
                 )
-                # Update beacon data (station info, doors)
+                # Update beacon data (station info and door side only)
                 self.api_client.update_beacon_data(
-                    station_name=outputs_to_write["station_name"],
-                    next_station=outputs_to_write["next_station"],
-                    left_door_open=outputs_to_write["left_door_open"],
-                    right_door_open=outputs_to_write["right_door_open"],
-                    door_side=outputs_to_write["door_side"],
-                    commanded_speed=outputs_to_write["commanded_speed"],
-                    speed_limit=outputs_to_write["speed_limit"]
+                    current_station=outputs_to_write["station_name"],
+                    next_stop=outputs_to_write["next_station"],
+                    station_side=outputs_to_write["door_side"]
                 )
                 return  # Success! Don't write to file
             except Exception as e:
