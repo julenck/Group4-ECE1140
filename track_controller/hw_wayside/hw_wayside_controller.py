@@ -1683,9 +1683,6 @@ class HW_Wayside_Controller:
             eff = None
             if bid in self._cmd_switch_state:
                 eff = self._cmd_switch_state.get(bid)
-                # DEBUG
-                if bid == "77":
-                    print(f"[DEBUG] Block 77: _cmd_switch_state = {eff}")
             elif bid in self._switch_state:
                 eff = self._switch_state.get(bid)
 
@@ -1699,9 +1696,6 @@ class HW_Wayside_Controller:
                         eff_pos = 1
                     elif str(eff).isdigit():
                         eff_pos = int(str(eff))
-                    # DEBUG
-                    if bid == "77":
-                        print(f"[DEBUG] Block 77: eff={eff}, eff_pos={eff_pos}")
                 except Exception:
                     eff_pos = None
 
@@ -1710,9 +1704,6 @@ class HW_Wayside_Controller:
                     tgt = sw_map.get(str(eff_pos)) or sw_map.get(eff_pos)
                     if tgt is not None:
                         display_switch = str(int(tgt))
-                    # DEBUG
-                    if bid == "77":
-                        print(f"[DEBUG] Block 77: sw_map={sw_map}, tgt={tgt}, display_switch={display_switch}")
                 except Exception:
                     display_switch = None
 
