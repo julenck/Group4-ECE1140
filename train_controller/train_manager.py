@@ -1243,17 +1243,13 @@ and control Train {self.train_id}."""
         self.destroy()
 
 
-def dispatch_train_from_ctc(train_manager=None, server_url=None):
+def dispatch_train_from_ctc(train_manager=None, server_url=None, controller_type=None):
     """Helper function to dispatch a train from CTC without UI.
-    
-    First train dispatched will be Hardware controller (Raspberry Pi).
-    All subsequent trains will be Software controllers.
-    
-    This function is called from the CTC UI when "Dispatch Train" is pressed.
     
     Args:
         train_manager: Optional existing TrainManager instance (creates new if None)
         server_url: Server URL for remote mode (e.g., http://192.168.1.100:5000)
+        controller_type: "software" or "hardware_remote" (if None, auto-selects based on train count)
         
     Returns:
         tuple: (train_id, controller_type) where controller_type is "hardware_remote" or "software"
@@ -1262,21 +1258,28 @@ def dispatch_train_from_ctc(train_manager=None, server_url=None):
     if train_manager is None:
         train_manager = TrainManager()
     
-    # Determine controller type based on how many trains exist
-    existing_train_count = train_manager.get_train_count()
+    # Determine controller type
+    if controller_type is None:
+        # Auto mode: Determine based on how many trains exist (legacy behavior)
+        existing_train_count = train_manager.get_train_count()
+        
+        if existing_train_count == 0:
+            controller_type = "hardware_remote"
+            print("[CTC Dispatch] Auto-selecting Hardware Controller for first train (REMOTE - Raspberry Pi)")
+        else:
+            controller_type = "software"
+            print(f"[CTC Dispatch] Auto-selecting Software Controller for train #{existing_train_count + 1}")
+    else:
+        # Use user-specified controller type
+        print(f"[CTC Dispatch] Using user-selected controller type: {controller_type}")
     
-    if existing_train_count == 0:
-        # First train: Hardware controller (REMOTE - Raspberry Pi)
-        controller_type = "hardware_remote"
+    # Set flags based on controller type
+    if controller_type == "hardware_remote":
         is_remote = True  # Run on Raspberry Pi (remote mode)
         use_hardware = True  # Use hardware controller UI
-        print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (REMOTE - Raspberry Pi)")
-    else:
-        # Subsequent trains: Software controller
-        controller_type = "software"
+    else:  # software
         is_remote = False
         use_hardware = False
-        print(f"[CTC Dispatch] Dispatching train #{existing_train_count + 1} with Software Controller")
     
     try:
         # Add train with appropriate controller type

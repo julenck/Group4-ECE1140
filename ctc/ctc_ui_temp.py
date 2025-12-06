@@ -48,13 +48,12 @@ class CTCUI:
             print(f"[CTC] Falling back to file-based I/O")
             self.ctc_api = None
         
-        # Initialize TrainManager for automatic train controller dispatch
+        # Initialize TrainManager for train controller dispatch
         try:
             from train_controller.train_manager import TrainManager
             self.train_manager = TrainManager()
             print("[CTC] TrainManager initialized - ready to dispatch trains")
-            print("[CTC] First train will use HARDWARE controller (REMOTE - Raspberry Pi)")
-            print("[CTC] Subsequent trains will use SOFTWARE controllers")
+            print("[CTC] Use 'Controller Type' dropdown to select Hardware or Software controller")
         except Exception as e:
             print(f"[CTC] Warning: Failed to initialize TrainManager: {e}")
             self.train_manager = None
@@ -209,8 +208,19 @@ class CTCUI:
         self.manual_dest_box.grid(row=1, column=2, padx=5, sticky='ew')
         self.manual_time_box.grid(row=1, column=3, padx=5, sticky='ew')
 
+        # Controller Type Selector (Row 2)
+        tk.Label(self.manual_frame, text="Controller Type:", font=label_font, bg="lightgreen").grid(row=2, column=0, sticky='e', padx=10, pady=5)
+        self.controller_type_box = ttk.Combobox(
+            self.manual_frame, 
+            values=["Software (PC)", "Hardware (Raspberry Pi)"], 
+            font=input_font,
+            state='readonly'
+        )
+        self.controller_type_box.set("Software (PC)")  # Default to software
+        self.controller_type_box.grid(row=2, column=1, columnspan=2, padx=5, sticky='ew')
+
         self.manual_dispatch_button = tk.Button(self.manual_frame, text='DISPATCH', command=self.manual_dispatch, **self.button_style)
-        self.manual_dispatch_button.grid(row=2, column=0, columnspan=4, pady=10, padx=500, sticky='ew')
+        self.manual_dispatch_button.grid(row=3, column=0, columnspan=4, pady=10, padx=500, sticky='ew')
 
         # Maintenance Frame UI
         self.maint_frame.grid_columnconfigure((0,1,2,3),weight=1)
@@ -317,22 +327,29 @@ class CTCUI:
             self.json.dump(data1, f1, indent=4)
         self.update_active_trains_table()
         
-        # Automatically dispatch train controller
-        # First train = Hardware (Raspberry Pi), subsequent trains = Software
+        # Dispatch train controller with user-selected type
         if hasattr(self, 'train_manager') and self.train_manager:
             try:
                 from train_controller.train_manager import dispatch_train_from_ctc
                 
-                # Automatically dispatch train (hardware for first, software for rest)
-                train_id, controller_type = dispatch_train_from_ctc(
+                # Get user's controller type selection
+                selected_type = self.controller_type_box.get()
+                if selected_type == "Hardware (Raspberry Pi)":
+                    controller_type = "hardware_remote"
+                else:  # "Software (PC)"
+                    controller_type = "software"
+                
+                # Dispatch train with user-selected controller type
+                train_id, actual_controller_type = dispatch_train_from_ctc(
                     train_manager=self.train_manager,
-                    server_url=None  # Will auto-detect server IP for remote hardware
+                    server_url=None,  # Will auto-detect server IP for remote hardware
+                    controller_type=controller_type  # Pass user's selection
                 )
                 
                 if train_id:
-                    print(f"[CTC] Successfully dispatched Train {train_id} with {controller_type} controller")
+                    print(f"[CTC] ✓ Successfully dispatched Train {train_id} with {actual_controller_type} controller")
                 else:
-                    print("[CTC] Train dispatch failed")
+                    print("[CTC] ✗ Train dispatch failed")
                     
             except Exception as e:
                 print(f"[CTC] Failed to dispatch train controller: {e}")
