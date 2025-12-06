@@ -629,6 +629,9 @@ class TrainModelUI(ttk.Frame):
                 pass
 
     def _update_ui(self, outputs, ctrl, merged_inputs, disembarking):
+        # Guard: Don't update if UI components aren't fully initialized yet
+        if not hasattr(self, 'info_labels') or not self.info_labels:
+            return
         try:
             self.info_labels["Velocity (mph)"].config(text=f"{outputs['velocity_mph']:.2f}")
             self.info_labels["Acceleration (ft/s²)"].config(

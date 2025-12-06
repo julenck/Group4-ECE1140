@@ -40,7 +40,7 @@ class CTCUI:
         self.ctc_api = None
         server_url = os.environ.get('CTC_SERVER_URL', 'http://localhost:5000')  # Default to localhost
         try:
-            from api.ctc_api_client import CTCAPIClient
+            from ctc.api.ctc_api_client import CTCAPIClient
             self.ctc_api = CTCAPIClient(server_url=server_url)
             print(f"[CTC] Using REST API: {server_url}")
         except Exception as e:
@@ -304,13 +304,16 @@ class CTCUI:
                 # Fall through to file I/O below
         
         # Legacy file I/O (fallback or when API not available)
-        with open(self.os.path.join('ctc', 'ctc_ui_inputs.json'), "r") as f1:
+        import os
+        ctc_dir = os.path.dirname(os.path.abspath(__file__))
+        input_file = os.path.join(ctc_dir, 'ctc_ui_inputs.json')
+        with open(input_file, "r") as f1:
             data1 = self.json.load(f1)
         data1["Train"] = train
         data1["Line"] = line
         data1["Station"] = dest
         data1["Arrival Time"] = arrival
-        with open(self.os.path.join('ctc', 'ctc_ui_inputs.json'), "w") as f1:
+        with open(input_file, "w") as f1:
             self.json.dump(data1, f1, indent=4)
         self.update_active_trains_table()
         
