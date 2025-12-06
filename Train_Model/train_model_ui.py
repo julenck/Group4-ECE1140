@@ -413,19 +413,24 @@ class TrainModelUI(ttk.Frame):
         if self.api_client:
             # Use REST API to write physics outputs
             try:
-                self.api_client.update_physics(
+                physics_ok = self.api_client.update_physics(
                     velocity=outputs_to_write["velocity_mph"],
                     position=outputs_to_write["position_yds"],
                     acceleration=outputs_to_write["acceleration_ftps2"],
                     temperature=outputs_to_write["temperature_F"]
                 )
                 # Update beacon data (station info and door side only)
-                self.api_client.update_beacon_data(
+                beacon_ok = self.api_client.update_beacon_data(
                     current_station=outputs_to_write["station_name"],
                     next_stop=outputs_to_write["next_station"],
                     station_side=outputs_to_write["door_side"]
                 )
-                return  # Success! Don't write to file
+                # Only skip file I/O if BOTH API calls succeeded
+                if physics_ok and beacon_ok:
+                    return  # Success! Don't write to file
+                else:
+                    print(f"[Train Model {self.train_id}] API update incomplete (physics={physics_ok}, beacon={beacon_ok}), falling back to file I/O")
+                    # Fall through to file I/O to ensure data is saved
             except Exception as e:
                 print(f"[Train Model {self.train_id}] API write failed: {e}, falling back to file I/O")
                 # Fall through to file I/O on error
