@@ -22,9 +22,33 @@ An extra closing curly bracket `}` was being added to `ctc_data.json`, causing J
 
 ---
 
-## Solution 1: Automatic Prevention (Built-in)
+## Solution 1: Thread-Safe Atomic Writes (Primary Fix)
 
-The `dispatch_train()` function now includes automatic detection and cleanup:
+All writes to `ctc_data.json` now use thread-safe atomic operations:
+
+**Files:** `ctc/ctc_ui_temp.py`, `ctc/ctc_main_temp.py`
+
+**How it works:**
+1. Validates JSON structure before writing (checks balanced braces)
+2. Writes to a temporary file first
+3. Performs atomic rename (replaces old file in one operation)
+4. If anything fails, temp file is deleted, original file untouched
+
+**Functions:**
+- `safe_write_json()` in `ctc_main_temp.py` - used by dispatch thread
+- `save_data()` in `ctc_ui_temp.py` - used by UI thread
+
+**Benefits:**
+- ✅ Thread-safe - no race conditions
+- ✅ Atomic - file is never in corrupt state
+- ✅ Validated - corrupt data rejected before write
+- ✅ Recoverable - original file preserved on error
+
+---
+
+## Solution 2: Automatic Detection and Cleanup (Fallback)
+
+The `dispatch_train()` function also includes automatic detection and cleanup:
 
 **File:** `ctc/ctc_main_temp.py`
 
@@ -47,7 +71,7 @@ The `dispatch_train()` function now includes automatic detection and cleanup:
 
 ---
 
-## Solution 2: Manual Fix Script
+## Solution 3: Manual Fix Script (Emergency Recovery)
 
 If the file becomes corrupted, you can manually run the fix script:
 
@@ -84,16 +108,23 @@ JSON is already valid!
 
 ## Root Cause Analysis
 
-The extra bracket was likely caused by:
-- **Concurrent writes** from multiple threads (CTC dispatch + UI updates)
-- **Interrupted file writes** (system crash during JSON dump)
-- **Legacy code** appending instead of overwriting
+The extra bracket was caused by:
+- **Race condition** between multiple threads writing to the same file simultaneously
+  - `ctc_ui_temp.py` (UI thread) writes during maintenance operations
+  - `ctc_main_temp.py` (dispatch thread) writes during train updates
+  - Both threads call `json.dump()` on the same file without synchronization
+- **Non-atomic writes** - Python's `json.dump()` is not thread-safe
+  - Thread A opens file, starts writing
+  - Thread B opens same file, starts writing
+  - File corruption: extra characters appended
 
 **Preventions now in place:**
-1. ✅ File validation before parsing
-2. ✅ Automatic cleanup on read
-3. ✅ Fallback to default structure
-4. ✅ All writes use mode `'w'` (overwrite, not append)
+1. ✅ **Thread-safe atomic writes** - temp file + atomic rename
+2. ✅ **Pre-write validation** - check structure before writing
+3. ✅ **Balanced brace checking** - detect corruption before it happens
+4. ✅ **File validation** before parsing (automatic cleanup on read)
+5. ✅ **Fallback to default** structure if unrepairable
+6. ✅ **Manual fix script** for recovery
 
 ---
 
@@ -266,21 +297,30 @@ python combine_ctc_wayside_test.py
 ## Git Commit
 
 ```
-Commit: 275cfa2
+Commit 1: 275cfa2 - Fix: Add safety checks for malformed ctc_data.json
+  - Added automatic cleanup on read
+  - Created manual fix script
+  
+Commit 2: 3f7096e - Fix: Thread-safe JSON writes to prevent corruption
+  - Implemented atomic writes via temp file
+  - Added pre-write validation
+  - Fixed race condition between UI and dispatch threads
+  - Replaced all json.dump() with safe_write_json()
+  
 Branch: phase3
-Message: Fix: Add safety checks for malformed ctc_data.json
 ```
 
 ---
 
 ## Summary
 
-**Status:** ✅ **FIXED**
+**Status:** ✅ **FULLY FIXED**
 
-**Prevention:** Automatic cleanup on every dispatch  
-**Recovery:** Manual fix script available  
-**Impact:** No more JSON corruption errors!
+**Root Cause:** Race condition between multiple threads writing to the same file  
+**Primary Fix:** Thread-safe atomic writes with validation  
+**Fallback:** Automatic cleanup on read + manual fix script  
+**Impact:** Extra `}` will no longer appear!
 
-**You're protected!** The system now handles JSON corruption automatically. 🛡️
+**You're protected!** The race condition has been eliminated at the source. 🛡️
 
 
