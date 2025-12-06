@@ -45,8 +45,27 @@ def dispatch_train(train, line, station, arrival_time_str,
     # Load existing data (preserve other trains)
     try:
         with open(data_file_ctc_data, 'r') as f:
-            ctc_data = json.load(f)
-    except Exception:
+            content = f.read()
+            # Safety check: remove any extra closing braces at the end
+            content = content.rstrip()
+            while content.endswith('}}'):
+                # Check if there's an extra } after the valid structure
+                try:
+                    json.loads(content)
+                    break  # Valid JSON found
+                except json.JSONDecodeError:
+                    # Try removing the last character if it's a }
+                    if content.endswith('}'):
+                        temp = content.rstrip('}')
+                        # Count braces to ensure we're not removing legitimate ones
+                        if temp.count('{') == temp.count('}'):
+                            content = temp + '}'
+                            print(f"[CTC Dispatch] Warning: Removed extra closing brace from {data_file_ctc_data}")
+                            break
+                    break
+            ctc_data = json.loads(content)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"[CTC Dispatch] Warning: Could not load {data_file_ctc_data}: {e}. Creating fresh structure.")
         ctc_data = {"Dispatcher": {"Trains": {}}}
     
     # Ensure structure exists
