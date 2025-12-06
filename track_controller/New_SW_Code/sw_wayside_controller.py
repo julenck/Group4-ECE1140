@@ -12,7 +12,7 @@ import csv
 
 
 class sw_wayside_controller:
-    def __init__(self, vital,plc=""):
+    def __init__(self, vital, plc="", server_url=None, wayside_id=1):
     # Association
         self.vital = vital
 
@@ -46,6 +46,25 @@ class sw_wayside_controller:
         
         self.block_status: list = []
         self.detected_faults: dict = {}
+        
+        # Phase 3: Initialize Wayside API client for REST API communication
+        self.wayside_api = None
+        self.wayside_id = wayside_id
+        if server_url:
+            try:
+                import sys
+                api_dir = os.path.join(project_root, "track_controller", "api")
+                if api_dir not in sys.path:
+                    sys.path.insert(0, api_dir)
+                from wayside_api_client import WaysideAPIClient
+                self.wayside_api = WaysideAPIClient(wayside_id=wayside_id, server_url=server_url)
+                print(f"[Wayside {wayside_id}] Using REST API: {server_url}")
+            except Exception as e:
+                print(f"[Wayside {wayside_id}] Warning: Failed to initialize API client: {e}")
+                print(f"[Wayside {wayside_id}] Falling back to file-based I/O")
+                self.wayside_api = None
+        else:
+            print(f"[Wayside {wayside_id}] Using file-based I/O (no server_url)")
         self.input_faults: list = [0]*152*3
         self.blocks_with_switches: list = [13,28,57,63,77,85]
         self.blocks_with_lights: list = [0,3,7,29,58,62,76,86,100,101,150,151]
@@ -926,8 +945,24 @@ class sw_wayside_controller:
             return self.active_plc
 
     def load_train_speeds(self):
-        """Load actual train speeds from Train_Model/train_data.json"""
+        """Load actual train speeds (via API or from Train_Model/train_data.json)"""
         train_speeds = {}
+        
+        # Phase 3: Use API client if available, otherwise file I/O
+        if self.wayside_api:
+            try:
+                api_speeds = self.wayside_api.get_train_speeds()
+                if api_speeds:
+                    # API returns speeds in mph with train names as keys
+                    # Convert to m/s (multiply by 0.44704)
+                    for train_name, velocity_mph in api_speeds.items():
+                        train_speeds[train_name] = velocity_mph * 0.44704
+                    return train_speeds
+                # else fall through to file I/O
+            except Exception as e:
+                print(f"[Wayside {self.wayside_id}] API load_train_speeds failed: {e}, falling back to file I/O")
+        
+        # Legacy file I/O (fallback or when API not available)
         try:
             # Path to train_data.json
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -954,6 +989,22 @@ class sw_wayside_controller:
         return train_speeds
     
     def load_inputs_ctc(self):
+        # Phase 3: Use API client if available, otherwise file I/O
+        if self.wayside_api:
+            try:
+                ctc_commands = self.wayside_api.get_ctc_commands()
+                if ctc_commands:
+                    # API returns data in expected format
+                    trains = ctc_commands.get("Trains", {})
+                    self.active_trains = trains
+                    self.closed_blocks = ctc_commands.get("Block Closure", [])
+                    self.ctc_sugg_switches = ctc_commands.get("Switch Suggestion", [])
+                    return
+                # else fall through to file I/O
+            except Exception as e:
+                print(f"[Wayside {self.wayside_id}] API load_inputs_ctc failed: {e}, falling back to file I/O")
+        
+        # Legacy file I/O (fallback or when API not available)
         max_retries = 3
         for retry in range(max_retries):
             try:
