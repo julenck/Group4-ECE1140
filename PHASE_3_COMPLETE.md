@@ -132,6 +132,10 @@ All Phase 3 work is committed to the `phase3` branch:
 1. `9b23ff3` - Train Model and Train Manager integration
 2. `20e72d8` - CTC integration  
 3. `f51c135` - Wayside integration
+4. `19f94ed` - Phase 3 completion documentation
+5. `b19d9c2` - Fix critical bug: update_beacon_data() parameter mismatch
+6. `f6c8db8` - Fix data loss bug: check API return values
+7. `f83052a` - Document Phase 3 critical bug fixes
 
 **To review:**
 ```bash
@@ -345,11 +349,30 @@ All components maintain file I/O fallback:
 
 ---
 
+## Critical Bug Fixes
+
+During Phase 3 integration, two critical bugs were discovered and fixed:
+
+### Bug 1: Parameter Mismatch (Would Cause TypeError)
+- **Issue:** `update_beacon_data()` called with 7 args but only accepts 3
+- **Fix:** Corrected parameter names and count to match API signature
+- **Commit:** `b19d9c2`
+
+### Bug 2: Data Loss on Partial API Failure
+- **Issue:** Code returned early without checking API return values
+- **Fix:** Check both `physics_ok` and `beacon_ok` before skipping file I/O
+- **Commit:** `f6c8db8`
+
+See `PHASE_3_BUGFIXES.md` for detailed analysis.
+
+---
+
 ## Documentation Created
 
 1. ✅ `PHASE_3_PROGRESS.md` - Detailed progress tracking during development
 2. ✅ `PHASE_3_COMPLETE.md` - This document (final summary)
-3. ✅ Code comments in all modified files explaining API integration
+3. ✅ `PHASE_3_BUGFIXES.md` - Critical bugs found and fixed during integration
+4. ✅ Code comments in all modified files explaining API integration
 
 ---
 
