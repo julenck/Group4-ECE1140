@@ -15,138 +15,68 @@ from hw_display import HW_Display
 from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 
 # ---------------------------------------------------------------------
-# GPIO Setup for Physical Switch Control
+# GPIO Setup for Physical Switch Control (fails soft like LCD)
 # ---------------------------------------------------------------------
-# Set to True when running on Raspberry Pi with GPIO connected
-ENABLE_GPIO = True
+GPIO_SWITCH_PIN = 17  # BCM pin number
 
-GPIO_SWITCH_PIN = 17  # BCM pin number for the physical switch input
-
-# Try to import GPIO library (only works on Raspberry Pi)
+# Try to import lgpio (like LCD imports smbus2)
 try:
-    import RPi.GPIO as GPIO
-    GPIO_AVAILABLE = True
-    GPIO_LIBRARY = "RPi.GPIO"
-except ImportError:
-    GPIO_AVAILABLE = False
-    GPIO = None
-    GPIO_LIBRARY = None
-    print("[INFO] RPi.GPIO not available - physical switch disabled")
+    import lgpio
+except Exception:
+    lgpio = None  # type: ignore
 
-# For Raspberry Pi 5, try lgpio-compatible library
-if not GPIO_AVAILABLE:
-    try:
-        import lgpio
-        GPIO_AVAILABLE = True
-        GPIO_LIBRARY = "lgpio"
-        print("[INFO] Using lgpio for Raspberry Pi 5")
-    except ImportError:
-        print("[INFO] lgpio not available - physical switch disabled")
-
-def setup_gpio():
-    """Initialize GPIO for physical switch input."""
-    global GPIO, GPIO_LIBRARY
+class PhysicalSwitch:
+    """Simple GPIO switch handler - fails soft on non-Pi like LCD does."""
+    def __init__(self, pin: int = GPIO_SWITCH_PIN):
+        self.pin = pin
+        self.chip = None
+        if lgpio:
+            try:
+                self.chip = lgpio.gpiochip_open(4)  # Pi 5 uses chip 4
+                lgpio.gpio_claim_input(self.chip, self.pin, lgpio.SET_PULL_UP)
+            except Exception:
+                self.chip = None  # fail soft
     
-    if not GPIO_AVAILABLE or not ENABLE_GPIO:
-        return False
+    def present(self) -> bool:
+        """Check if GPIO is available."""
+        return self.chip is not None
     
-    try:
-        if GPIO_LIBRARY == "lgpio":
-            # Pi 5 using lgpio
-            import lgpio
-            GPIO.chip = lgpio.gpiochip_open(4)  # Pi 5 uses gpiochip4
-            GPIO.pin_handle = lgpio.gpio_claim_input(GPIO.chip, GPIO_SWITCH_PIN, lgpio.SET_PULL_UP)
-            print(f"[GPIO] Physical switch initialized on GPIO {GPIO_SWITCH_PIN} (Pi 5/lgpio)")
-            return True
-        else:
-            # Pi 4 and older using RPi.GPIO
-            GPIO.setmode(GPIO.BCM)
-            GPIO.setup(GPIO_SWITCH_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-            print(f"[GPIO] Physical switch initialized on GPIO {GPIO_SWITCH_PIN} (RPi.GPIO)")
-            return True
-    except Exception as e:
-        print(f"[GPIO] Setup failed: {e}")
-        if GPIO_LIBRARY == "RPi.GPIO":
-            print(f"[GPIO] If on Pi 5, install lgpio: sudo apt install -y python3-lgpio")
-        return False
-
-def cleanup_gpio():
-    """Clean up GPIO on exit."""
-    if GPIO_AVAILABLE and ENABLE_GPIO:
+    def read_state(self) -> str:
+        """Read switch state. Returns 'Left' or 'Right'."""
+        if not self.chip:
+            return None
         try:
-            if GPIO_LIBRARY == "lgpio":
-                import lgpio
-                if hasattr(GPIO, 'chip'):
-                    lgpio.gpiochip_close(GPIO.chip)
-            else:
-                GPIO.cleanup()
+            state = lgpio.gpio_read(self.chip, self.pin)
+            return "Right" if state == 1 else "Left"
         except Exception:
-            pass
+            return None
 
-def read_physical_switch() -> str:
-    """Read the physical switch state. Returns 'Left' or 'Right'."""
-    if not GPIO_AVAILABLE or not ENABLE_GPIO:
-        return None
-    try:
-        if GPIO_LIBRARY == "lgpio":
-            # Pi 5 using lgpio
-            import lgpio
-            state = lgpio.gpio_read(GPIO.chip, GPIO_SWITCH_PIN)
-        else:
-            # Pi 4 and older using RPi.GPIO
-            state = GPIO.input(GPIO_SWITCH_PIN)
-        
-        # With pull-up: LOW (0) = switch connected to GND = "Left"
-        #               HIGH (1) = switch open/floating = "Right"
-        return "Right" if state == 1 else "Left"
-    except Exception:
-        return None
+# Global switch instance (like LCD)
+_physical_switch = PhysicalSwitch()
 
 def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
     """Read physical switch and apply to selected block if it has a switch."""
-    if not GPIO_AVAILABLE or not ENABLE_GPIO:
+    if not _physical_switch.present():
         return
     
-    # Only apply in maintenance mode
-    if not getattr(controller, 'maintenance_active', False):
+    if not controller.maintenance_active:
         return
     
-    # Get selected block
     selected = controller.get_selected_block()
-    if not selected:
+    if not selected or not controller.has_switch(selected):
         return
     
-    # Check if selected block has a switch
-    if not controller.has_switch(selected):
+    new_state = _physical_switch.read_state()
+    if not new_state:
         return
     
-    # Read physical switch state
-    new_state = read_physical_switch()
-    if new_state is None:
-        return
-    
-    # Get current commanded state
     with controller._lock:
-        current_state = controller._cmd_switch_state.get(selected) or controller._switch_state.get(selected)
+        current = controller._cmd_switch_state.get(selected) or controller._switch_state.get(selected)
     
-    # Normalize state names (handle 0/1 or "Left"/"Right")
-    def normalize_state(s):
-        if s in [0, "0", "Left"]:
-            return "Left"
-        elif s in [1, "1", "Right"]:
-            return "Right"
-        return str(s)
-    
-    current_state = normalize_state(current_state)
-    new_state = normalize_state(new_state)
-    
-    # Only apply if state changed
-    if current_state != new_state:
+    if str(current) != str(new_state):
         allowed, reason = controller.request_switch_change(selected, new_state)
         if allowed:
-            print(f"[GPIO] Switch {selected} changed to {new_state} (physical switch)")
-        else:
-            print(f"[GPIO] Switch {selected} change rejected: {reason}")
+            print(f"[GPIO] Switch {selected} → {new_state}")
 
 # ---------------------------------------------------------------------
 # Config
@@ -407,21 +337,10 @@ def main() -> None:
 
     # Build block list for Wayside B 
     blocks_B: List[str] = _discover_blocks_B()
-    # info: initial block list (removed for clean runtime)
-
-    # Initialize GPIO for physical switch (if enabled and available)
-    gpio_initialized = setup_gpio()
 
     root = tk.Tk()
-
     root.title("Green Line Wayside Controller B (HW)")
     root.geometry("900x750")
-    
-    # Cleanup GPIO on window close
-    def on_closing():
-        cleanup_gpio()
-        root.destroy()
-    root.protocol("WM_DELETE_WINDOW", on_closing)
 
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
     # Attempt to load and start a default PLC for this wayside (non-fatal)
