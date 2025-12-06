@@ -15,6 +15,89 @@ from hw_display import HW_Display
 from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 
 # ---------------------------------------------------------------------
+# GPIO Setup for Physical Switch Control
+# ---------------------------------------------------------------------
+# Set to True when running on Raspberry Pi with GPIO connected
+ENABLE_GPIO = False
+
+GPIO_SWITCH_PIN = 17  # BCM pin number for the physical switch input
+
+# Try to import GPIO library (only works on Raspberry Pi)
+try:
+    import RPi.GPIO as GPIO
+    GPIO_AVAILABLE = True
+except ImportError:
+    GPIO_AVAILABLE = False
+    print("[INFO] RPi.GPIO not available - physical switch disabled")
+
+def setup_gpio():
+    """Initialize GPIO for physical switch input."""
+    if not GPIO_AVAILABLE or not ENABLE_GPIO:
+        return False
+    try:
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(GPIO_SWITCH_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        print(f"[GPIO] Physical switch initialized on GPIO {GPIO_SWITCH_PIN}")
+        return True
+    except Exception as e:
+        print(f"[GPIO] Setup failed: {e}")
+        return False
+
+def cleanup_gpio():
+    """Clean up GPIO on exit."""
+    if GPIO_AVAILABLE and ENABLE_GPIO:
+        try:
+            GPIO.cleanup()
+        except Exception:
+            pass
+
+def read_physical_switch() -> str:
+    """Read the physical switch state. Returns 'Left' or 'Right'."""
+    if not GPIO_AVAILABLE or not ENABLE_GPIO:
+        return None
+    try:
+        # With pull-up: LOW (0) = switch connected to GND = "Left"
+        #               HIGH (1) = switch open/floating = "Right"
+        state = GPIO.input(GPIO_SWITCH_PIN)
+        return "Right" if state == GPIO.HIGH else "Left"
+    except Exception:
+        return None
+
+def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
+    """Read physical switch and apply to selected block if it has a switch."""
+    if not GPIO_AVAILABLE or not ENABLE_GPIO:
+        return
+    
+    # Only apply in maintenance mode
+    if not getattr(controller, 'maintenance_active', False):
+        return
+    
+    # Get selected block
+    selected = controller.get_selected_block()
+    if not selected:
+        return
+    
+    # Check if selected block has a switch
+    if not controller.has_switch(selected):
+        return
+    
+    # Read physical switch state
+    new_state = read_physical_switch()
+    if new_state is None:
+        return
+    
+    # Get current commanded state
+    current_state = controller._cmd_switch_state.get(selected) or controller._switch_state.get(selected)
+    
+    # Only apply if state changed
+    if current_state != new_state:
+        allowed, reason = controller.request_switch_change(selected, new_state)
+        if allowed:
+            print(f"[GPIO] Switch {selected} changed to {new_state}")
+        else:
+            print(f"[GPIO] Switch {selected} change rejected: {reason}")
+
+# ---------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------
 
@@ -270,6 +353,13 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
         except Exception:
             pass
 
+    # Poll physical switch and apply to selected block (if GPIO enabled)
+    for controller in controllers:
+        try:
+            apply_physical_switch(controller)
+        except Exception:
+            pass
+
     root.after(POLL_MS, _poll_json_loop, root, controllers, uis, blocks_by_ws)
 
 
@@ -283,10 +373,19 @@ def main() -> None:
     blocks_B: List[str] = _discover_blocks_B()
     # info: initial block list (removed for clean runtime)
 
+    # Initialize GPIO for physical switch (if enabled and available)
+    gpio_initialized = setup_gpio()
+
     root = tk.Tk()
 
     root.title("Green Line Wayside Controller B (HW)")
     root.geometry("900x750")
+    
+    # Cleanup GPIO on window close
+    def on_closing():
+        cleanup_gpio()
+        root.destroy()
+    root.protocol("WM_DELETE_WINDOW", on_closing)
 
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
     # Attempt to load and start a default PLC for this wayside (non-fatal)
