@@ -825,8 +825,8 @@ class HW_Wayside_Controller:
                     except Exception:
                         pos = 0
 
-                    # Skip trains outside our visible partition (unless yard 0)
-                    if str(pos) not in set(self.block_ids) and pos != 0:
+                    # Skip trains outside our managed blocks
+                    if pos not in self.managed_blocks and pos != 0:
                         self.last_seen_position[tname] = pos
                         continue
 
