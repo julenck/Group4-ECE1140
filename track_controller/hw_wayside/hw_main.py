@@ -35,7 +35,9 @@ class PhysicalSwitch:
             try:
                 self.chip = lgpio.gpiochip_open(4)  # Pi 5 uses chip 4
                 lgpio.gpio_claim_input(self.chip, self.pin, lgpio.SET_PULL_UP)
-            except Exception:
+                print(f"[GPIO] Physical switch initialized on pin {pin}")
+            except Exception as e:
+                print(f"[GPIO] Init failed: {e}")
                 self.chip = None  # fail soft
     
     def present(self) -> bool:
@@ -48,8 +50,10 @@ class PhysicalSwitch:
             return None
         try:
             state = lgpio.gpio_read(self.chip, self.pin)
-            return "Right" if state == 1 else "Left"
-        except Exception:
+            result = "Right" if state == 1 else "Left"
+            return result
+        except Exception as e:
+            print(f"[GPIO] Read error: {e}")
             return None
     
     def check_for_change(self) -> str:
@@ -61,9 +65,11 @@ class PhysicalSwitch:
         # First time reading or state changed
         if self.last_read_state is None:
             self.last_read_state = current
+            print(f"[GPIO] Initial state: {current}")
             return None  # Don't trigger on first read
         
         if current != self.last_read_state:
+            print(f"[GPIO] State changed: {self.last_read_state} → {current}")
             self.last_read_state = current
             return current  # Return new state only on change
         
@@ -81,7 +87,10 @@ def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
         return
     
     selected = controller.get_selected_block()
-    if not selected or not controller.has_switch(selected):
+    if not selected:
+        return
+    
+    if not controller.has_switch(selected):
         return
     
     # Only act if physical switch actually changed
@@ -90,9 +99,12 @@ def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
         return  # No change detected
     
     # Physical switch changed - apply it
+    print(f"[GPIO] Applying switch change to block {selected}: → {new_state}")
     allowed, reason = controller.request_switch_change(selected, new_state)
     if allowed:
-        print(f"[GPIO] Physical switch flipped → {new_state}")
+        print(f"[GPIO] ✓ Switch changed successfully")
+    else:
+        print(f"[GPIO] ✗ Switch change rejected: {reason}")
 
 # ---------------------------------------------------------------------
 # Config
