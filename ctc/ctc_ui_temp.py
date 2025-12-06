@@ -36,6 +36,18 @@ class CTCUI:
 
         self.setup_json_file()
         
+        # Phase 3: Initialize CTC API client for REST API communication
+        self.ctc_api = None
+        server_url = os.environ.get('CTC_SERVER_URL', 'http://localhost:5000')  # Default to localhost
+        try:
+            from api.ctc_api_client import CTCAPIClient
+            self.ctc_api = CTCAPIClient(server_url=server_url)
+            print(f"[CTC] Using REST API: {server_url}")
+        except Exception as e:
+            print(f"[CTC] Warning: Failed to initialize API client: {e}")
+            print(f"[CTC] Falling back to file-based I/O")
+            self.ctc_api = None
+        
         # Initialize TrainManager for automatic train controller dispatch
         try:
             from train_controller.train_manager import TrainManager

@@ -29,6 +29,13 @@ sys.path.append(train_model_dir)
 # Import required classes
 from api.train_controller_api import train_controller_api
 
+# Phase 3: REST API support
+try:
+    import requests
+except ImportError:
+    requests = None
+    print("[Train Manager] Warning: requests library not available, using file I/O only")
+
 
 class TrainPair:
     """Represents a paired TrainModel and train_controller instance with UIs.
@@ -78,14 +85,18 @@ class TrainManager:
         state_file: Path to the shared train_states.json file.
     """
     
-    def __init__(self, state_file: str = None):
+    def __init__(self, state_file: str = None, server_url: str = None):
         """Initialize the TrainManager.
         
         Args:
             state_file: Path to train_states.json. If None, uses default location.
+            server_url: Optional REST API server URL (e.g. "http://localhost:5000").
+                       If provided, Train Manager will use REST API for state management.
+                       If None, uses direct file I/O (legacy mode).
         """
         self.trains = {}  # Dictionary of train_id -> TrainPair
         self.next_train_id = 1
+        self.server_url = server_url  # Phase 3: REST API integration
         
         # Set state file path
         if state_file is None:
@@ -99,6 +110,12 @@ class TrainManager:
         self.train_data_file = os.path.join(train_model_dir_actual, "train_data.json")
         # IMPORTANT: seed trains from the Train_Model folder's track-to-train file
         self.track_model_file = os.path.join(train_model_dir_actual, "track_model_Train_Model.json")
+        
+        # Phase 3: Print mode
+        if self.server_url:
+            print(f"[Train Manager] Using REST API: {self.server_url}")
+        else:
+            print(f"[Train Manager] Using file-based I/O (legacy mode)")
         
         # Ensure state file exists
         self._initialize_state_file()
@@ -273,18 +290,11 @@ class TrainManager:
         return train_id
     
     def _initialize_train_state(self, train_id: int):
-        """Initialize state for a train in the JSON file.
+        """Initialize state for a train (via REST API or file).
         
         Args:
             train_id: ID of the train to initialize.
         """
-        # Read current state file
-        with open(self.state_file, 'r') as f:
-            try:
-                all_states = json.load(f)
-            except json.JSONDecodeError:
-                all_states = {}
-        
         train_key = f"train_{train_id}"
 
         # Seed from Train Model/track_model_Train_Model.json (multi-train keyed)
@@ -308,7 +318,7 @@ class TrainManager:
         station_side = beacon.get("side_door", "") or ""
 
         # Default state for new train (matches track inputs)
-        all_states[train_key] = {
+        initial_state = {
             "train_id": train_id,
             "commanded_speed": commanded_speed,
             "commanded_authority": commanded_authority,
@@ -338,6 +348,29 @@ class TrainManager:
             "beacon_read_blocked": False,
             "current_station": next_stop
         }
+        
+        # Phase 3: Use REST API if available, otherwise file I/O
+        if self.server_url and requests:
+            try:
+                # Use REST API to initialize train state
+                endpoint = f"{self.server_url}/api/train/{train_id}/state"
+                response = requests.post(endpoint, json=initial_state, timeout=5)
+                if response.status_code == 200:
+                    print(f"[Train Manager] Train {train_id} state initialized via REST API")
+                    return
+                else:
+                    print(f"[Train Manager] REST API init failed ({response.status_code}), falling back to file I/O")
+            except Exception as e:
+                print(f"[Train Manager] REST API error: {e}, falling back to file I/O")
+        
+        # Legacy file I/O (fallback or when API not available)
+        with open(self.state_file, 'r') as f:
+            try:
+                all_states = json.load(f)
+            except json.JSONDecodeError:
+                all_states = {}
+        
+        all_states[train_key] = initial_state
         
         # Write back to file
         with open(self.state_file, 'w') as f:
