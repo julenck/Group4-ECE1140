@@ -20,9 +20,18 @@ CORS(app)  # Allow cross-origin requests from Raspberry Pis
 # File paths
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
+project_root = os.path.dirname(parent_dir)
+
+# Module-specific data directories
 DATA_DIR = os.path.join(parent_dir, "data")
+TRAIN_MODEL_DIR = os.path.join(project_root, "Train_Model")
+WAYSIDE_DIR = os.path.join(project_root, "track_controller", "New_SW_Code")
+
+# Communication files (respecting module boundaries)
 TRAIN_STATES_FILE = os.path.join(DATA_DIR, "train_states.json")
-TRAIN_DATA_FILE = os.path.join(os.path.dirname(parent_dir), "Train_Model", "train_data.json")
+TRAIN_DATA_FILE = os.path.join(TRAIN_MODEL_DIR, "train_data.json")
+CTC_TRACK_CONTROLLER_FILE = os.path.join(project_root, "ctc_track_controller.json")
+WAYSIDE_TO_TRAIN_FILE = os.path.join(WAYSIDE_DIR, "wayside_to_train.json")
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -766,6 +775,200 @@ def update_wayside_lights():
         print(f"[Server] Error updating lights: {e}")
         return jsonify({"error": str(e)}), 500
 
+# ========== CORRECTED MODULE-BOUNDARY-RESPECTING ENDPOINTS ==========
+
+# CTC Endpoints (interact with ctc_track_controller.json)
+@app.route('/api/ctc/commands', methods=['POST'])
+def set_ctc_commands():
+    """CTC sends commands to wayside via ctc_track_controller.json.
+    
+    CORRECT BOUNDARY: CTC → ctc_track_controller.json → Wayside
+    """
+    command_data = request.json
+    if not command_data:
+        return jsonify({"error": "No command data provided"}), 400
+    
+    try:
+        ctc_data = read_json_file(CTC_TRACK_CONTROLLER_FILE)
+        
+        # Ensure structure exists
+        if "Trains" not in ctc_data:
+            ctc_data["Trains"] = {}
+        
+        # Update train commands
+        train_name = command_data.get("train", "Train 1")
+        if train_name not in ctc_data["Trains"]:
+            ctc_data["Trains"][train_name] = {
+                "Active": 0,
+                "Suggested Speed": 0,
+                "Suggested Authority": 0,
+                "Train Position": 0,
+                "Train State": ""
+            }
+        
+        # Update commanded values
+        if "speed" in command_data:
+            ctc_data["Trains"][train_name]["Suggested Speed"] = float(command_data["speed"])
+        if "authority" in command_data:
+            ctc_data["Trains"][train_name]["Suggested Authority"] = float(command_data["authority"])
+        if "active" in command_data:
+            ctc_data["Trains"][train_name]["Active"] = int(command_data["active"])
+        
+        write_json_file(CTC_TRACK_CONTROLLER_FILE, ctc_data)
+        
+        print(f"[Server] CTC command sent to {train_name}: speed={command_data.get('speed')}, auth={command_data.get('authority')}")
+        return jsonify({"message": "Command sent to wayside"}), 200
+    except Exception as e:
+        print(f"[Server] Error setting CTC commands: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ctc/status', methods=['GET'])
+def get_ctc_status():
+    """CTC reads status from wayside via ctc_track_controller.json.
+    
+    CORRECT BOUNDARY: Wayside → ctc_track_controller.json → CTC
+    """
+    try:
+        ctc_data = read_json_file(CTC_TRACK_CONTROLLER_FILE)
+        return jsonify(ctc_data), 200
+    except Exception as e:
+        print(f"[Server] Error reading CTC status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Wayside Endpoints
+@app.route('/api/wayside/ctc_commands', methods=['GET'])
+def get_wayside_ctc_commands():
+    """Wayside reads CTC commands from ctc_track_controller.json.
+    
+    CORRECT BOUNDARY: CTC → ctc_track_controller.json → Wayside
+    """
+    try:
+        ctc_data = read_json_file(CTC_TRACK_CONTROLLER_FILE)
+        return jsonify(ctc_data), 200
+    except Exception as e:
+        print(f"[Server] Error reading CTC commands for wayside: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/wayside/train_status', methods=['POST'])
+def update_wayside_train_status():
+    """Wayside writes train position/state back to ctc_track_controller.json.
+    
+    CORRECT BOUNDARY: Wayside → ctc_track_controller.json → CTC
+    """
+    status_data = request.json
+    if not status_data:
+        return jsonify({"error": "No status data provided"}), 400
+    
+    try:
+        ctc_data = read_json_file(CTC_TRACK_CONTROLLER_FILE)
+        
+        if "Trains" not in ctc_data:
+            ctc_data["Trains"] = {}
+        
+        train_name = status_data.get("train", "Train 1")
+        if train_name not in ctc_data["Trains"]:
+            ctc_data["Trains"][train_name] = {}
+        
+        # Update position and state from wayside
+        if "position" in status_data:
+            ctc_data["Trains"][train_name]["Train Position"] = int(status_data["position"])
+        if "state" in status_data:
+            ctc_data["Trains"][train_name]["Train State"] = status_data["state"]
+        if "active" in status_data:
+            ctc_data["Trains"][train_name]["Active"] = int(status_data["active"])
+        
+        write_json_file(CTC_TRACK_CONTROLLER_FILE, ctc_data)
+        
+        print(f"[Server] Wayside updated {train_name} status: pos={status_data.get('position')}")
+        return jsonify({"message": "Train status updated"}), 200
+    except Exception as e:
+        print(f"[Server] Error updating train status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/wayside/train_physics', methods=['GET'])
+def get_wayside_train_physics():
+    """Wayside reads train physics from train_data.json.
+    
+    CORRECT BOUNDARY: Train Model → train_data.json → Wayside
+    """
+    try:
+        train_data = read_json_file(TRAIN_DATA_FILE)
+        # Return physics outputs for all trains
+        return jsonify(train_data), 200
+    except Exception as e:
+        print(f"[Server] Error reading train physics: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/wayside/train_commands', methods=['POST'])
+def set_wayside_train_commands():
+    """Wayside writes commands to wayside_to_train.json.
+    
+    CORRECT BOUNDARY: Wayside → wayside_to_train.json → Train Model
+    """
+    command_data = request.json
+    if not command_data:
+        return jsonify({"error": "No command data provided"}), 400
+    
+    try:
+        wayside_data = read_json_file(WAYSIDE_TO_TRAIN_FILE)
+        
+        train_name = command_data.get("train", "Train 1")
+        if train_name not in wayside_data:
+            wayside_data[train_name] = {
+                "Commanded Speed": 0,
+                "Commanded Authority": 0,
+                "Beacon": {"Current Station": "", "Next Station": ""},
+                "Train Speed": 0
+            }
+        
+        # Ensure Beacon structure exists
+        if "Beacon" not in wayside_data[train_name]:
+            wayside_data[train_name]["Beacon"] = {"Current Station": "", "Next Station": ""}
+        
+        # Update commands
+        if "commanded_speed" in command_data:
+            wayside_data[train_name]["Commanded Speed"] = float(command_data["commanded_speed"])
+        if "commanded_authority" in command_data:
+            wayside_data[train_name]["Commanded Authority"] = float(command_data["commanded_authority"])
+        
+        # Update beacon data (Current Station AND Next Station)
+        if "current_station" in command_data:
+            wayside_data[train_name]["Beacon"]["Current Station"] = str(command_data["current_station"])
+        if "next_station" in command_data:
+            wayside_data[train_name]["Beacon"]["Next Station"] = str(command_data["next_station"])
+        
+        write_json_file(WAYSIDE_TO_TRAIN_FILE, wayside_data)
+        
+        print(f"[Server] Wayside set commands for {train_name}: speed={command_data.get('commanded_speed')}, auth={command_data.get('commanded_authority')}")
+        return jsonify({"message": "Commands written to wayside_to_train.json"}), 200
+    except Exception as e:
+        print(f"[Server] Error writing wayside commands: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Train Model Endpoints
+@app.route('/api/train_model/<int:train_id>/commands', methods=['GET'])
+def get_train_model_commands(train_id):
+    """Train Model reads commands from wayside_to_train.json.
+    
+    CORRECT BOUNDARY: Wayside → wayside_to_train.json → Train Model
+    """
+    try:
+        print(f"[Server] Reading from: {WAYSIDE_TO_TRAIN_FILE}")
+        wayside_data = read_json_file(WAYSIDE_TO_TRAIN_FILE)
+        train_name = f"Train {train_id}"
+        
+        print(f"[Server] Looking for {train_name}, available trains: {list(wayside_data.keys())}")
+        
+        if train_name in wayside_data:
+            print(f"[Server] Found {train_name} commands")
+            return jsonify(wayside_data[train_name]), 200
+        else:
+            print(f"[Server] {train_name} not found in wayside_to_train.json")
+            return jsonify({"error": f"{train_name} not found"}), 404
+    except Exception as e:
+        print(f"[Server] Error reading train model commands: {e}")
+        return jsonify({"error": str(e)}), 500
+
 # ========== Health Check ==========
 
 @app.route('/api/health', methods=['GET'])
@@ -806,11 +1009,19 @@ def root():
 
 if __name__ == '__main__':
     print("=" * 70)
-    print("  TRAIN SYSTEM REST API SERVER v2.0")
+    print("  TRAIN SYSTEM REST API SERVER v2.0 - BOUNDARY RESPECTING")
     print("=" * 70)
     print(f"\nData directory: {DATA_DIR}")
-    print(f"State file: {TRAIN_STATES_FILE}")
-    print(f"Train data file: {TRAIN_DATA_FILE}")
+    print(f"\nCommunication Files:")
+    print(f"  train_states.json: {TRAIN_STATES_FILE}")
+    print(f"  train_data.json: {TRAIN_DATA_FILE}")
+    print(f"  ctc_track_controller.json: {CTC_TRACK_CONTROLLER_FILE}")
+    print(f"  wayside_to_train.json: {WAYSIDE_TO_TRAIN_FILE}")
+    print(f"\nFile Check:")
+    print(f"  train_states.json exists: {os.path.exists(TRAIN_STATES_FILE)}")
+    print(f"  train_data.json exists: {os.path.exists(TRAIN_DATA_FILE)}")
+    print(f"  ctc_track_controller.json exists: {os.path.exists(CTC_TRACK_CONTROLLER_FILE)}")
+    print(f"  wayside_to_train.json exists: {os.path.exists(WAYSIDE_TO_TRAIN_FILE)}")
     print("\nServer starting on http://0.0.0.0:5000")
     print("All components should connect to: http://<server-ip>:5000\n")
     print("Available endpoints:")

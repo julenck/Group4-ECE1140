@@ -2,10 +2,10 @@
     "Trains": {
         "Train 1": {
             "Active": 1,
-            "Suggested Speed": -1,
-            "Suggested Authority": 900,
-            "Train Position": 65,
-            "Train State": 0
+            "Suggested Speed": 30.0,
+            "Suggested Authority": 100.0,
+            "Train Position": 25,
+            "Train State": "moving"
         },
         "Train 2": {
             "Active": 0,

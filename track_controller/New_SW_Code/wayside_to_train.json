@@ -1,10 +1,10 @@
 {
     "Train 1": {
-        "Commanded Speed": 0,
-        "Commanded Authority": 0,
+        "Commanded Speed": 30.0,
+        "Commanded Authority": 100.0,
         "Beacon": {
-            "Current Station": "",
-            "Next Station": ""
+            "Current Station": "Station A",
+            "Next Station": "Station B"
         },
         "Train Speed": 0
     },
