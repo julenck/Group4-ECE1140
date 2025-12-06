@@ -14,24 +14,33 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 3. ✅ **CTC** - Integrated with `CTCAPIClient`
 4. ✅ **Wayside** - Integrated with `WaysideAPIClient`
 
-### Bug Fixes (3 Critical Issues)
+### Bug Fixes (6 Critical Issues)
 1. ✅ **Parameter Mismatch** - Fixed `update_beacon_data()` call signature
 2. ✅ **Data Loss Prevention** - Added return value checking for partial failures
 3. ✅ **Response Validation** - Fixed misleading success messages in `dispatch_train()`
+4. ✅ **CTC API Import Error** - Fixed import path for API client
+5. ✅ **FileNotFoundError** - Fixed file path resolution using `__file__`
+6. ✅ **Train Model AttributeError** - Added guard for UI initialization race
 
-### Documentation (5 Documents)
+### New Features
+1. ✅ **Manual Controller Type Selection** - CTC UI dropdown to choose Hardware or Software controller per train
+
+### Documentation (8 Documents)
 1. ✅ `PHASE_3_PROGRESS.md` - Development tracking
 2. ✅ `PHASE_3_COMPLETE.md` - Complete implementation guide
-3. ✅ `PHASE_3_BUGFIXES.md` - Bug analysis and fixes
-4. ✅ `PHASE_3_TESTING_GUIDE.md` - Comprehensive testing procedures
-5. ✅ `PHASE_3_FINAL_SUMMARY.md` - This document
+3. ✅ `PHASE_3_BUGFIXES.md` - Bug analysis and fixes (development bugs)
+4. ✅ `PHASE_3_RUNTIME_BUGFIXES.md` - Runtime bugs found during testing
+5. ✅ `PHASE_3_TESTING_GUIDE.md` - Comprehensive testing procedures
+6. ✅ `PHASE_3_TESTING_NOTES.md` - Actual test results and behavior
+7. ✅ `CTC_CONTROLLER_TYPE_SELECTOR.md` - Manual controller selection feature
+8. ✅ `PHASE_3_FINAL_SUMMARY.md` - This document
 
 ---
 
 ## Git Commits Summary
 
 ### Branch: `phase3`
-**Total Commits:** 11
+**Total Commits:** 17
 
 | Commit | Description | Impact |
 |--------|-------------|--------|
@@ -44,8 +53,16 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 | `f83052a` | Document Phase 3 bug fixes | Bug documentation |
 | `33dca52` | Update docs with bug fix details | Documentation update |
 | `a19204a` | Add comprehensive testing guide | Testing procedures |
-| `4d41abd` | Phase 3: Final summary and completion status | Final summary |
+| `4d41abd` | Phase 3: Final summary | Final summary |
 | `7329f6c` | Fix: misleading success message in dispatch_train() | Response validation |
+| `477813b` | Update Phase 3 summary with third bug fix | Documentation |
+| `50ece10` | Add testing notes explaining behavior | Testing notes |
+| `a310621` | Update testing docs: Wayside import error | Testing guide update |
+| `39e3ab9` | Add quick test reference guide | Quick reference |
+| `b721ebc` | Fix: critical runtime errors in combine test | Runtime bug fixes |
+| `279fd50` | Document runtime bug fixes | Documentation |
+| `a449d77` | Add manual controller type selection to CTC UI | **New feature** |
+| `bdfb8fe` | Document CTC controller type selector | Feature docs |
 
 ---
 
