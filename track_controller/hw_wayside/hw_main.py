@@ -83,28 +83,37 @@ def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
     if not _physical_switch.present():
         return
     
-    if not controller.maintenance_active:
-        return
-    
-    selected = controller.get_selected_block()
-    if not selected:
-        return
-    
-    if not controller.has_switch(selected):
-        return
-    
-    # Only act if physical switch actually changed
+    # Always check for switch changes first, then validate conditions
     new_state = _physical_switch.check_for_change()
     if not new_state:
         return  # No change detected
     
-    # Physical switch changed - apply it
-    print(f"[GPIO] Applying switch change to block {selected}: → {new_state}")
+    # Physical switch changed! Now check if we can apply it
+    print(f"[GPIO] Physical switch flipped to: {new_state}")
+    
+    # Check maintenance mode
+    if not controller.maintenance_active:
+        print("[GPIO] Ignored - not in maintenance mode")
+        return
+    
+    # Check selected block
+    selected = controller.get_selected_block()
+    if not selected:
+        print("[GPIO] Ignored - no block selected")
+        return
+    
+    # Check if block has switch
+    if not controller.has_switch(selected):
+        print(f"[GPIO] Ignored - block {selected} has no switch")
+        return
+    
+    # All checks passed - apply it!
+    print(f"[GPIO] Applying to block {selected}")
     allowed, reason = controller.request_switch_change(selected, new_state)
     if allowed:
         print(f"[GPIO] ✓ Switch changed successfully")
     else:
-        print(f"[GPIO] ✗ Switch change rejected: {reason}")
+        print(f"[GPIO] ✗ Rejected: {reason}")
 
 # ---------------------------------------------------------------------
 # Config
