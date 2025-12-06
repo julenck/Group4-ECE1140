@@ -1293,6 +1293,10 @@ class HW_Wayside_Controller:
             # Safe guard
             if not self._plc_loaded or not self._plc_module:
                 return
+            
+            # Don't run PLC in maintenance mode - manual control takes precedence
+            if getattr(self, 'maintenance_active', False):
+                return
 
             # Build an occupancy slice intended for PLC functions.
             # Many PLCs expect a contiguous slice covering their region; we provide the
