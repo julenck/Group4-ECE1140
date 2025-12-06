@@ -1498,6 +1498,11 @@ class HW_Wayside_Controller:
     def on_selected_block(self, block_id: str):
         with self._lock:
             self._selected_block = str(block_id)
+    
+    def get_selected_block(self) -> Optional[str]:
+        """Return the currently selected block ID."""
+        with self._lock:
+            return self._selected_block
 
     # ------------------ manual switch control (UI) ------------------
 
