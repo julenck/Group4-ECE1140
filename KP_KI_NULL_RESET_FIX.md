@@ -16,9 +16,14 @@
 
 ## 🔍 Root Cause Analysis
 
-### The Bug
+### The Bugs
 
-The REST API server (`train_api_server.py`) had **2 critical locations** that would **wipe out the entire train dict** when the `inputs` key was missing:
+**There were actually 3 critical locations with this bug:**
+1. REST API server sync thread (`train_api_server.py`)
+2. REST API server update endpoint (`train_api_server.py`)
+3. **Local file API** (`train_controller_api.py`) ← **This was the real culprit!**
+
+All 3 would **wipe out outputs** (including kp/ki) when the `inputs` key was missing:
 
 **Location 1: `sync_train_data_to_states()` (line 194-198)** - Runs every 500ms
 ```python
@@ -36,6 +41,23 @@ if "inputs" not in train_states[key]:
 if "inputs" not in data[train_key]:
     data[train_key] = {"inputs": {}, "outputs": {}}  # ❌ WIPES OUT EXISTING VALUES!
 ```
+
+**Location 3: `save_state()` in `train_controller_api.py` (lines 235-243)** - **THE REAL CULPRIT!**
+```python
+# BEFORE (BUG):
+if 'inputs' in existing and 'outputs' in existing:
+    inputs = existing['inputs'].copy()
+    outputs = existing['outputs'].copy()
+else:
+    inputs = self.default_inputs.copy()
+    outputs = self.default_outputs.copy()  # ❌ WIPES OUT kp/ki!
+```
+
+**Why Location 3 is the worst:**
+- This is the **local file API** used by controllers
+- Gets called **every single time** the controller saves state
+- Even if the server fix worked, this would still reset kp/ki!
+- Both local mode AND remote mode use this code path
 
 ### How It Happened
 
@@ -115,7 +137,7 @@ if "inputs" not in train_states[key]:
 - ✅ Warning logged if kp/ki would have been lost
 - ✅ Only replaces dict if completely malformed (not a dict)
 
-### Location 2: Update Endpoint (lines 416-450)
+### Location 2: Update Endpoint (Server - lines 416-450)
 
 **Before:**
 ```python
@@ -152,7 +174,51 @@ if "outputs" not in data[train_key]:
 - ✅ Ensures outputs exists before writing kp/ki
 - ✅ Warning logged if values would be lost
 
-### Location 3: Default Value Setting (lines 297-302)
+### Location 3: Local API save_state() (train_controller_api.py - lines 232-255) **CRITICAL!**
+
+**Before:**
+```python
+if train_key in all_states and isinstance(all_states[train_key], dict):
+    existing = all_states[train_key]
+    if 'inputs' in existing and 'outputs' in existing:
+        inputs = existing['inputs'].copy()
+        outputs = existing['outputs'].copy()
+    else:
+        inputs = self.default_inputs.copy()
+        outputs = self.default_outputs.copy()  # ❌ RESETS kp/ki TO None!
+```
+
+**After:**
+```python
+if train_key in all_states and isinstance(all_states[train_key], dict):
+    existing = all_states[train_key]
+    # Check inputs and outputs SEPARATELY (don't reset both!)
+    if 'inputs' in existing and isinstance(existing['inputs'], dict):
+        inputs = existing['inputs'].copy()
+    else:
+        inputs = self.default_inputs.copy()
+    
+    if 'outputs' in existing and isinstance(existing['outputs'], dict):
+        outputs = existing['outputs'].copy()  # ✅ PRESERVES kp/ki!
+    else:
+        # Check if we're about to lose kp/ki values (legacy format)
+        if 'kp' in existing or 'ki' in existing:
+            print(f"[API] Warning: train_{self.train_id} has flat kp/ki - preserving")
+            outputs = self.default_outputs.copy()
+            outputs['kp'] = existing.get('kp', None)
+            outputs['ki'] = existing.get('ki', None)
+        else:
+            outputs = self.default_outputs.copy()
+```
+
+**Key Changes:**
+- ✅ **Checks inputs and outputs SEPARATELY** - doesn't reset both if one is missing!
+- ✅ Preserves existing outputs even if inputs missing
+- ✅ Handles legacy flat format (kp/ki at root level)
+- ✅ Warning logged if legacy format detected
+- ✅ **THIS WAS THE MAIN BUG** - happens on every save, not just sync!
+
+### Location 4: Default Value Setting (Server - lines 297-302)
 
 **Added protective comments:**
 ```python
@@ -288,23 +354,28 @@ This fix also addresses the underlying cause of:
 
 ## 📝 Files Modified
 
-| File | Lines | Change |
-|------|-------|--------|
-| `train_controller/api/train_api_server.py` | 194-208 | Preserve outputs in sync thread |
-| `train_controller/api/train_api_server.py` | 416-450 | Preserve outputs in update endpoint |
-| `train_controller/api/train_api_server.py` | 297-302 | Added protective comments |
+| File | Lines | Change | Severity |
+|------|-------|--------|----------|
+| `train_controller/api/train_api_server.py` | 194-208 | Preserve outputs in sync thread | High |
+| `train_controller/api/train_api_server.py` | 416-450 | Preserve outputs in update endpoint | High |
+| `train_controller/api/train_controller_api.py` | 232-255 | **Preserve outputs in save_state()** | **CRITICAL** |
+| `train_controller/api/train_api_server.py` | 297-302 | Added protective comments | Low |
 
-**Total:** 1 file, 3 critical sections fixed
+**Total:** 2 files, 4 critical sections fixed
+
+**Most Important Fix:** `train_controller_api.py` - This is the local API used by controllers, gets called on EVERY state save!
 
 ---
 
-## 🎯 Git Commit
+## 🎯 Git Commits
 
 ```
-Commit: 6c53228
+Commit 1: 6c53228 - CRITICAL FIX: Prevent kp/ki values from being reset to None (SERVER)
+Commit 2: f3d514f - CRITICAL FIX (Part 2): Fix kp/ki reset bug in train_controller_api.py (LOCAL API)
 Branch: phase3
-Message: CRITICAL FIX: Prevent kp/ki values from being reset to None
 ```
+
+**Both fixes were required!** The server fix (6c53228) alone wasn't enough because the local API (f3d514f) had the same bug.
 
 ---
 
@@ -344,10 +415,15 @@ This helps:
 
 ## ✅ Status
 
-**Problem:** ✅ **FIXED**  
-**Testing:** ✅ **VERIFIED**  
-**Documentation:** ✅ **COMPLETE**
+**Problem:** ✅ **FIXED (2 commits required!)**  
+**Testing:** ⏳ **NEEDS VERIFICATION**  
+**Documentation:** ✅ **UPDATED**
 
-**Your kp and ki values are now safe!** 🎉🔒
+**Critical Discovery:**
+The first fix (commit 6c53228) only fixed the **server**, but the bug ALSO existed in the **local file API** (`train_controller_api.py`). The second fix (commit f3d514f) was **THE REAL FIX** that actually solves the problem!
+
+**Your kp and ki values should now be safe!** 🎉🔒
+
+**Please test again and confirm kp/ki persist!**
 
 
