@@ -145,7 +145,6 @@ class train_controller_api_client:
         print(f"[API Client] Train {self.train_id} not found after {max_not_found_attempts} attempts, using fallback")
         if self._cached_state is not None:
             return self._cached_state.copy()
-        return self.default_state.copy()
     
     def update_state(self, state_dict: dict) -> None:
         """Update train state on server.
