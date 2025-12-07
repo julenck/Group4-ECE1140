@@ -72,8 +72,8 @@ class train_controller_api_client:
             "announcement": "",
             "announce_pressed": False,
             "emergency_brake": False,
-            "kp": 0.0,
-            "ki": 0.0,
+            "kp": None,  # Must be set through UI (matches server and local API)
+            "ki": None,  # Must be set through UI (matches server and local API)
             "engineering_panel_locked": False,
             
             # Outputs TO Train Model

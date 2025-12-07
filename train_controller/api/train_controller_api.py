@@ -77,6 +77,8 @@ class train_controller_api:
         
         # Check if train state already exists before initializing
         # Only initialize if this is a NEW train
+        # CRITICAL: Be conservative - if we can't determine if train exists, assume it DOES exist
+        # This prevents accidentally resetting kp/ki to None due to file corruption or race conditions
         train_exists = False
         if os.path.exists(self.state_file):
             try:
@@ -85,13 +87,32 @@ class train_controller_api:
                     if self.train_id is not None:
                         train_key = f"train_{self.train_id}"
                         train_exists = train_key in existing_states
+                        # If train has kp/ki set in the file, definitely don't reinitialize!
+                        if train_exists and isinstance(existing_states.get(train_key), dict):
+                            train_dict = existing_states[train_key]
+                            # Check both nested and flat formats
+                            has_kp_ki = False
+                            if 'outputs' in train_dict:
+                                kp_val = train_dict['outputs'].get('kp')
+                                ki_val = train_dict['outputs'].get('ki')
+                                if kp_val is not None or ki_val is not None:
+                                    has_kp_ki = True
+                                    print(f"[API INIT] train_{self.train_id} has kp={kp_val}, ki={ki_val} - will NOT reinitialize")
+                            elif 'kp' in train_dict or 'ki' in train_dict:
+                                has_kp_ki = True
+                                print(f"[API INIT] train_{self.train_id} has flat kp/ki - will NOT reinitialize")
+                            if has_kp_ki:
+                                train_exists = True  # Extra safety - never reinitialize if kp/ki are set!
                     else:
                         train_exists = bool(existing_states)
-            except:
-                pass
+            except Exception as e:
+                # If we can't read the file, assume train exists (conservative approach)
+                # This prevents accidentally resetting kp/ki due to temporary file issues
+                print(f"[API INIT] Warning: Could not read state file: {e} - assuming train exists to be safe")
+                train_exists = True
         
         # Only initialize state file if train doesn't exist yet
-        # This prevents overwriting existing state (lights, power_command, etc.)
+        # This prevents overwriting existing state (lights, power_command, kp/ki, etc.)
         if not train_exists:
             try:
                 print(f"[API INIT] Initializing NEW train_controller_api for train_id={train_id}")
@@ -99,16 +120,19 @@ class train_controller_api:
                 initial_state = self.train_states.copy()
                 initial_state['driver_velocity'] = initial_state['commanded_speed']
                 initial_state['set_temperature'] = initial_state['train_temperature']
-                # Ensure kp and ki are None (must be set through UI)
+                # Ensure kp and ki are None (must be set through UI) - for new trains only!
                 initial_state['kp'] = None
                 initial_state['ki'] = None
                 initial_state['interior_lights'] = True  # Default lights ON for new trains
                 initial_state['exterior_lights'] = True
-                print(f"[API INIT] Setting kp={initial_state['kp']}, ki={initial_state['ki']}")
+                print(f"[API INIT] Initializing new train with kp={initial_state['kp']}, ki={initial_state['ki']}")
                 self.save_state(initial_state)
                 print(f"[API INIT] State saved successfully")
             except Exception as e:
                 print(f"[API INIT] Error initializing state file: {e}")
+        else:
+            if self.train_id is not None:
+                print(f"[API INIT] train_{self.train_id} already exists - skipping initialization (preserves kp/ki)")
         else:
             print(f"[API INIT] Train {train_id} already exists, preserving existing state")
 

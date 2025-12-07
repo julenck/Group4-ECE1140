@@ -148,47 +148,12 @@ def sync_train_data_to_states():
                     outputs = section.get("outputs", {})
                     
                     # Ensure train exists in states with proper inputs/outputs structure
+                    # CRITICAL: Skip trains that don't exist in train_states - they should be created by dispatch, not sync!
+                    # This prevents resetting kp/ki to None if the train entry gets corrupted/deleted
                     if key not in train_states:
-                        # Extract train_id from key
-                        train_id = int(key.split("_")[1])
-                        train_states[key] = {
-                            "inputs": {
-                                "commanded_speed": 0.0,
-                                "commanded_authority": 0.0,
-                                "speed_limit": 0.0,
-                                "train_velocity": 0.0,
-                                "next_stop": "",
-                                "station_side": "",
-                                "train_temperature": 70.0,
-                                "train_model_engine_failure": False,
-                                "train_model_signal_failure": False,
-                                "train_model_brake_failure": False,
-                                "train_controller_engine_failure": False,
-                                "train_controller_signal_failure": False,
-                                "train_controller_brake_failure": False,
-                                "current_station": "",
-                                "beacon_read_blocked": False
-                            },
-                            "outputs": {
-                                "manual_mode": False,
-                                "driver_velocity": 0.0,
-                                "service_brake": False,
-                                "right_door": False,
-                                "left_door": False,
-                                "interior_lights": True,
-                                "exterior_lights": True,
-                                "set_temperature": 70.0,
-                                "temperature_up": False,
-                                "temperature_down": False,
-                                "announcement": "",
-                                "announce_pressed": False,
-                                "emergency_brake": False,
-                                "kp": None,
-                                "ki": None,
-                                "engineering_panel_locked": False,
-                                "power_command": 0.0
-                            }
-                        }
+                        print(f"[Server] Warning: {key} found in train_data.json but not in train_states.json - skipping sync")
+                        print(f"[Server] This train should be dispatched via CTC to properly initialize train_states")
+                        continue  # Skip this train - don't create it with None kp/ki!
                     
                     # Ensure inputs/outputs structure exists (handle legacy flat format)
                     # CRITICAL: Don't replace the entire dict - preserve existing outputs (kp, ki, etc.)!
