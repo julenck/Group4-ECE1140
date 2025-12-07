@@ -10,6 +10,11 @@
 
 
 # User Help
+**This code requires the following:**
+- Python version ... 
+- Watchdog
+- Pillow
+- 
 
 ## CTC
 
