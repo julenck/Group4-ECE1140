@@ -230,14 +230,26 @@ class train_controller_api:
                     train_key = f"train_{self.train_id}"
                     
                     # Read existing state from file (if it exists), otherwise start with defaults
+                    # CRITICAL: Preserve existing inputs/outputs separately - don't reset both if one is missing!
                     if train_key in all_states and isinstance(all_states[train_key], dict):
                         existing = all_states[train_key]
-                        if 'inputs' in existing and 'outputs' in existing:
+                        # Check inputs and outputs SEPARATELY
+                        if 'inputs' in existing and isinstance(existing['inputs'], dict):
                             inputs = existing['inputs'].copy()
-                            outputs = existing['outputs'].copy()
                         else:
                             inputs = self.default_inputs.copy()
-                            outputs = self.default_outputs.copy()
+                        
+                        if 'outputs' in existing and isinstance(existing['outputs'], dict):
+                            outputs = existing['outputs'].copy()
+                        else:
+                            # Check if we're about to lose kp/ki values
+                            if 'kp' in existing or 'ki' in existing:
+                                print(f"[API] Warning: train_{self.train_id} has flat kp/ki but missing outputs - preserving values")
+                                outputs = self.default_outputs.copy()
+                                outputs['kp'] = existing.get('kp', None)
+                                outputs['ki'] = existing.get('ki', None)
+                            else:
+                                outputs = self.default_outputs.copy()
                     else:
                         inputs = self.default_inputs.copy()
                         outputs = self.default_outputs.copy()
