@@ -50,5 +50,40 @@ Maintenance mode of the software wayside controller can be accessed by clicking 
 ## Train Model
 
 ## SW Train Controller
+<img src="./screenshots/sw_train_ctrl_main_UI.png">
 
+The software train controller is created upon the dispatching of a software train by the CTC module. it is responsible for
+
+### Engineering Panel
+
+The engineering panel located at the bottom of the software train controller UI is where the Kp and Ki of the train must be set.
+
+<img src="./screenshots/sw_train_ctrl_engr.png">
+
+- The Kp and Ki must be set prior to the train moving. Once it is set using the clickbox labeled "Lock Values", It is unabled to be changed again.
+
+### Train Speed
+
+The train speed section located on the top left of the UI displays the current speed of the train in miles per hour.
+
+<img src="./screenshots/sw_train_ctrl_speed.png">
+
+- The train driver is able to i
+
+### Train Information
+
+The train info section located on the top right of the UI...
+
+<img src="./screenshots/sw_train_ctrl_train_info.png">
+
+- This section displays...
+
+### Train Controls
+
+The train control section located in the middle of the UI...
+
+<img src="./screenshots/sw_train_ctrl_ctrl.png">
+
+- In this section the driver can...
+ 
 ## HW Train Controller
