@@ -133,8 +133,8 @@ class train_controller_api:
         else:
             if self.train_id is not None:
                 print(f"[API INIT] train_{self.train_id} already exists - skipping initialization (preserves kp/ki)")
-        else:
-            print(f"[API INIT] Train {train_id} already exists, preserving existing state")
+            else:
+                print(f"[API INIT] Train already exists, preserving existing state")
 
     def update_state(self, state_dict: dict) -> None:
         """Update train state with new values.
