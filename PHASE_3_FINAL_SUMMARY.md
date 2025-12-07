@@ -14,7 +14,7 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 3. ✅ **CTC** - Integrated with `CTCAPIClient`
 4. ✅ **Wayside** - Integrated with `WaysideAPIClient`
 
-### Bug Fixes (9 Critical Issues)
+### Bug Fixes (10 Critical Issues)
 1. ✅ **Parameter Mismatch** - Fixed `update_beacon_data()` call signature
 2. ✅ **Data Loss Prevention** - Added return value checking for partial failures
 3. ✅ **Response Validation** - Fixed misleading success messages in `dispatch_train()`
@@ -24,11 +24,12 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 7. ✅ **Multi-Train Dispatch** - Fixed legacy dispatch wiping out all trains when dispatching second train
 8. ✅ **JSON Corruption (Race Condition)** - Fixed thread-unsafe writes to `ctc_data.json` with atomic operations
 9. ✅ **Train Order Randomization** - Fixed inconsistent train order in `train_states.json` by sorting keys on every write
+10. ✅ **kp/ki Random Reset to None** - Fixed sync thread and update endpoint wiping out user-set kp/ki values
 
 ### New Features
 1. ✅ **Manual Controller Type Selection** - CTC UI dropdown to choose Hardware or Software controller per train
 
-### Documentation (12 Documents)
+### Documentation (13 Documents)
 1. ✅ `PHASE_3_PROGRESS.md` - Development tracking
 2. ✅ `PHASE_3_COMPLETE.md` - Complete implementation guide
 3. ✅ `PHASE_3_BUGFIXES.md` - Bug analysis and fixes (development bugs)
@@ -39,15 +40,16 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 8. ✅ `MULTI_TRAIN_DISPATCH_FIX.md` - Multi-train dispatch bug fix
 9. ✅ `CTC_DATA_JSON_FIX.md` - JSON corruption fix and thread-safe writes
 10. ✅ `TRAIN_STATES_ORDER_FIX.md` - Train order consistency fix
-11. ✅ `QUICK_START_GUIDE.md` - User-friendly quick start guide
-12. ✅ `PHASE_3_FINAL_SUMMARY.md` - This document
+11. ✅ `KP_KI_NULL_RESET_FIX.md` - kp/ki random reset prevention
+12. ✅ `QUICK_START_GUIDE.md` - User-friendly quick start guide
+13. ✅ `PHASE_3_FINAL_SUMMARY.md` - This document
 
 ---
 
 ## Git Commits Summary
 
 ### Branch: `phase3`
-**Total Commits:** 30
+**Total Commits:** 32
 
 | Commit | Description | Impact |
 |--------|-------------|--------|
@@ -83,6 +85,8 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 | `5049d20` | Update Phase 3 summary with thread-safe write fix | Documentation |
 | `06fa177` | Fix: Maintain consistent train order in train_states.json | **Train ordering fix** |
 | `6dc1f0a` | Document train_states.json order fix | Documentation |
+| `fdffacc` | Update Phase 3 summary with train order fix | Documentation |
+| `6c53228` | CRITICAL FIX: Prevent kp/ki values from being reset to None | **kp/ki preservation** |
 
 ---
 
