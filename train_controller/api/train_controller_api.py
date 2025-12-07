@@ -7,11 +7,63 @@ for communication between Train Controller and Train Model modules.
 import json
 import os
 import threading
+import tempfile
 from typing import Dict, Optional
 
 # Global file lock for thread-safe access to train_states.json
 # Using RLock (reentrant lock) to allow same thread to acquire lock multiple times
 _file_lock = threading.Lock()
+
+def safe_write_json(filepath: str, data: dict) -> bool:
+    """Thread-safe atomic JSON file write with validation.
+    
+    Writes to a temporary file first, then atomically renames to target.
+    This prevents partial writes and race conditions.
+    
+    Args:
+        filepath: Target JSON file path
+        data: Dictionary to write as JSON
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Sort keys if writing to train_states.json
+        if "train_states.json" in filepath and isinstance(data, dict):
+            data = {k: data[k] for k in sorted(data.keys())}
+        
+        # Validate JSON structure by serializing first
+        json_str = json.dumps(data, indent=4)
+        
+        # Count braces to ensure balance
+        if json_str.count('{') != json_str.count('}'):
+            print(f"[API] ERROR: Unbalanced braces in JSON data")
+            return False
+        
+        # Write to temporary file in same directory
+        dir_name = os.path.dirname(filepath)
+        with tempfile.NamedTemporaryFile(mode='w', dir=dir_name, delete=False, suffix='.tmp') as tmp_file:
+            tmp_file.write(json_str)
+            tmp_path = tmp_file.name
+        
+        # Atomic rename (overwrites target file)
+        # On Windows, need to remove target first
+        if os.path.exists(filepath):
+            os.replace(tmp_path, filepath)
+        else:
+            os.rename(tmp_path, filepath)
+        
+        return True
+        
+    except Exception as e:
+        print(f"[API] ERROR: Failed to write {filepath}: {e}")
+        # Clean up temp file if it exists
+        try:
+            if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+        return False
 
 class train_controller_api:
     """Manages train state persistence and module communication using JSON."""
@@ -241,8 +293,17 @@ class train_controller_api:
                 if self.train_id is not None:
                     # Multi-train mode: update specific train's section at ROOT level only
                     if os.path.exists(self.state_file):
-                        with open(self.state_file, 'r') as f:
-                            all_states = json.load(f)
+                        try:
+                            with open(self.state_file, 'r') as f:
+                                content = f.read()
+                                if not content or content.strip() == '':
+                                    print(f"[API] ERROR: train_states.json is EMPTY! Skipping save to prevent data loss.")
+                                    raise IOError("Empty file detected - race condition victim")
+                                all_states = json.loads(content)
+                        except json.JSONDecodeError as e:
+                            print(f"[API] ERROR: train_states.json is CORRUPTED: {e}")
+                            print(f"[API] CRITICAL: Refusing to save - would lose existing data!")
+                            raise IOError("Corrupted file detected - refusing to overwrite")
                     else:
                         all_states = {}
                     
@@ -304,15 +365,25 @@ class train_controller_api:
                         'outputs': outputs
                     }
                     
-                    # Direct write with sorted keys to maintain consistent order (file lock prevents race conditions)
+                    # Atomic write with sorted keys (prevents race conditions and corruption)
                     sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
-                    with open(self.state_file, 'w') as f:
-                        json.dump(sorted_states, f, indent=4)
+                    if not safe_write_json(self.state_file, sorted_states):
+                        print(f"[API] CRITICAL: Failed to save train_{self.train_id} state atomically!")
+                        raise IOError("Atomic write failed")
                 else:
                     # Legacy mode: save with inputs/outputs structure at root
                     if os.path.exists(self.state_file):
-                        with open(self.state_file, 'r') as f:
-                            all_states = json.load(f)
+                        try:
+                            with open(self.state_file, 'r') as f:
+                                content = f.read()
+                                if not content or content.strip() == '':
+                                    print(f"[API] ERROR: train_states.json is EMPTY! Skipping save to prevent data loss.")
+                                    raise IOError("Empty file detected - race condition victim")
+                                all_states = json.loads(content)
+                        except json.JSONDecodeError as e:
+                            print(f"[API] ERROR: train_states.json is CORRUPTED: {e}")
+                            print(f"[API] CRITICAL: Refusing to save - would lose existing data!")
+                            raise IOError("Corrupted file detected - refusing to overwrite")
                     else:
                         all_states = {}
                     
@@ -328,10 +399,11 @@ class train_controller_api:
                         elif key in self.default_outputs:
                             all_states['outputs'][key] = value
                     
-                    # Direct write with sorted keys to maintain consistent order (file lock prevents race conditions)
+                    # Atomic write with sorted keys (prevents race conditions and corruption)
                     sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
-                    with open(self.state_file, 'w') as f:
-                        json.dump(sorted_states, f, indent=4)
+                    if not safe_write_json(self.state_file, sorted_states):
+                        print(f"[API] CRITICAL: Failed to save legacy state atomically!")
+                        raise IOError("Atomic write failed")
 
             except Exception as e:
                 print(f"[ERROR] Failed to save train state: {e}")
