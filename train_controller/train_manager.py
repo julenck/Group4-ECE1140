@@ -291,11 +291,24 @@ class TrainManager:
     
     def _initialize_train_state(self, train_id: int):
         """Initialize state for a train (via REST API or file).
-        
+
         Args:
             train_id: ID of the train to initialize.
         """
         train_key = f"train_{train_id}"
+
+        # Check if train already exists and has kp/ki set - if so, skip initialization
+        # This prevents overwriting user-set PID values
+        try:
+            existing_state = self.get_train_state(train_id)
+            if existing_state and 'outputs' in existing_state:
+                kp_val = existing_state['outputs'].get('kp')
+                ki_val = existing_state['outputs'].get('ki')
+                if kp_val is not None or ki_val is not None:
+                    print(f"[Train Manager] Train {train_id} already exists with kp={kp_val}, ki={ki_val} - skipping initialization")
+                    return
+        except Exception as e:
+            print(f"[Train Manager] Error checking existing train {train_id}: {e}")
 
         # Seed from Train Model/track_model_Train_Model.json (multi-train keyed)
         track = self._safe_read_json(self.track_model_file)
