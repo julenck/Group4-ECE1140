@@ -238,21 +238,32 @@ def sync_train_data_to_states():
                     if existing_outputs:
                         print(f"[Server] DEBUG: {key} has existing outputs: {existing_outputs}")
                     
-                    # Set defaults for any missing output fields (preserves existing values)
+                    # CRITICAL: Set defaults in CONSISTENT ORDER to prevent JSON reordering issues
+                    # Order must match train_controller_api.py and API client
                     if "manual_mode" not in outputs_section:
                         outputs_section["manual_mode"] = False
                     if "driver_velocity" not in outputs_section:
                         outputs_section["driver_velocity"] = 0.0
                     if "service_brake" not in outputs_section:
                         outputs_section["service_brake"] = False
+                    if "emergency_brake" not in outputs_section:
+                        outputs_section["emergency_brake"] = False
+                    if "power_command" not in outputs_section:
+                        outputs_section["power_command"] = 0.0
+                    # CRITICAL: Only set kp/ki to None if they don't exist
+                    # NEVER overwrite existing values (user may have set them via UI)
+                    if "kp" not in outputs_section:
+                        outputs_section["kp"] = None  # Must be set through UI
+                    if "ki" not in outputs_section:
+                        outputs_section["ki"] = None  # Must be set through UI
                     if "right_door" not in outputs_section:
                         outputs_section["right_door"] = False
                     if "left_door" not in outputs_section:
                         outputs_section["left_door"] = False
                     if "interior_lights" not in outputs_section:
-                        outputs_section["interior_lights"] = True  # Default ON (matches train_controller_api.py line 105)
+                        outputs_section["interior_lights"] = True  # Default ON
                     if "exterior_lights" not in outputs_section:
-                        outputs_section["exterior_lights"] = True  # Default ON (matches train_controller_api.py line 106)
+                        outputs_section["exterior_lights"] = True  # Default ON
                     if "set_temperature" not in outputs_section:
                         outputs_section["set_temperature"] = 70.0
                     if "temperature_up" not in outputs_section:
@@ -263,18 +274,8 @@ def sync_train_data_to_states():
                         outputs_section["announcement"] = ""
                     if "announce_pressed" not in outputs_section:
                         outputs_section["announce_pressed"] = False
-                    if "emergency_brake" not in outputs_section:
-                        outputs_section["emergency_brake"] = False
-                    # CRITICAL: Only set kp/ki to None if they don't exist
-                    # NEVER overwrite existing values (user may have set them via UI)
-                    if "kp" not in outputs_section:
-                        outputs_section["kp"] = None  # Must be set through UI (matches train_controller_api.py line 103)
-                    if "ki" not in outputs_section:
-                        outputs_section["ki"] = None  # Must be set through UI (matches train_controller_api.py line 104)
                     if "engineering_panel_locked" not in outputs_section:
                         outputs_section["engineering_panel_locked"] = False
-                    if "power_command" not in outputs_section:
-                        outputs_section["power_command"] = 0.0
             
             # DEBUG: Before writing, check what we're about to save
             for key in train_states.keys():
@@ -475,6 +476,9 @@ def reset_train_state(train_id):
             "driver_velocity": 0.0,
             "service_brake": False,
             "emergency_brake": False,
+            "power_command": 0.0,
+            "kp": None,
+            "ki": None,
             "right_door": False,
             "left_door": False,
             "interior_lights": True,
@@ -484,10 +488,7 @@ def reset_train_state(train_id):
             "temperature_down": False,
             "announcement": "",
             "announce_pressed": False,
-            "kp": None,
-            "ki": None,
-            "engineering_panel_locked": False,
-            "power_command": 0.0
+            "engineering_panel_locked": False
         }
     }
     

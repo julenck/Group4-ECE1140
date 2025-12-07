@@ -58,26 +58,25 @@ class train_controller_api_client:
             # Signal for Train Controller (set by Train Model when beacon read is blocked)
             "beacon_read_blocked": False,
             
+            # CRITICAL: Field order must match server and local API to prevent JSON reordering issues
             # Internal Train Controller State
             "manual_mode": False,
             "driver_velocity": 0.0,
             "service_brake": False,
+            "emergency_brake": False,
+            "power_command": 0.0,
+            "kp": None,  # Must be set through UI (matches server and local API)
+            "ki": None,  # Must be set through UI (matches server and local API)
             "right_door": False,
             "left_door": False,
-            "interior_lights": False,
-            "exterior_lights": False,
+            "interior_lights": True,  # Default ON (matches server)
+            "exterior_lights": True,  # Default ON (matches server)
             "set_temperature": 70.0,
             "temperature_up": False,
             "temperature_down": False,
             "announcement": "",
             "announce_pressed": False,
-            "emergency_brake": False,
-            "kp": None,  # Must be set through UI (matches server and local API)
-            "ki": None,  # Must be set through UI (matches server and local API)
-            "engineering_panel_locked": False,
-            
-            # Outputs TO Train Model
-            "power_command": 0.0
+            "engineering_panel_locked": False
         }
         
         # Test connection

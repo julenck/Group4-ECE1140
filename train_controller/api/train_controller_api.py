@@ -126,25 +126,26 @@ class train_controller_api:
             'beacon_read_blocked': False,
         }
         
+        # CRITICAL: Field order must match server and API client to prevent JSON reordering issues
         self.default_outputs = {
             # Outputs TO Train Model (Train Controller commands)
             'manual_mode': False,
             'driver_velocity': 0.0,
             'service_brake': False,
+            'emergency_brake': False,
+            'power_command': 0.0,
+            'kp': None,  # Must be set through UI
+            'ki': None,  # Must be set through UI
             'right_door': False,
             'left_door': False,
-            'interior_lights': False,
-            'exterior_lights': False,
+            'interior_lights': True,  # Default ON (matches server)
+            'exterior_lights': True,  # Default ON (matches server)
             'set_temperature': 70.0,
             'temperature_up': False,
             'temperature_down': False,
             'announcement': '',
             'announce_pressed': False,
-            'emergency_brake': False,
-            'kp': None,  # Must be set through UI
-            'ki': None,  # Must be set through UI
             'engineering_panel_locked': False,
-            'power_command': 0.0,
         }
         
         # Legacy flat structure for backward compatibility
