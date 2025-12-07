@@ -24,7 +24,7 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 7. ✅ **Multi-Train Dispatch** - Fixed legacy dispatch wiping out all trains when dispatching second train
 8. ✅ **JSON Corruption (Race Condition)** - Fixed thread-unsafe writes to `ctc_data.json` with atomic operations
 9. ✅ **Train Order Randomization** - Fixed inconsistent train order in `train_states.json` by sorting keys on every write
-10. ✅ **kp/ki Random Reset to None** - Fixed sync thread and update endpoint wiping out user-set kp/ki values
+10. ✅ **kp/ki Random Reset to None** - Fixed 3 locations (server sync, server endpoint, **local API save_state**) wiping out user-set kp/ki values
 
 ### New Features
 1. ✅ **Manual Controller Type Selection** - CTC UI dropdown to choose Hardware or Software controller per train
@@ -49,7 +49,7 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 ## Git Commits Summary
 
 ### Branch: `phase3`
-**Total Commits:** 32
+**Total Commits:** 35
 
 | Commit | Description | Impact |
 |--------|-------------|--------|
@@ -86,7 +86,10 @@ All Phase 3 objectives achieved. System is ready for distributed deployment.
 | `06fa177` | Fix: Maintain consistent train order in train_states.json | **Train ordering fix** |
 | `6dc1f0a` | Document train_states.json order fix | Documentation |
 | `fdffacc` | Update Phase 3 summary with train order fix | Documentation |
-| `6c53228` | CRITICAL FIX: Prevent kp/ki values from being reset to None | **kp/ki preservation** |
+| `6c53228` | CRITICAL FIX: Prevent kp/ki values from being reset to None (SERVER) | **kp/ki fix Part 1** |
+| `4cbd19f` | Document kp/ki null reset fix | Documentation |
+| `f3d514f` | CRITICAL FIX (Part 2): Fix kp/ki reset bug in train_controller_api.py (LOCAL API) | **kp/ki fix Part 2 (THE REAL FIX)** |
+| `a42abc5` | Update kp/ki fix documentation with Part 2 | Documentation |
 
 ---
 
