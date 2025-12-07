@@ -2,10 +2,10 @@
     "Trains": {
         "Train 1": {
             "Active": 1,
-            "Suggested Speed": 30.0,
-            "Suggested Authority": 100.0,
-            "Train Position": 25,
-            "Train State": "moving"
+            "Suggested Speed": 7,
+            "Suggested Authority": 500,
+            "Train Position": 65,
+            "Train State": 0
         },
         "Train 2": {
             "Active": 0,
@@ -35,11 +35,5 @@
             "Train Position": 0,
             "Train State": 0
         }
-    },
-    "Block Closure": [],
-    "Switch Suggestion": [],
-    "Block Failure": [],
-    "Gates": [],
-    "Lights": [],
-    "Switch Actual": []
+    }
 }
