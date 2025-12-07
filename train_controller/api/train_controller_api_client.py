@@ -141,10 +141,12 @@ class train_controller_api_client:
             if not_found_attempts > 0:
                 time.sleep(1)  # Wait 1 second between 404 retries
 
-        # Too many 404 attempts - fall back to cache or defaults as last resort
-        print(f"[API Client] Train {self.train_id} not found after {max_not_found_attempts} attempts, using fallback")
+        # All retries failed - fall back to cache or defaults
+        print(f"[API Client] All connection attempts failed, using fallback")
         if self._cached_state is not None:
             return self._cached_state.copy()
+        # Return defaults as last resort (hardware controller expects certain keys)
+        return self.default_state.copy()
     
     def update_state(self, state_dict: dict) -> None:
         """Update train state on server.

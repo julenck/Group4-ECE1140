@@ -224,9 +224,9 @@ class train_controller_api:
 
     def get_state(self) -> dict:
         """Get current train state.
-        
+
         Returns:
-            dict: Current state of the train (merged inputs + outputs). Returns default state if there are any issues.
+            dict: Current state of the train (merged inputs + outputs). NEVER returns defaults during runtime.
         """
         with _file_lock:
             try:
@@ -236,6 +236,8 @@ class train_controller_api:
                         try:
                             with open(self.state_file, 'r') as f:
                                 all_states = json.load(f)
+                                # Track last successful read for kp/ki preservation
+                                self._last_good_state = all_states.copy()
                                 break  # Success!
                         except json.JSONDecodeError as e:
                             if attempt < 2:  # Retry on first 2 attempts
@@ -244,71 +246,99 @@ class train_controller_api:
                                 continue
                             else:  # Final attempt failed
                                 print(f"[WARNING] JSON decode error after 3 attempts (race condition): {e}")
-                                return self.train_states.copy()
+                                # CRITICAL: Return defaults but preserve kp/ki from cache to prevent reset
+                                result = self.train_states.copy()
+                                if hasattr(self, '_last_good_state') and self._last_good_state:
+                                    # Preserve kp/ki from last good read
+                                    if 'kp' in self._last_good_state:
+                                        result['kp'] = self._last_good_state['kp']
+                                    if 'ki' in self._last_good_state:
+                                        result['ki'] = self._last_good_state['ki']
+                                return result
                     else:
                         # This shouldn't happen, but just in case
-                        return self.train_states.copy()
-                    
+                        return {}
+
                     # Successfully loaded all_states, now process it
                     try:
-                            
-                            # If train_id is specified, read from train_X section
-                            if self.train_id is not None:
-                                train_key = f"train_{self.train_id}"
+
+                        # If train_id is specified, read from train_X section
+                        if self.train_id is not None:
+                            train_key = f"train_{self.train_id}"
+                            if train_key in all_states:
+                                section = all_states[train_key]
+                                # Check if it has new inputs/outputs structure
+                                if 'inputs' in section and 'outputs' in section:
+                                    # Merge defaults first, then inputs and outputs
+                                    result = self.train_states.copy()
+                                    result.update(section.get('inputs', {}))
+                                    result.update(section.get('outputs', {}))
+                                    return result
+                                else:
+                                    # Old flat structure - merge with defaults
+                                    result = self.train_states.copy()
+                                    result.update(section)
+                                    return result
+                            else:
+                                # Train doesn't exist - return empty dict instead of defaults
+                                print(f"[API] Train {self.train_id} not found in file")
+                                return {}
+                        else:
+                            # Legacy mode: read from root level, support both old and new structure
+                            # CRITICAL FIX: If per-train structure exists, use train_1 as default for legacy mode
+                            has_per_train_structure = any(key.startswith('train_') for key in all_states.keys())
+                            if has_per_train_structure:
+                                print(f"[API] WARNING: Legacy mode detected per-train structure, using train_1 as default")
+                                train_key = "train_1"
                                 if train_key in all_states:
                                     section = all_states[train_key]
-                                    # Check if it has new inputs/outputs structure
                                     if 'inputs' in section and 'outputs' in section:
-                                        # Merge defaults first, then inputs and outputs
                                         result = self.train_states.copy()
                                         result.update(section.get('inputs', {}))
                                         result.update(section.get('outputs', {}))
                                         return result
-                                    else:
-                                        # Old flat structure - merge with defaults
-                                        result = self.train_states.copy()
-                                        result.update(section)
-                                        return result
-                                else:
-                                    # Return default state if train section doesn't exist
-                                    default = self.train_states.copy()
-                                    default['train_id'] = self.train_id
-                                    return default
-                            else:
-                                # Legacy mode: read from root level, support both old and new structure
-                                # CRITICAL FIX: If per-train structure exists, use train_1 as default for legacy mode
-                                has_per_train_structure = any(key.startswith('train_') for key in all_states.keys())
-                                if has_per_train_structure:
-                                    print(f"[API] WARNING: Legacy mode detected per-train structure, using train_1 as default")
-                                    train_key = "train_1"
-                                    if train_key in all_states:
-                                        section = all_states[train_key]
-                                        if 'inputs' in section and 'outputs' in section:
-                                            result = self.train_states.copy()
-                                            result.update(section.get('inputs', {}))
-                                            result.update(section.get('outputs', {}))
-                                            return result
-                                    # Fallback to defaults if train_1 doesn't exist or is malformed
-                                    return self.train_states.copy()
+                                # Train not found - return empty dict instead of defaults
+                                return {}
 
-                                # Original legacy behavior for truly legacy files
-                                if 'inputs' in all_states and 'outputs' in all_states:
-                                    result = self.train_states.copy()
-                                    result.update(all_states.get('inputs', {}))
-                                    result.update(all_states.get('outputs', {}))
-                                    return result
-                                else:
-                                    result = self.train_states.copy()
-                                    result.update(all_states)
-                                    return result
+                            # Original legacy behavior for truly legacy files
+                            if 'inputs' in all_states and 'outputs' in all_states:
+                                result = self.train_states.copy()
+                                result.update(all_states.get('inputs', {}))
+                                result.update(all_states.get('outputs', {}))
+                                return result
+                            else:
+                                result = self.train_states.copy()
+                                result.update(all_states)
+                                return result
                     except Exception as e:
                         print(f"[WARNING] Error processing state: {e}")
-                        return self.train_states.copy()
+                        # Return defaults but preserve kp/ki from last good read
+                        result = self.train_states.copy()
+                        if hasattr(self, '_last_good_state') and self._last_good_state:
+                            if 'kp' in self._last_good_state:
+                                result['kp'] = self._last_good_state['kp']
+                            if 'ki' in self._last_good_state:
+                                result['ki'] = self._last_good_state['ki']
+                        return result
                 else:
-                    return self.train_states.copy()
+                    # File doesn't exist - return defaults but preserve kp/ki from last good read
+                    result = self.train_states.copy()
+                    if hasattr(self, '_last_good_state') and self._last_good_state:
+                        if 'kp' in self._last_good_state:
+                            result['kp'] = self._last_good_state['kp']
+                        if 'ki' in self._last_good_state:
+                            result['ki'] = self._last_good_state['ki']
+                    return result
             except Exception as e:
                 print(f"Error accessing state file: {e}")
-                return self.train_states.copy()
+                # Return defaults but preserve kp/ki from last good read
+                result = self.train_states.copy()
+                if hasattr(self, '_last_good_state') and self._last_good_state:
+                    if 'kp' in self._last_good_state:
+                        result['kp'] = self._last_good_state['kp']
+                    if 'ki' in self._last_good_state:
+                        result['ki'] = self._last_good_state['ki']
+                return result
 
     def save_state(self, state: dict) -> None:
         """Save train state to file with inputs/outputs structure.
