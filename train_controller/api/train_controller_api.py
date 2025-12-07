@@ -275,6 +275,22 @@ class train_controller_api:
                                     return default
                             else:
                                 # Legacy mode: read from root level, support both old and new structure
+                                # CRITICAL FIX: If per-train structure exists, use train_1 as default for legacy mode
+                                has_per_train_structure = any(key.startswith('train_') for key in all_states.keys())
+                                if has_per_train_structure:
+                                    print(f"[API] WARNING: Legacy mode detected per-train structure, using train_1 as default")
+                                    train_key = "train_1"
+                                    if train_key in all_states:
+                                        section = all_states[train_key]
+                                        if 'inputs' in section and 'outputs' in section:
+                                            result = self.train_states.copy()
+                                            result.update(section.get('inputs', {}))
+                                            result.update(section.get('outputs', {}))
+                                            return result
+                                    # Fallback to defaults if train_1 doesn't exist or is malformed
+                                    return self.train_states.copy()
+
+                                # Original legacy behavior for truly legacy files
                                 if 'inputs' in all_states and 'outputs' in all_states:
                                     result = self.train_states.copy()
                                     result.update(all_states.get('inputs', {}))
@@ -329,7 +345,7 @@ class train_controller_api:
                             raise IOError("Corrupted file detected - refusing to overwrite")
                     else:
                         all_states = {}
-                    
+
                     # Clean up legacy flat fields - only keep train_X entries
                     keys_to_remove = [k for k in all_states.keys() if not k.startswith('train_')]
                     for k in keys_to_remove:
@@ -395,6 +411,8 @@ class train_controller_api:
                         raise IOError("Atomic write failed")
                 else:
                     # Legacy mode: save with inputs/outputs structure at root
+                    # CRITICAL FIX: Don't corrupt per-train structure! If per-train structure exists,
+                    # legacy mode should NOT add flat inputs/outputs at root level.
                     if os.path.exists(self.state_file):
                         try:
                             with open(self.state_file, 'r') as f:
@@ -409,7 +427,18 @@ class train_controller_api:
                             raise IOError("Corrupted file detected - refusing to overwrite")
                     else:
                         all_states = {}
-                    
+
+                    # CRITICAL: Check if per-train structure exists
+                    has_per_train_structure = any(key.startswith('train_') for key in all_states.keys())
+
+                    if has_per_train_structure:
+                        # DON'T add flat inputs/outputs at root - it corrupts per-train data!
+                        # Instead, warn and skip the save to prevent corruption
+                        print(f"[API] WARNING: Legacy mode detected per-train structure in train_states.json!")
+                        print(f"[API] WARNING: Refusing to save to prevent corruption. Use train-specific mode instead.")
+                        print(f"[API] WARNING: Software controller should specify train_id instead of using legacy mode.")
+                        return  # Skip the save entirely to prevent corruption
+
                     if 'inputs' not in all_states:
                         all_states['inputs'] = self.default_inputs.copy()
                     if 'outputs' not in all_states:

@@ -590,7 +590,7 @@ class train_controller_ui(tk.Tk):
         emergency_brake_release_timer: Timer ID for emergency brake auto-release.
     """
     
-    def __init__(self, train_id=None, server_url=None, timeout=5.0):
+    def __init__(self, train_id=1, server_url=None, timeout=5.0):
         """Initialize the driver interface.
         
         Args:
