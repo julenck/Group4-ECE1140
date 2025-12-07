@@ -156,20 +156,18 @@ def sync_train_data_to_states():
                         continue  # Skip this train - don't create it with None kp/ki!
                     
                     # Ensure inputs/outputs structure exists (handle legacy flat format)
-                    # CRITICAL: Don't replace the entire dict - preserve existing outputs (kp, ki, etc.)!
+                    # CRITICAL: Don't replace the entire dict - preserve existing outputs (kp, ki, lights, etc.)!
                     if "inputs" not in train_states[key]:
                         # Only add missing inputs, preserve existing outputs
                         if isinstance(train_states[key], dict):
-                            # Check if we're about to lose kp/ki values
-                            if "outputs" in train_states[key]:
-                                kp_val = train_states[key]["outputs"].get("kp")
-                                ki_val = train_states[key]["outputs"].get("ki")
-                                if kp_val is not None or ki_val is not None:
-                                    print(f"[Server] Warning: {key} missing inputs but has kp={kp_val}, ki={ki_val} - preserving outputs")
+                            # Check if we're about to lose ANY output values
+                            if "outputs" in train_states[key] and train_states[key]["outputs"]:
+                                print(f"[Server] WARNING: {key} missing inputs but has existing outputs - PRESERVING ALL OUTPUTS")
+                                print(f"[Server] Outputs: {list(train_states[key]['outputs'].keys())}")
                             train_states[key]["inputs"] = {}
                         else:
-                            # Completely malformed - must replace
-                            print(f"[Server] Warning: {key} is not a dict, replacing with default structure")
+                            # Completely malformed - must replace (should be rare)
+                            print(f"[Server] ERROR: {key} is not a dict (type={type(train_states[key])}), replacing with default structure")
                             train_states[key] = {"inputs": {}, "outputs": {}}
                     
                     # CLEAN UP: Remove flat fields (legacy format) - only keep inputs/outputs structure
@@ -231,8 +229,14 @@ def sync_train_data_to_states():
                     
                     # Ensure ALL required output fields exist with defaults (matches train_controller_api.py)
                     if "outputs" not in train_states[key]:
+                        print(f"[Server] WARNING: {key} missing outputs section - creating empty dict (will be filled with defaults)")
                         train_states[key]["outputs"] = {}
                     outputs_section = train_states[key]["outputs"]
+                    
+                    # DEBUG: Log what's in outputs before setting defaults
+                    existing_outputs = list(outputs_section.keys())
+                    if existing_outputs:
+                        print(f"[Server] DEBUG: {key} has existing outputs: {existing_outputs}")
                     
                     # Set defaults for any missing output fields (preserves existing values)
                     if "manual_mode" not in outputs_section:
@@ -271,6 +275,16 @@ def sync_train_data_to_states():
                         outputs_section["engineering_panel_locked"] = False
                     if "power_command" not in outputs_section:
                         outputs_section["power_command"] = 0.0
+            
+            # DEBUG: Before writing, check what we're about to save
+            for key in train_states.keys():
+                if key.startswith("train_"):
+                    outputs = train_states[key].get("outputs", {})
+                    kp_val = outputs.get("kp")
+                    ki_val = outputs.get("ki")
+                    lights = outputs.get("interior_lights")
+                    if kp_val is not None or ki_val is not None or lights is not None:
+                        print(f"[Server] DEBUG: About to save {key}: kp={kp_val}, ki={ki_val}, interior_lights={lights}")
             
             # Write updated states back
             write_json_file(TRAIN_STATES_FILE, train_states)

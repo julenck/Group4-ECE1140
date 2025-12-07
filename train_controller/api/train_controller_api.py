@@ -279,6 +279,13 @@ class train_controller_api:
                         outputs = self.default_outputs.copy()
                     
                     # Update ONLY the fields present in complete_state (preserves other fields)
+                    # DEBUG: Log what we're about to update
+                    output_updates = {k: v for k, v in complete_state.items() if k in self.default_outputs}
+                    if output_updates:
+                        print(f"[API] DEBUG: Updating outputs for train_{self.train_id}: {list(output_updates.keys())}")
+                        if 'kp' in output_updates or 'ki' in output_updates:
+                            print(f"[API] DEBUG: kp={output_updates.get('kp')}, ki={output_updates.get('ki')}")
+                    
                     for key, value in complete_state.items():
                         # Skip nested train_X sections and train_id
                         if key.startswith('train_') and isinstance(value, dict):
