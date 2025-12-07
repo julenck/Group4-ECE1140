@@ -8,6 +8,7 @@ Author: James Struyk, Julen Coca-Knorr
 """
 import requests
 import json
+import time
 from typing import Dict, Optional
 
 class train_controller_api_client:
@@ -99,35 +100,49 @@ class train_controller_api_client:
     
     def get_state(self) -> dict:
         """Get current train state from server.
-        
+
         Returns:
             dict: Current train state. Returns cached/default state if server unreachable.
         """
-        for attempt in range(self.max_retries):
-            try:
-                response = requests.get(self.state_endpoint, timeout=self.timeout)
-                if response.status_code == 200:
-                    state = response.json()
-                    self._cached_state = state  # Update cache
-                    return state
-                elif response.status_code == 404:
-                    # Train doesn't exist yet, return defaults
-                    if attempt == 0:  # Only print once
-                        print(f"[API Client] Train {self.train_id} not found on server, using defaults")
-                    return self.default_state.copy()
-                else:
+        # Special handling for 404: keep trying indefinitely until train exists
+        # This prevents falling back to defaults that reset kp/ki when server lags
+        not_found_attempts = 0
+        max_not_found_attempts = 30  # Try for up to ~30 seconds (with 1s timeout)
+
+        while not_found_attempts < max_not_found_attempts:
+            for attempt in range(self.max_retries):
+                try:
+                    response = requests.get(self.state_endpoint, timeout=self.timeout)
+                    if response.status_code == 200:
+                        state = response.json()
+                        self._cached_state = state  # Update cache
+                        return state
+                    elif response.status_code == 404:
+                        # Train doesn't exist yet - keep trying instead of using defaults
+                        not_found_attempts += 1
+                        if not_found_attempts == 1:  # Only print once
+                            print(f"[API Client] Train {self.train_id} not found on server, waiting for dispatch...")
+                        elif not_found_attempts % 10 == 0:  # Print every 10 attempts
+                            print(f"[API Client] Still waiting for Train {self.train_id} to be dispatched...")
+                        break  # Break inner loop to continue outer loop
+                    else:
+                        if attempt == self.max_retries - 1:
+                            print(f"[API Client] Server error {response.status_code}, using cache")
+
+                except requests.exceptions.Timeout:
                     if attempt == self.max_retries - 1:
-                        print(f"[API Client] Server error {response.status_code}, using cache")
-                    
-            except requests.exceptions.Timeout:
-                if attempt == self.max_retries - 1:
-                    print(f"[API Client] Request timed out after {self.timeout}s (attempt {attempt + 1}/{self.max_retries})")
-                    
-            except requests.exceptions.RequestException as e:
-                if attempt == self.max_retries - 1:
-                    print(f"[API Client] Request failed: {e}")
-        
-        # All retries failed - use cached state or default
+                        print(f"[API Client] Request timed out after {self.timeout}s (attempt {attempt + 1}/{self.max_retries})")
+
+                except requests.exceptions.RequestException as e:
+                    if attempt == self.max_retries - 1:
+                        print(f"[API Client] Request failed: {e}")
+
+            # Wait before retrying for 404
+            if not_found_attempts > 0:
+                time.sleep(1)  # Wait 1 second between 404 retries
+
+        # Too many 404 attempts - fall back to cache or defaults as last resort
+        print(f"[API Client] Train {self.train_id} not found after {max_not_found_attempts} attempts, using fallback")
         if self._cached_state is not None:
             return self._cached_state.copy()
         return self.default_state.copy()
