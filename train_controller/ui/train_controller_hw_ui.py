@@ -53,7 +53,8 @@ class train_controller:
         self.lcd_rw = 0x02
         self.lcd_enable = 0x04
         self.validators = [vital_control_first_check(), vital_control_second_check()] # instantiate validators
-        self._accumulated_error = 0  # PI controller accumulated error
+        self._accumulated_error = 0.0  # PI controller accumulated error
+        self._last_update_time = time.time()  # Track last update time for PI control
         self._last_beacon_for_announcement = ""  # Track last beacon for auto-announcements
 
     def init_hardware(self):
@@ -293,26 +294,41 @@ class train_controller:
             print(f"apply_automatic_controls error: {e}")
 
     def calculate_power_command(self, state: dict) -> float:
-        """Calculate power command using PI controller (same logic as SW controller)."""
-        driver_velocity = state.get('driver_velocity', 0.0)
-        current_velocity = state.get('train_velocity', 0.0)
-        # Handle None values for kp/ki (server sets them to None by default)
-        kp = state.get('kp') or 5000.0
-        ki = state.get('ki') or 500.0
-        
-        error = driver_velocity - current_velocity
-        self._accumulated_error += error * 0.5  # dt = 0.5 seconds
-        
-        # Anti-windup: limit accumulated error
-        max_accumulated = 100.0
-        self._accumulated_error = max(-max_accumulated, min(max_accumulated, self._accumulated_error))
-        
-        power = kp * error + ki * self._accumulated_error
-        
-        # Clamp power to valid range
-        max_power = 120000.0  # 120 kW max
-        power = max(0, min(max_power, power))
-        
+        """Calculate power command using vital_train_controls.
+
+        Args:
+            state: Current train state dictionary.
+
+        Returns:
+            Power command in Watts (0-120000). Returns 0 if kp/ki not set or velocity exceeds speed limit.
+        """
+        # If kp or ki are not set, train cannot move
+        if 'kp' not in state or 'ki' not in state or state['kp'] is None or state['ki'] is None:
+            return 0.0
+
+        # Create a vital_train_controls instance with current state
+        controls = vital_train_controls(
+            kp=state['kp'],
+            ki=state['ki'],
+            train_velocity=state['train_velocity'],
+            driver_velocity=state['driver_velocity'],
+            emergency_brake=state['emergency_brake'],
+            service_brake=state['service_brake'],
+            power_command=state['power_command'],
+            commanded_authority=state['commanded_authority'],
+            speed_limit=state['speed_limit']
+        )
+
+        # Calculate power using vital_train_controls method
+        power, new_error, new_time = controls.calculate_power_command(
+            self._accumulated_error,
+            self._last_update_time
+        )
+
+        # Update internal tracking variables
+        self._accumulated_error = new_error
+        self._last_update_time = new_time
+
         return power
 
     def detect_and_respond_to_failures(self, state: dict):
@@ -617,22 +633,19 @@ class train_controller_ui(tk.Tk):
                     print(f"ADC read/update error: {e}")
             
             # Recalculate power command based on current state
-            emergency_brake = state.get('emergency_brake', False)
-            service_brake = state.get('service_brake', False)
-            power_command = state.get('power_command', 0.0)
-            if (not emergency_brake and 
-                not service_brake and 
+            if (not state['emergency_brake'] and
+                not state['service_brake'] and
                 not critical_failure):
                 power = self.controller.calculate_power_command(state)
-                if power != power_command:
-                    self.controller.vital_control_check_and_update({'power_command': power})
+                print(f"[DEBUG POWER] train_vel={state['train_velocity']:.2f}, driver_vel={state['driver_velocity']:.2f}, calculated_power={power:.2f}")
+                # Always update power command even if same to ensure it's written
+                self.controller.vital_control_check_and_update({'power_command': power})
             else:
                 # Reset accumulated error when brakes are active
                 self.controller._accumulated_error = 0
-                # No power when brakes are active or failures present
+                # Set power to 0 when brakes are active or failures present
                 self.controller.vital_control_check_and_update({
-                    'power_command': 0,
-                    'driver_velocity': 0
+                    'power_command': 0
                 })
             # try:
             # # Recalculate power command based on current state
@@ -820,6 +833,63 @@ class vital_train_controls:
         self.power_command = power_command
         self.commanded_authority = commanded_authority
         self.speed_limit = speed_limit
+
+    def calculate_power_command(self, accumulated_error: float, last_update_time: float) -> tuple:
+        """Calculate power command based on speed difference and Kp/Ki values.
+
+        Implements PI control with:
+        - Real-time accumulated error tracking
+        - Anti-windup protection
+        - Power limiting
+        - Zero power when error is zero or negative (train going too fast)
+
+        Args:
+            accumulated_error: Current accumulated error for integral term.
+            last_update_time: Time of last calculation (seconds).
+
+        Returns:
+            Tuple of (power_command, new_accumulated_error, new_update_time).
+        """
+        # Calculate speed error
+        speed_error = self.driver_velocity - self.train_velocity
+
+        # If speed error is zero or negative (train at or above target), return zero power
+        if speed_error <= 0.01:  # Exact match or train too fast
+            return (0.0, 0.0, time.time())  # Reset accumulated error and return 0 power
+
+        # Get current time
+        current_time = time.time()
+
+        # Calculate real time step
+        dt = current_time - last_update_time
+        dt = max(0.001, min(dt, 1.0))  # Limit dt between 1ms and 1s for stability
+
+        # Update accumulated error with anti-windup and scaling
+        new_accumulated_error = accumulated_error + speed_error * dt
+
+        # Anti-windup limits (scaled by ki to prevent excessive integral term)
+        max_integral = 120000 / self.ki if self.ki != 0 else 0
+        new_accumulated_error = max(-max_integral, min(max_integral, new_accumulated_error))
+
+        # Calculate PI control output
+        proportional = self.kp * speed_error
+        integral = self.ki * new_accumulated_error
+
+        # Calculate total power command
+        power = proportional + integral
+
+        # Limit power
+        power = max(0, min(power, 120000))  # 120kW max power
+
+        # Anti-windup: adjust accumulated error when power saturates
+        if power == 120000 and integral > 0:
+            # Back-calculate integral term to match power limit
+            new_accumulated_error = (120000 - proportional) / self.ki if self.ki != 0 else 0
+        elif power == 0 and integral < 0:
+            # Reset integral term when power is zero
+            new_accumulated_error = -proportional / self.ki if self.ki != 0 else 0
+
+        return (power, new_accumulated_error, current_time)
 
 class vital_control_first_check:
     def validate(self, v: vital_train_controls) -> bool:
