@@ -21,12 +21,33 @@ def safe_write_json(file_path, data):
             json.dump(data, f, indent=4)
         
         # Atomic rename (replaces old file)
-        os.replace(temp_path, file_path)
+        # On Windows, retry if file is locked by another process
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                os.replace(temp_path, file_path)
+                return True
+            except PermissionError as e:
+                if attempt < max_retries - 1:
+                    time.sleep(0.01)  # Wait 10ms and retry
+                    continue
+                else:
+                    # Last attempt - try remove then rename (Windows workaround)
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                        os.rename(temp_path, file_path)
+                        return True
+                    except:
+                        raise e  # Re-raise original error
         return True
     except Exception as e:
         print(f"[safe_write_json] ERROR writing {file_path}: {e}")
         if 'temp_path' in locals() and os.path.exists(temp_path):
-            os.remove(temp_path)
+            try:
+                os.remove(temp_path)
+            except:
+                pass
         return False
 
 def track_update_handler(new_data, train, data_file_ctc_data):

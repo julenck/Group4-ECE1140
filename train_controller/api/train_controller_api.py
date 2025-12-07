@@ -47,11 +47,34 @@ def safe_write_json(filepath: str, data: dict) -> bool:
             tmp_path = tmp_file.name
         
         # Atomic rename (overwrites target file)
-        # On Windows, need to remove target first
-        if os.path.exists(filepath):
-            os.replace(tmp_path, filepath)
-        else:
-            os.rename(tmp_path, filepath)
+        # On Windows, os.replace() can fail with "Access Denied" if file is open
+        # Use retry logic with brief delay
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if os.path.exists(filepath):
+                    # On Windows, try to remove first if replace fails
+                    try:
+                        os.replace(tmp_path, filepath)
+                        break  # Success!
+                    except PermissionError:
+                        if attempt < max_retries - 1:
+                            import time
+                            time.sleep(0.01)  # Wait 10ms and retry
+                            continue
+                        else:
+                            # Last attempt - try remove then rename
+                            os.remove(filepath)
+                            os.rename(tmp_path, filepath)
+                            break
+                else:
+                    os.rename(tmp_path, filepath)
+                    break
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise  # Re-raise on last attempt
+                import time
+                time.sleep(0.01)
         
         return True
         
