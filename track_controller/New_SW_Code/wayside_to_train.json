@@ -1,12 +1,12 @@
 {
     "Train 1": {
-        "Commanded Speed": 15.65858,
-        "Commanded Authority": 160.41723933713482,
+        "Commanded Speed": 0,
+        "Commanded Authority": 0,
         "Beacon": {
-            "Current Station": "Glenbury",
-            "Next Station": "Dormont"
+            "Current Station": "",
+            "Next Station": ""
         },
-        "Train Speed": 8.818303162358879
+        "Train Speed": 0
     },
     "Train 2": {
         "Commanded Speed": 0,

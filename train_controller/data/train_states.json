@@ -1,11 +1,11 @@
 {
     "train_1": {
         "inputs": {
-            "commanded_speed": 15.65858,
-            "commanded_authority": 160.41723933713482,
+            "commanded_speed": 0,
+            "commanded_authority": 0,
             "speed_limit": 0.0,
-            "train_velocity": 8.818288545163785,
-            "next_stop": "Dormont",
+            "train_velocity": 0,
+            "next_stop": "",
             "station_side": "",
             "train_temperature": 70.0,
             "train_model_engine_failure": false,
@@ -14,12 +14,12 @@
             "train_controller_engine_failure": false,
             "train_controller_signal_failure": false,
             "train_controller_brake_failure": false,
-            "current_station": "Glenbury",
+            "current_station": "",
             "beacon_read_blocked": false
         },
         "outputs": {
             "manual_mode": false,
-            "driver_velocity": 15.65858,
+            "driver_velocity": 0,
             "service_brake": false,
             "right_door": false,
             "left_door": false,
@@ -28,7 +28,7 @@
             "set_temperature": 70.0,
             "temperature_up": false,
             "temperature_down": false,
-            "announcement": "Next stop: Dormont",
+            "announcement": "",
             "announce_pressed": false,
             "emergency_brake": false,
             "kp": null,
@@ -42,7 +42,7 @@
             "commanded_speed": 0.0,
             "commanded_authority": 0.0,
             "speed_limit": 0.0,
-            "train_velocity": 21.891867349090656,
+            "train_velocity": 0,
             "next_stop": "",
             "station_side": "",
             "train_temperature": 70.0,

@@ -15,11 +15,11 @@
     "outputs": {},
     "train_1": {
         "inputs": {
-            "commanded speed": 15.65858,
-            "commanded authority": 160.41723933713482,
+            "commanded speed": 0,
+            "commanded authority": 0,
             "speed limit": 0.0,
-            "current station": "Glenbury",
-            "next station": "Dormont",
+            "current station": "",
+            "next station": "",
             "side_door": "",
             "passengers_boarding": 0,
             "train_model_engine_failure": false,
@@ -36,17 +36,17 @@
             "set_temperature": 70.0
         },
         "outputs": {
-            "velocity_mph": 8.818288545163785,
+            "velocity_mph": 0,
             "acceleration_ftps2": 0.0,
-            "position_yds": 1299.4114512227818,
-            "authority_yds": 160.41723933713482,
+            "position_yds": 0,
+            "authority_yds": 0,
             "temperature_F": 70.0,
-            "station_name": "Glenbury",
-            "next_station": "Dormont",
+            "station_name": "",
+            "next_station": "",
             "left_door_open": false,
             "right_door_open": false,
             "door_side": "",
-            "commanded_speed": 15.65858,
+            "commanded_speed": 0,
             "speed_limit": 0.0
         },
         "specs": {
@@ -85,17 +85,17 @@
             "set_temperature": 70.0
         },
         "outputs": {
-            "velocity_mph": 21.891867349090656,
+            "velocity_mph": 0,
             "acceleration_ftps2": 0.0,
-            "position_yds": 1616.03312195187,
-            "authority_yds": 138.83618375567448,
+            "position_yds": 0,
+            "authority_yds": 0,
             "temperature_F": 70.0,
-            "station_name": "Glenbury",
-            "next_station": "Dormont",
+            "station_name": "",
+            "next_station": "",
             "left_door_open": false,
             "right_door_open": false,
             "door_side": "",
-            "commanded_speed": 43.495956136000004,
+            "commanded_speed": 0,
             "speed_limit": 0.0
         },
         "specs": {
