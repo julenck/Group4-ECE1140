@@ -514,12 +514,19 @@ class train_controller_ui(tk.Tk):
         engineering_frame.pack(side="right", fill="y", ipadx=6)
 
         ttk.Label(engineering_frame, text="Kp:").grid(row=0, column=0, sticky="w", pady=(2,6))
-        self.kp_var = tk.StringVar(value="0.0")
+        # Initialize with current kp value from API state (not hardcoded 0.0)
+        current_state = self.api.get_state()
+        current_kp = current_state.get('kp')
+        kp_display = str(current_kp) if current_kp is not None else "0.0"
+        self.kp_var = tk.StringVar(value=kp_display)
         self.kp_entry = ttk.Entry(engineering_frame, textvariable=self.kp_var, width=20)
         self.kp_entry.grid(row=0, column=1, pady=(2,6))
 
         ttk.Label(engineering_frame, text="Ki:").grid(row=1, column=0, sticky="w", pady=(2,6))
-        self.ki_var = tk.StringVar(value="0.0")
+        # Initialize with current ki value from API state (not hardcoded 0.0)
+        current_ki = current_state.get('ki')
+        ki_display = str(current_ki) if current_ki is not None else "0.0"
+        self.ki_var = tk.StringVar(value=ki_display)
         self.ki_entry = ttk.Entry(engineering_frame, textvariable=self.ki_var, width=20)
         self.ki_entry.grid(row=1, column=1, pady=(2,6))
 
