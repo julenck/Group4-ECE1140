@@ -191,11 +191,21 @@ def sync_train_data_to_states():
                         }
                     
                     # Ensure inputs/outputs structure exists (handle legacy flat format)
+                    # CRITICAL: Don't replace the entire dict - preserve existing outputs (kp, ki, etc.)!
                     if "inputs" not in train_states[key]:
-                        train_states[key] = {
-                            "inputs": {},
-                            "outputs": {}
-                        }
+                        # Only add missing inputs, preserve existing outputs
+                        if isinstance(train_states[key], dict):
+                            # Check if we're about to lose kp/ki values
+                            if "outputs" in train_states[key]:
+                                kp_val = train_states[key]["outputs"].get("kp")
+                                ki_val = train_states[key]["outputs"].get("ki")
+                                if kp_val is not None or ki_val is not None:
+                                    print(f"[Server] Warning: {key} missing inputs but has kp={kp_val}, ki={ki_val} - preserving outputs")
+                            train_states[key]["inputs"] = {}
+                        else:
+                            # Completely malformed - must replace
+                            print(f"[Server] Warning: {key} is not a dict, replacing with default structure")
+                            train_states[key] = {"inputs": {}, "outputs": {}}
                     
                     # CLEAN UP: Remove flat fields (legacy format) - only keep inputs/outputs structure
                     keys_to_remove = [k for k in train_states[key].keys() if k not in ['inputs', 'outputs']]
@@ -286,6 +296,8 @@ def sync_train_data_to_states():
                         outputs_section["announce_pressed"] = False
                     if "emergency_brake" not in outputs_section:
                         outputs_section["emergency_brake"] = False
+                    # CRITICAL: Only set kp/ki to None if they don't exist
+                    # NEVER overwrite existing values (user may have set them via UI)
                     if "kp" not in outputs_section:
                         outputs_section["kp"] = None  # Must be set through UI (matches train_controller_api.py line 103)
                     if "ki" not in outputs_section:
@@ -402,13 +414,31 @@ def update_train_state(train_id):
         }
     
     # Ensure inputs/outputs structure exists
+    # CRITICAL: Don't replace the entire dict - preserve existing outputs (kp, ki, etc.)!
     if "inputs" not in data[train_key]:
-        data[train_key] = {"inputs": {}, "outputs": {}}
+        if isinstance(data[train_key], dict):
+            # Only add missing inputs, preserve existing outputs
+            if "outputs" in data[train_key]:
+                kp_val = data[train_key]["outputs"].get("kp")
+                ki_val = data[train_key]["outputs"].get("ki")
+                if kp_val is not None or ki_val is not None:
+                    print(f"[Server] Warning: train_{train_id} missing inputs but has kp={kp_val}, ki={ki_val} - preserving outputs")
+            data[train_key]["inputs"] = {}
+        else:
+            # Completely malformed - must replace
+            print(f"[Server] Warning: train_{train_id} is not a dict, replacing with default structure")
+            data[train_key] = {"inputs": {}, "outputs": {}}
     
     # CLEAN UP: Remove flat fields (legacy format) - only keep inputs/outputs structure
     keys_to_remove = [k for k in data[train_key].keys() if k not in ['inputs', 'outputs']]
     for k in keys_to_remove:
         del data[train_key][k]
+    
+    # Ensure outputs section exists before writing to it
+    if "inputs" not in data[train_key]:
+        data[train_key]["inputs"] = {}
+    if "outputs" not in data[train_key]:
+        data[train_key]["outputs"] = {}
     
     # Update fields in appropriate sections
     for key, value in updates.items():
