@@ -163,8 +163,8 @@ def process_states_green_xlup(occupied):
     
     #switch 2 and 3
     #for now always these position
-    switches[2] = 0
-    switches[3] = 1
+    switches[2] = 1
+    switches[3] = 0
     
 
 

@@ -36,6 +36,7 @@ class sw_wayside_controller_ui:
 
     # Attributes
         self.toggle_maintenance_mode: tk.BooleanVar = tk.BooleanVar(value=False)
+        self.maintenance_enabled: bool = False  # Manual tracking
         self.selected_block: int = -1
         self.selected_block_data: dict = {}
         self.maintenance_frame: ttk.Frame = None
@@ -53,7 +54,7 @@ class sw_wayside_controller_ui:
 
         #epty options for now
         self.switch_options: list = []
-        self.state_options: list = []
+        self.state_options: list = ["Straight", "Diverge"]
         self.selected_switch: tk.StringVar = tk.StringVar()
 
 
@@ -97,6 +98,7 @@ class sw_wayside_controller_ui:
         self.train_data_labels: dict = {}
 
         self.build_maintenance_frame()
+        self.update_switch_options()  # Initialize switch options based on start PLC
         self.build_input_frame()
         self.build_all_blocks_frame()
         self.build_map_frame()
@@ -164,6 +166,7 @@ class sw_wayside_controller_ui:
     def update_selected_file(self, filename: str):
         self.selected_file_str.set(filename)
         self.selected_file_label.config(text=f"currently selected file: {os.path.basename(self.selected_file_str.get())}")
+        self.update_switch_options()  # Update available switches
         self.build_all_blocks_frame()
 
     def select_block(self, block_id: int):
@@ -191,7 +194,6 @@ class sw_wayside_controller_ui:
             self.maintenance_frame,
             text="Toggle Maintenance",
             style="Maintenance.TCheckbutton",
-            variable=self.toggle_maintenance_mode,
             command=self.toggle_maintenance,
         )
         toggle_maintenance.pack(pady=10)
@@ -206,19 +208,30 @@ class sw_wayside_controller_ui:
             state="disabled",
         )
         self.switch_menu.pack(pady=5)
+        self.switch_menu.bind("<<ComboboxSelected>>", lambda e: self.root.after(50, self.on_switch_selected))
         #show current state
-        current_state_label = ttk.Label(self.maintenance_frame, text="Current Switch State: N/A", style="display.TLabel")
-        current_state_label.pack(pady=(5,50))
+        self.current_switch_state_label = ttk.Label(self.maintenance_frame, text="Current Switch State: N/A", style="display.TLabel")
+        self.current_switch_state_label.pack(pady=(5,10))
 
         #switch state selection
         state_label = ttk.Label(self.maintenance_frame, text="Set Switch State:", style="Maintenance.TLabel")
         state_label.pack(pady=5)
         self.state_menu = ttk.Combobox(
             self.maintenance_frame,
-            values=self.state_options,
+            values=[],  # Will be populated when switch is selected
             state="disabled",
         )
-        self.state_menu.pack(pady=(5,80))
+        self.state_menu.pack(pady=5)
+        
+        # Apply button for manual switch control
+        self.apply_switch_button = ttk.Button(
+            self.maintenance_frame,
+            text="Apply Switch Position",
+            command=self.apply_manual_switch,
+            state="disabled",
+            style="Maintenance.TButton"
+        )
+        self.apply_switch_button.pack(pady=(5,40))
 
         #upload plc file
 
@@ -238,6 +251,305 @@ class sw_wayside_controller_ui:
 
         self.selected_file_label = ttk.Label(self.maintenance_frame, text=f"currently selected file: {self.selected_file_str.get()}", style="display.TLabel", wraplength=200)
         self.selected_file_label.pack(pady=5)
+
+        # MURPHY Section - Block Failure Testing
+        ttk.Separator(self.maintenance_frame, orient='horizontal').pack(fill='x', pady=10)
+        
+        murphy_title = ttk.Label(self.maintenance_frame, text="MURPHY", style="Maintenance.TLabel")
+        murphy_title.pack(pady=5)
+        
+        # Block number entry
+        block_entry_label = ttk.Label(self.maintenance_frame, text="Enter Block:", style="display.TLabel", font=("Arial", 9))
+        block_entry_label.pack(pady=2)
+        
+        self.murphy_block_var = tk.StringVar()
+        self.murphy_block_entry = ttk.Entry(self.maintenance_frame, textvariable=self.murphy_block_var, width=8)
+        self.murphy_block_entry.pack(pady=2)
+        self.murphy_block_entry.bind('<Return>', lambda e: self.load_murphy_block())
+        
+        load_block_btn = ttk.Button(self.maintenance_frame, text="Load", command=self.load_murphy_block, style="Maintenance.TButton")
+        load_block_btn.pack(pady=2)
+        
+        # Failure state display frame
+        self.murphy_display_frame = ttk.Frame(self.maintenance_frame, style="Maintenance.TFrame")
+        self.murphy_display_frame.pack(pady=5, fill='x', padx=5)
+        
+        self.murphy_labels = {}  # Store label references
+        self.murphy_buttons = {}  # Store button references
+        self.current_murphy_block = None  # Track which block is loaded
+
+    def load_murphy_block(self):
+        """Load failure states for the specified block"""
+        print(f"DEBUG: load_murphy_block called")
+        # Get value directly from entry widget
+        block_str = self.murphy_block_entry.get()
+        print(f"DEBUG: block_str from entry = '{block_str}'")
+        try:
+            block_num = int(block_str)
+            print(f"DEBUG: Parsed block_num = {block_num}")
+        except ValueError as e:
+            print(f"DEBUG: ValueError parsing block number: {e}")
+            return  # Invalid input, do nothing
+        
+        # Check if block is in visible blocks for current controller
+        print(f"DEBUG: Current PLC file = '{self.selected_file_str.get()}'")
+        if self.selected_file_str.get() == "Green_Line_PLC_XandLup.py":
+            # Blocks 1-73 and 144-151
+            visible_blocks = list(range(1, 74)) + list(range(144, 152)) + [0]
+            print(f"DEBUG: Using XandLup visible blocks")
+        elif self.selected_file_str.get() == "Green_Line_PLC_XandLdown.py":
+            # Blocks 70-146
+            visible_blocks = list(range(70, 147))
+            print(f"DEBUG: Using XandLdown visible blocks")
+        else:
+            print(f"DEBUG: No valid PLC loaded, returning")
+            return  # No PLC loaded
+        
+        print(f"DEBUG: Checking if {block_num} in visible_blocks")
+        if block_num not in visible_blocks:
+            print(f"DEBUG: Block {block_num} not in visible range, doing nothing")
+            return  # Block not in visible range, do nothing
+        
+        print(f"DEBUG: Block {block_num} is valid, setting current_murphy_block")
+        self.current_murphy_block = block_num
+        print(f"DEBUG: Calling build_murphy_display()")
+        self.build_murphy_display()
+    
+    def build_murphy_display(self):
+        """Build the failure state display for the current block"""
+        print(f"DEBUG: build_murphy_display called")
+        # Clear existing widgets
+        for widget in self.murphy_display_frame.winfo_children():
+            widget.destroy()
+        
+        if self.current_murphy_block is None:
+            print("DEBUG: current_murphy_block is None, returning")
+            return
+        
+        block_num = self.current_murphy_block
+        print(f"DEBUG: Building display for block {block_num}")
+        
+        # Display block info
+        block_label = ttk.Label(self.murphy_display_frame, 
+                                text=f"Block {block_num}:", 
+                                font=("Arial", 9, "bold"),
+                                background="lightgray",
+                                anchor="center")
+        block_label.grid(row=0, column=0, columnspan=3, pady=3, sticky="ew")
+        
+        # Configure column weights for centering
+        self.murphy_display_frame.columnconfigure(0, weight=1)
+        self.murphy_display_frame.columnconfigure(1, weight=1)
+        self.murphy_display_frame.columnconfigure(2, weight=1)
+        
+        # Get current failure states
+        failure_types = ["Broken Track", "Power Failure", "Circuit Failure"]
+        
+        for i, failure_type in enumerate(failure_types):
+            # Label for failure type
+            type_label = ttk.Label(self.murphy_display_frame, 
+                                   text=failure_type, 
+                                   font=("Arial", 8),
+                                   background="lightgray",
+                                   anchor="center")
+            type_label.grid(row=1, column=i, padx=3, pady=2, sticky="ew")
+            
+            # Current state label
+            fault_idx = block_num * 3 + i
+            current_state = self.controller.input_faults[fault_idx]
+            state_text = "ON" if current_state == 1 else "OFF"
+            state_color = "red" if current_state == 1 else "green"
+            
+            print(f"DEBUG: Failure {i} ({failure_type}): fault_idx={fault_idx}, state={current_state}")
+            
+            state_label = ttk.Label(self.murphy_display_frame, 
+                                    text=state_text, 
+                                    font=("Arial", 8, "bold"),
+                                    foreground=state_color,
+                                    background="lightgray",
+                                    anchor="center")
+            state_label.grid(row=2, column=i, padx=3, pady=2, sticky="ew")
+            self.murphy_labels[i] = state_label
+            
+            # Toggle button
+            toggle_btn = ttk.Button(self.murphy_display_frame, 
+                                    text="Toggle", 
+                                    command=lambda idx=i: self.toggle_murphy_failure(idx),
+                                    style="Maintenance.TButton")
+            toggle_btn.grid(row=3, column=i, padx=3, pady=2, sticky="ew")
+            self.murphy_buttons[i] = toggle_btn
+        
+        print(f"DEBUG: Display built successfully")
+    
+    def toggle_murphy_failure(self, failure_idx):
+        """Toggle a specific failure type for the current block"""
+        print(f"DEBUG: toggle_murphy_failure called with failure_idx={failure_idx}")
+        if self.current_murphy_block is None:
+            print("DEBUG: current_murphy_block is None, returning")
+            return
+        
+        fault_idx = self.current_murphy_block * 3 + failure_idx
+        print(f"DEBUG: Toggling fault_idx={fault_idx} for block {self.current_murphy_block}")
+        
+        # Toggle the failure state
+        current_state = self.controller.input_faults[fault_idx]
+        new_state = 0 if current_state == 1 else 1
+        self.controller.input_faults[fault_idx] = new_state
+        
+        print(f"DEBUG: Changed state from {current_state} to {new_state}")
+        
+        # Update the display
+        state_text = "ON" if new_state == 1 else "OFF"
+        state_color = "red" if new_state == 1 else "green"
+        self.murphy_labels[failure_idx].config(text=state_text, foreground=state_color)
+        print(f"DEBUG: Updated label to {state_text} with color {state_color}")
+
+    def update_switch_options(self):
+        state_text = "ACTIVE" if new_state == 1 else "OFF"
+        state_color = "red" if new_state == 1 else "green"
+        self.murphy_labels[failure_idx].config(text=state_text, foreground=state_color)
+
+    def update_switch_options(self):
+        """Update available switches based on loaded PLC file"""
+        if self.selected_file_str.get() == "Green_Line_PLC_XandLup.py":
+            # Switches 0-3 correspond to blocks 13, 28, 57, 63
+            self.switch_options = ["Switch 1 (Block 13)", "Switch 2 (Block 28)", 
+                                   "Switch 3 (Block 57)", "Switch 4 (Block 63)"]
+        elif self.selected_file_str.get() == "Green_Line_PLC_XandLdown.py":
+            # Switches 4-5 correspond to blocks 77, 85
+            self.switch_options = ["Switch 5 (Block 77)", "Switch 6 (Block 85)"]
+        else:
+            self.switch_options = []
+        
+        self.switch_menu.config(values=self.switch_options)
+        self.selected_switch.set("")  # Clear selection
+        if self.current_switch_state_label:
+            self.current_switch_state_label.config(text="Current Switch State: N/A")
+
+    def on_switch_selected(self, event=None):
+        """Update current state display when a switch is selected"""
+        # Get value directly from the combobox widget instead of StringVar
+        selection = self.switch_menu.get()
+        print(f"DEBUG: on_switch_selected called, selection = '{selection}'")
+        if not selection or selection == "":
+            print("DEBUG: No selection, returning")
+            return
+        
+        # Parse switch index from selection
+        switch_idx = self.get_switch_index_from_selection(selection)
+        print(f"DEBUG: Switch index = {switch_idx}")
+        if switch_idx is not None:
+            current_state = self.controller.switch_states[switch_idx]
+            print(f"DEBUG: Current state = {current_state}")
+            
+            # Get the specific block connections for this switch
+            state_options = self.get_switch_state_options(switch_idx)
+            print(f"DEBUG: State options = {state_options}")
+            print(f"DEBUG: Setting state_menu values to {state_options}")
+            self.state_menu['values'] = state_options
+            print(f"DEBUG: state_menu values set, checking: {self.state_menu['values']}")
+            
+            # Show current state
+            state_str = state_options[current_state] if current_state < len(state_options) else "Unknown"
+            self.current_switch_state_label.config(text=f"Current Switch State: {state_str}")
+            print(f"DEBUG: Updated label to: {state_str}")
+        else:
+            print("DEBUG: switch_idx is None")
+
+    def get_switch_state_options(self, switch_idx):
+        """Get the specific block connection options for a switch"""
+        # Define the connections for each switch
+        # Format: [state_0_connection (lower block), state_1_connection (higher/diverge block)]
+        # State 0 = connected to lower numbered block
+        # State 1 = connected to higher numbered or diverging block
+        switch_connections = {
+            0: ["13-1", "13-12"],       # Switch 1 (Block 13): 0=to block 1, 1=to block 12
+            1: ["28-27", "28-29"],      # Switch 2 (Block 28): 0=to block 27, 1=to block 29
+            2: ["57-58", "57-Yard"],    # Switch 3 (Block 57): 0=to block 58, 1=to Yard
+            3: ["Yard-63", "62-63"],    # Switch 4 (Block 63): 0=to Yard, 1=to block 62
+            4: ["77-76", "77-101"],     # Switch 5 (Block 77): 0=to block 76, 1=to block 101
+            5: ["85-84", "85-86"]       # Switch 6 (Block 85): 0=to block 84, 1=to block 86
+        }
+        return switch_connections.get(switch_idx, ["State 0", "State 1"])
+
+    def get_switch_index_from_selection(self, selection):
+        """Extract switch index from combo box selection string"""
+        if "Switch 1" in selection:
+            return 0
+        elif "Switch 2" in selection:
+            return 1
+        elif "Switch 3" in selection:
+            return 2
+        elif "Switch 4" in selection:
+            return 3
+        elif "Switch 5" in selection:
+            return 4
+        elif "Switch 6" in selection:
+            return 5
+        return None
+
+    def apply_manual_switch(self):
+        """Apply manual switch position override"""
+        print("DEBUG: apply_manual_switch called")
+        # Get values directly from the combobox widgets instead of StringVars
+        selection = self.switch_menu.get()
+        desired_state = self.state_menu.get()
+        print(f"DEBUG: selection = '{selection}', desired_state = '{desired_state}'")
+        
+        if not selection or not desired_state:
+            print("DEBUG: Missing selection or desired state, returning")
+            return
+        
+        switch_idx = self.get_switch_index_from_selection(selection)
+        print(f"DEBUG: switch_idx = {switch_idx}")
+        if switch_idx is None:
+            print("DEBUG: switch_idx is None, returning")
+            return
+        
+        # Get the state options for this switch and find the index
+        state_options = self.get_switch_state_options(switch_idx)
+        print(f"DEBUG: state_options = {state_options}")
+        try:
+            state_value = state_options.index(desired_state)
+            print(f"DEBUG: state_value = {state_value}")
+        except ValueError as e:
+            print(f"DEBUG: ValueError - invalid state selected: {e}")
+            return  # Invalid state selected
+        
+        # Apply the manual override
+        print(f"DEBUG: Setting switch_states[{switch_idx}] = {state_value}")
+        print(f"DEBUG: Before - controller.switch_states[{switch_idx}] = {self.controller.switch_states[switch_idx]}")
+        self.controller.manual_switch_overrides[switch_idx] = state_value
+        self.controller.switch_states[switch_idx] = state_value
+        print(f"DEBUG: After - controller.switch_states[{switch_idx}] = {self.controller.switch_states[switch_idx]}")
+        print(f"DEBUG: manual_switch_overrides = {self.controller.manual_switch_overrides}")
+        
+        # Verify the switch change using vital checks
+        verification_passed = self.controller.vital.verify_switch_change(
+            switch_idx, 
+            state_value, 
+            self.controller.switch_states
+        )
+        
+        if not verification_passed:
+            # Vital check failed - toggle power failure for this block
+            # Map switch index to block ID
+            blocks_with_switches = [13, 28, 57, 63, 77, 85]
+            if switch_idx < len(blocks_with_switches):
+                block_id = blocks_with_switches[switch_idx]
+                # Toggle power failure (index = block_id * 3 + 1)
+                power_failure_idx = block_id * 3 + 1
+                self.controller.input_faults[power_failure_idx] = 1
+                print(f"[VITAL CHECK FAILED] Switch {switch_idx} at block {block_id} - Power failure activated")
+        else:
+            print(f"[VITAL CHECK PASSED] Switch {switch_idx} verified successfully")
+        
+        # Update display
+        self.current_switch_state_label.config(text=f"Current Switch State: {desired_state}")
+        print(f"DEBUG: Updated label to: {desired_state}")
+        
+        # Clear the state selection
+        self.state_menu.set("")
 
     def build_input_frame(self):
         # Clear frame first
@@ -559,15 +871,15 @@ class sw_wayside_controller_ui:
                     occupied_label = ttk.Label(self.scrollable_frame, text=f"{desired['occupied']}", style="smaller.TLabel")
                     if desired['occupied']:
                         occupied_label.configure(background="lightgreen")
-                    occupied_label.grid(row=i+2, column=2, padx=5, pady=5)  
+                    occupied_label.grid(row=i+1, column=2, padx=5, pady=5)  
                     switch_label = ttk.Label(self.scrollable_frame, text=f"{desired['switch_state']}", style="smaller.TLabel")  
-                    switch_label.grid(row=i+2, column=3, padx=5, pady= 5)
+                    switch_label.grid(row=i+1, column=3, padx=5, pady= 5)
                     light_label = ttk.Label(self.scrollable_frame, text=f"{desired['light_state']}", style="smaller.TLabel")
-                    light_label.grid(row=i+2, column=4, padx=5, pady=5)
+                    light_label.grid(row=i+1, column=4, padx=5, pady=5)
                     gate_label = ttk.Label(self.scrollable_frame, text=f"{desired['gate_state']}", style="smaller.TLabel")
-                    gate_label.grid(row=i+2, column=5, padx=5, pady=5)
+                    gate_label.grid(row=i+1, column=5, padx=5, pady=5)
                     failure_label = ttk.Label(self.scrollable_frame, text=f"{desired['Failure']}", style="smaller.TLabel")  
-                    failure_label.grid(row=i+2, column=6, padx=5, pady=5)
+                    failure_label.grid(row=i+1, column=6, padx=5, pady=5)
 
                     self.block_labels[block_num] = {
                         "occupied": occupied_label,
@@ -854,15 +1166,24 @@ class sw_wayside_controller_ui:
                 
     
     def toggle_maintenance(self):
-        widgets = [self.switch_menu, self.state_menu, self.upload_button]
-
-        if self.toggle_maintenance_mode.get():
-            state = "readonly"
+        # Toggle the state manually
+        self.maintenance_enabled = not self.maintenance_enabled
+        
+        if self.maintenance_enabled:
+            # Enable maintenance mode in controller
+            self.controller.maintenance_mode = True
+            self.switch_menu['state'] = 'readonly'
+            self.state_menu['state'] = 'readonly'
+            self.upload_button['state'] = 'normal'
+            self.apply_switch_button['state'] = 'normal'
         else:
-            state = "disabled"
-
-        for widget in widgets:
-            widget.config(state=state)
+            # Disable maintenance mode and clear overrides
+            self.controller.maintenance_mode = False
+            self.controller.manual_switch_overrides.clear()
+            self.switch_menu['state'] = 'disabled'
+            self.state_menu['state'] = 'disabled'
+            self.upload_button['state'] = 'disabled'
+            self.apply_switch_button['state'] = 'disabled'
 
     def get_section_letter(self, block_num: int):
         block_num -= 1  # Adjust for 0-based index
@@ -935,13 +1256,13 @@ class sw_wayside_controller_ui:
             elif id == 28 and switch_state_enum == 1:
                 switch_state = "F28->Z150"
             elif id == 57 and switch_state_enum == 0:
-                switch_state = "I57->Yard"
-            elif id == 57 and switch_state_enum == 1:
                 switch_state = "I57->J58"
+            elif id == 57 and switch_state_enum == 1:
+                switch_state = "I57->Yard"
             elif id == 63 and switch_state_enum == 0:
-                switch_state = "K63->J62"
+                switch_state = "K63->Yard"
             elif id == 63 and switch_state_enum == 1:
-                switch_state = "K63-Yard"
+                switch_state = "K63->J62"
             elif id == 77 and switch_state_enum == 0:
                 switch_state = "N77->M76"
             elif id == 77 and switch_state_enum == 1:
