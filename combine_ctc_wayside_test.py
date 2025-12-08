@@ -50,15 +50,27 @@ def run_wayside_sw_ui_2():
 def run_wayside_hw_ui_2():
     """Launch Hardware Wayside Controller 2 (X and L Down).
     
-    Similar to hardware train controller, this can run on Raspberry Pi when server_url is provided.
+    ONLY runs on Raspberry Pi when SERVER_URL environment variable is set.
+    On PC, falls back to SW wayside.
     """
-    if not HW_WAYSIDE_AVAILABLE:
-        print("ERROR: Hardware wayside components not available. Using SW wayside instead.")
+    # Get server URL from environment variable
+    server_url = os.environ.get('SERVER_URL', None)
+    
+    # If SERVER_URL is not set, we're on PC - use SW wayside instead
+    if not server_url:
+        print("[Wayside 2] No SERVER_URL set, using SW wayside controller on PC")
         run_wayside_sw_ui_2()
         return
     
-    # Get server URL from environment variable (if set)
-    server_url = os.environ.get('SERVER_URL', None)
+    # SERVER_URL is set - we're on Raspberry Pi, use HW wayside
+    if not HW_WAYSIDE_AVAILABLE:
+        print("ERROR: Hardware wayside components not available but SERVER_URL is set!")
+        print("       Falling back to SW wayside.")
+        run_wayside_sw_ui_2()
+        return
+    
+    print(f"[Wayside 2] SERVER_URL detected: {server_url}")
+    print(f"[Wayside 2] Launching HARDWARE wayside controller [SERVER MODE]")
     
     # Define blocks managed by this wayside (70-143)
     blocks_70_143 = list(range(70, 144))
@@ -78,7 +90,7 @@ def run_wayside_hw_ui_2():
     ui = HW_Wayside_Controller_UI(
         root=root,
         controller=controller,
-        title="Hardware Wayside B - X and L Down (Blocks 70-143)"
+        title="Hardware Wayside B - X and L Down (Blocks 70-143) [SERVER MODE]"
     )
     ui.pack(fill=tk.BOTH, expand=True)
     
@@ -106,7 +118,11 @@ def main():
     root.title("System Status")
     root.geometry("300x200")
 
-    info_text = "All Systems Running:\n\n• CTC Dispatcher\n• Wayside Controller 1 [SW] (Blocks 0-73, 144-150)\n• Wayside Controller 2 [HW] (Blocks 70-143)"
+    # Check if running in server mode (Raspberry Pi with SERVER_URL set)
+    server_mode = os.environ.get('SERVER_URL', None) is not None
+    wayside_2_type = "[HW-SERVER]" if server_mode else "[SW]"
+    
+    info_text = f"All Systems Running:\n\n• CTC Dispatcher\n• Wayside Controller 1 [SW] (Blocks 0-73, 144-150)\n• Wayside Controller 2 {wayside_2_type} (Blocks 70-143)"
 
     label = ttk.Label(root, text=info_text, justify=tk.CENTER)
     label.pack(expand=True, padx=10, pady=10)
