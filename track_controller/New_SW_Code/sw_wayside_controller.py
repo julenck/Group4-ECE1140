@@ -32,6 +32,9 @@ class sw_wayside_controller:
         self.switch_states: list = [0]*6
         self.ctc_sugg_switches: list = [0]*6
         self.output_data: dict = {}
+        # Maintenance mode control
+        self.maintenance_mode: bool = False
+        self.manual_switch_overrides: dict = {}  # {switch_index: state}
         # Extract just the filename from the plc path (in case full path is provided)
         self.active_plc: str = os.path.basename(plc) if '\\' in plc or '/' in plc else plc
         
@@ -270,10 +273,17 @@ class sw_wayside_controller:
                 occ2 = self.occupied_blocks[144:151]
                 occ =occ1+occ2
                 switches, signals, crossing = process_states_green_xlup(occ)
-                self.switch_states[0]=switches[0]
-                self.switch_states[1]=switches[1]
-                self.switch_states[2]=switches[2]
-                self.switch_states[3]=switches[3]
+                # Only update switches if not in maintenance mode
+                if not self.maintenance_mode:
+                    self.switch_states[0]=switches[0]
+                    self.switch_states[1]=switches[1]
+                    self.switch_states[2]=switches[2]
+                    self.switch_states[3]=switches[3]
+                # Apply manual overrides if in maintenance mode
+                else:
+                    for idx in [0, 1, 2, 3]:
+                        if idx in self.manual_switch_overrides:
+                            self.switch_states[idx] = self.manual_switch_overrides[idx]
                 self.light_states[0]=signals[0]
                 self.light_states[1]=signals[1]
                 self.light_states[2]=signals[2]
@@ -295,8 +305,15 @@ class sw_wayside_controller:
             elif self.active_plc == "Green_Line_PLC_XandLdown.py":
                 occ = self.occupied_blocks[70:146]
                 signals, switches, crossing = process_states_green_xldown(occ)
-                self.switch_states[4]=switches[0]
-                self.switch_states[5]=switches[1]
+                # Only update switches if not in maintenance mode
+                if not self.maintenance_mode:
+                    self.switch_states[4]=switches[0]
+                    self.switch_states[5]=switches[1]
+                # Apply manual overrides if in maintenance mode
+                else:
+                    for idx in [4, 5]:
+                        if idx in self.manual_switch_overrides:
+                            self.switch_states[idx] = self.manual_switch_overrides[idx]
                 self.light_states[12]=signals[0]
                 self.light_states[13]=signals[1]
                 self.light_states[14]=signals[2]
@@ -423,6 +440,18 @@ class sw_wayside_controller:
                         "cmd speed": speed_to_use,
                         "pos": train_pos
                     }
+                    
+                    # Verify speed and authority using vital checks
+                    speed_verified = self.vital.verify_speed(train, speed_to_use, self.cmd_trains)
+                    auth_verified = self.vital.verify_auth(train, auth_to_use, self.cmd_trains)
+                    
+                    if not speed_verified or not auth_verified:
+                        # Vital check failed - toggle power failure for current block
+                        power_failure_idx = train_pos * 3 + 1
+                        if power_failure_idx < len(self.input_faults):
+                            self.input_faults[power_failure_idx] = 1
+                            print(f"[VITAL CHECK FAILED] Train {train} at block {train_pos} - Power failure activated (speed_ok={speed_verified}, auth_ok={auth_verified})")
+                    
                     # Track CTC authority for reactivation detection
                     # Use the ACTUAL authority being used, not necessarily CTC's suggested value
                     # This ensures proper comparison when CTC gives authority for next leg
@@ -508,11 +537,26 @@ class sw_wayside_controller:
                     self.last_seen_position[train] = train_pos
                 else:
                     # Train starting from yard (block 0)
+                    auth_to_use = self.active_trains[train]["Suggested Authority"]
+                    speed_to_use = self.active_trains[train]["Suggested Speed"]
+                    
                     self.cmd_trains[train] = {
-                        "cmd auth": self.active_trains[train]["Suggested Authority"],
-                        "cmd speed": self.active_trains[train]["Suggested Speed"],
+                        "cmd auth": auth_to_use,
+                        "cmd speed": speed_to_use,
                         "pos": 0
                     }
+                    
+                    # Verify speed and authority using vital checks
+                    speed_verified = self.vital.verify_speed(train, speed_to_use, self.cmd_trains)
+                    auth_verified = self.vital.verify_auth(train, auth_to_use, self.cmd_trains)
+                    
+                    if not speed_verified or not auth_verified:
+                        # Vital check failed - toggle power failure for yard (block 0)
+                        power_failure_idx = 0 * 3 + 1  # Index 1 for block 0
+                        if power_failure_idx < len(self.input_faults):
+                            self.input_faults[power_failure_idx] = 1
+                            print(f"[VITAL CHECK FAILED] Train {train} at yard - Power failure activated (speed_ok={speed_verified}, auth_ok={auth_verified})")
+                    
                     # Track CTC authority for reactivation detection
                     self.last_ctc_authority[train] = self.active_trains[train]["Suggested Authority"]
                     # Initialize per-train tracking
@@ -550,6 +594,19 @@ class sw_wayside_controller:
                         new_speed = self.active_trains[cmd_train]["Suggested Speed"]
                         self.cmd_trains[cmd_train]["cmd auth"] = new_auth
                         self.cmd_trains[cmd_train]["cmd speed"] = new_speed
+                        
+                        # Verify speed and authority using vital checks
+                        speed_verified = self.vital.verify_speed(cmd_train, new_speed, self.cmd_trains)
+                        auth_verified = self.vital.verify_auth(cmd_train, new_auth, self.cmd_trains)
+                        
+                        if not speed_verified or not auth_verified:
+                            # Vital check failed - toggle power failure for current block
+                            pos = self.cmd_trains[cmd_train]["pos"]
+                            power_failure_idx = pos * 3 + 1
+                            if power_failure_idx < len(self.input_faults):
+                                self.input_faults[power_failure_idx] = 1
+                                print(f"[VITAL CHECK FAILED] Train {cmd_train} reactivation at block {pos} - Power failure activated (speed_ok={speed_verified}, auth_ok={auth_verified})")
+                        
                         # Update train_auth_start for proper distance tracking
                         self.train_auth_start[cmd_train] = new_auth
                         self.last_ctc_authority[cmd_train] = new_auth
