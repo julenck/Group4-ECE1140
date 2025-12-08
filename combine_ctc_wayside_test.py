@@ -106,23 +106,21 @@ def main():
     # Start Wayside UI 1 (X and L Up) in thread
     wayside_thread_1 = threading.Thread(target=run_wayside_sw_ui_1)
     wayside_thread_1.daemon = True
-    wayside_thread_1.start() 
+    wayside_thread_1.start()
 
-    # Start Wayside UI 2 (X and L Down) in thread - HARDWARE VERSION
-    wayside_thread_2 = threading.Thread(target=run_wayside_hw_ui_2)
-    wayside_thread_2.daemon = True
-    wayside_thread_2.start()
+    # NOTE: Wayside 2 runs on separate Raspberry Pi
+    # Use run_wayside_hw_ui_2() on Raspberry Pi with SERVER_URL set
 
     # Create a simple status window
     root = tk.Tk()
     root.title("System Status")
-    root.geometry("300x200")
+    root.geometry("350x250")
 
-    # Check if running in server mode (Raspberry Pi with SERVER_URL set)
-    server_mode = os.environ.get('SERVER_URL', None) is not None
-    wayside_2_type = "[HW-SERVER]" if server_mode else "[SW]"
-    
-    info_text = f"All Systems Running:\n\n• CTC Dispatcher\n• Wayside Controller 1 [SW] (Blocks 0-73, 144-150)\n• Wayside Controller 2 {wayside_2_type} (Blocks 70-143)"
+    info_text = ("Distributed System Status:\n\n"
+                "• CTC Dispatcher [PC]\n"
+                "• Wayside Controller 1 [SW] (Blocks 0-73, 144-150) [PC]\n"
+                "• Wayside Controller 2 [HW] (Blocks 70-143) [Raspberry Pi]\n"
+                "• Train Controllers [HW] [Raspberry Pi]")
 
     label = ttk.Label(root, text=info_text, justify=tk.CENTER)
     label.pack(expand=True, padx=10, pady=10)
