@@ -1157,6 +1157,21 @@ class sw_wayside_controller:
                             data[train_id]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
                             data[train_id]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
                         # If no beacon at current block, keep existing beacon data (don't clear it)
+
+                        # CRITICAL: Update train status back to CTC for real-time position tracking
+                        # This allows CTC to display train positions to the dispatcher
+                        if self.wayside_api:
+                            try:
+                                self.wayside_api.update_train_status(
+                                    train_name=train_id,
+                                    position=int(train_pos),
+                                    state="moving" if actual_train_speeds.get(train_id, 0) > 0 else "stopped",
+                                    active=1 if train_id in self.cmd_trains else 0
+                                )
+                                print(f"[SW Wayside {self.wayside_id}] Updated CTC: {train_id} at block {train_pos}")
+                            except Exception as e:
+                                print(f"[SW Wayside {self.wayside_id}] Failed to update train status to CTC: {e}")
+
                 # else: don't update - other controller is managing this train
 
         with open(self.train_comm_file, 'w') as f:

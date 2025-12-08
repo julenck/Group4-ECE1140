@@ -1341,6 +1341,20 @@ class HW_Wayside_Controller:
                                 data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
                             # If no beacon at current block, keep existing beacon data (don't clear it)
 
+                        # CRITICAL: Update train status back to CTC for real-time position tracking
+                        # This allows CTC to display train positions to the dispatcher
+                        if self.wayside_api:
+                            try:
+                                self.wayside_api.update_train_status(
+                                    train_name=tkey,
+                                    position=int(train_pos),
+                                    state="moving" if actual_train_speeds.get(tkey, 0) > 0 else "stopped",
+                                    active=1 if tkey in self.cmd_trains else 0
+                                )
+                                print(f"[HW Wayside {self.wayside_id}] Updated CTC: {tkey} at block {train_pos}")
+                            except Exception as e:
+                                print(f"[HW Wayside {self.wayside_id}] Failed to update train status to CTC: {e}")
+
             # Atomic write
             d = os.path.dirname(self.train_comm_file) or '.'
             import tempfile
