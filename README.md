@@ -84,6 +84,8 @@ Maintenance mode of the software wayside controller can be accessed by clicking 
 
 ## HW Wayside Controller
 
+<img src=".screenshots/
+
 ## Train Model
 <img src="./screenshots/train_model_ui.png">
 
