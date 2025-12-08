@@ -943,6 +943,9 @@ class HW_Wayside_Controller:
 
             for train in self.active_trains:
                 if train not in self.cmd_trains and self.active_trains[train]["Active"]==1:
+                    # Initialize handoff data variables (will be set if handoff occurs)
+                    stored_cumulative = 0.0
+                    stored_auth_start_m = 0.0
                     train_pos = self.active_trains[train]["Train Position"]
                     sug_auth = self.active_trains[train]["Suggested Authority"]
 
@@ -1027,6 +1030,7 @@ class HW_Wayside_Controller:
 
                     if is_handoff:
                         # Read prior controller outputs (wayside_to_train) to obtain remaining auth/speed
+                        print(f"[HW Wayside {self.wayside_id}] Taking over train {tname} via handoff at block {pos}")
                         try:
                             with open(self.train_comm_file, 'r', encoding='utf-8') as f:
                                 train_data = json.load(f)
@@ -1035,9 +1039,19 @@ class HW_Wayside_Controller:
                                 current_speed_mph = train_data.get(tname, {}).get('Commanded Speed', sug_speed_mph)
                                 current_auth = float(current_auth_yds) * 0.9144  # yards to meters
                                 current_speed = float(current_speed_mph) * 0.44704  # mph to m/s
-                        except Exception:
+
+                                # Read stored cumulative distance and auth start for accurate handoff
+                                stored_cumulative = train_data.get(tname, {}).get('Cumulative Distance', 0)
+                                stored_auth_start = train_data.get(tname, {}).get('Train Auth Start', current_auth)
+                                stored_auth_start_m = float(stored_auth_start) * 0.9144  # yards to meters
+
+                                print(f"[HW Wayside {self.wayside_id}] Read handoff data for {tname}: speed={current_speed_mph:.1f} mph ({current_speed:.2f} m/s), auth={current_auth_yds:.0f} yards ({current_auth:.0f} m), cumulative={stored_cumulative:.0f}m, auth_start={stored_auth_start_m:.0f}m")
+                        except Exception as e:
+                            print(f"[HW Wayside {self.wayside_id}] Failed to read handoff data for {tname}, using CTC values: {e}")
                             current_auth = sug_auth_m
                             current_speed = sug_speed_ms
+                            stored_cumulative = 0
+                            stored_auth_start_m = sug_auth_m  # Use current CTC value as fallback
                         auth_to_use = float(current_auth)
                         speed_to_use = float(current_speed)
                     else:
@@ -1050,7 +1064,9 @@ class HW_Wayside_Controller:
                         'cmd speed': speed_to_use,
                         'pos': pos,
                     }
-                    
+
+                    print(f"[HW Wayside {self.wayside_id}] Activated train {tname} at block {pos} (speed: {speed_to_use:.2f} m/s, auth: {auth_to_use:.0f} m, handoff: {is_handoff})")
+
                     # Track CTC authority for reactivation detection (matching SW behavior)
                     self.last_ctc_authority[tname] = auth_to_use
 
@@ -1060,11 +1076,12 @@ class HW_Wayside_Controller:
                     else:
                         self.train_idx[tname] = 0
                     self.train_pos_start[tname] = self.train_idx[tname]
-                    # For handoff, set auth_start to suggested authority from CTC (in meters)
+                    # For handoff, use the stored cumulative distance from the previous controller
                     if is_handoff:
-                        self.train_auth_start[tname] = float(sug_auth_m)
-                        traveled_before = float(sug_auth_m) - auth_to_use
-                        self.cumulative_distance[tname] = traveled_before
+                        # Use the stored values from the handoff data instead of calculating
+                        self.train_auth_start[tname] = stored_auth_start_m
+                        self.cumulative_distance[tname] = stored_cumulative
+                        print(f"[HW Wayside {self.wayside_id}] Using stored handoff data for {tname}: auth_start={stored_auth_start_m:.0f}m, cumulative_distance={stored_cumulative:.0f}m")
                     else:
                         self.train_auth_start[tname] = auth_to_use  # meters
                         # initialize cumulative distance heuristics
@@ -1246,9 +1263,42 @@ class HW_Wayside_Controller:
                                 else:
                                     print(f"Warning: Failed to write position for {tname} after {max_retries} attempts: {e}")
 
-                        # If train moved outside visible range, schedule handoff removal
+                        # If train moved outside visible range, write commanded values for handoff and schedule removal
                         if state['pos'] not in self.visible_blocks and state['pos'] != 0:
                             if tname not in self.trains_to_handoff:
+                                # Write commanded values to shared file for next controller (SW-compatible handoff)
+                                print(f"[HW Wayside {self.wayside_id}] Handing off train {tname} at block {state['pos']} (speed: {state['cmd speed']:.2f} m/s, auth: {state['cmd auth']:.0f} m)")
+                                try:
+                                    with self.file_lock:
+                                        # Read existing train_comm_file
+                                        try:
+                                            with open(self.train_comm_file, 'r', encoding='utf-8') as f:
+                                                train_data = json.load(f)
+                                        except:
+                                            train_data = {}
+
+                                        # Update with current commanded values for this train (convert to mph/yards like SW controller)
+                                        cmd_speed_mph = state['cmd speed'] * 2.23694  # m/s to mph
+                                        cmd_auth_yds = state['cmd auth'] * 1.09361    # meters to yards
+
+                                        if tname not in train_data:
+                                            train_data[tname] = {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
+
+                                        train_data[tname]["Commanded Speed"] = cmd_speed_mph
+                                        train_data[tname]["Commanded Authority"] = cmd_auth_yds
+                                        # Also store cumulative distance for accurate handoff calculation
+                                        train_data[tname]["Cumulative Distance"] = self.cumulative_distance.get(tname, 0)
+                                        train_data[tname]["Train Auth Start"] = self.train_auth_start.get(tname, state['cmd auth'])
+
+                                        # Write back to file
+                                        with open(self.train_comm_file, 'w', encoding='utf-8') as f:
+                                            json.dump(train_data, f, indent=2)
+
+                                        print(f"[HW Wayside {self.wayside_id}] Wrote handoff data for {tname}: speed={cmd_speed_mph:.1f} mph, auth={cmd_auth_yds:.0f} yards")
+
+                                except Exception as e:
+                                    print(f"[HW Wayside {self.wayside_id}] Warning: Failed to write handoff data for {tname}: {e}")
+
                                 self.trains_to_handoff.append(tname)
 
             # Write commanded outputs to train file (similar to SW behavior)
@@ -1862,10 +1912,28 @@ class HW_Wayside_Controller:
         b = str(block_id)
         with self._lock:
             occupied_here = (b in self._occupied)
+
+            # For blocks we manage, show commanded values from active trains instead of simulated values
+            speed_mph = 0.0
+            authority_yards = 0
+
+            if b in self.block_ids:
+                # Check if any train is currently commanded to occupy this block
+                for train_id, train_data in self.cmd_trains.items():
+                    if str(train_data.get('pos', '')) == b:
+                        # This train is commanded to be at this block - show its commanded values
+                        speed_mph = train_data.get('cmd speed', 0.0)
+                        authority_yards = train_data.get('cmd auth', 0)
+                        break
+                else:
+                    # No train commanded to this block, show simulated values for maintenance mode
+                    speed_mph = self._speed_mph
+                    authority_yards = self._authority_yds
+
             state = {
                 "block_id": b,
-                "speed_mph": self._speed_mph if b in self.block_ids else 0.0,
-                "authority_yards": self._authority_yds if b in self.block_ids else 0,
+                "speed_mph": speed_mph,
+                "authority_yards": authority_yards,
                 "occupied": occupied_here,
                 "switch": self._switch_state.get(b, "-"),
                 "light": self._light_state.get(b, "-"),
