@@ -83,8 +83,20 @@ Maintenance mode of the software wayside controller can be accessed by clicking 
 - Below that, the user can select a new plc file by using the "Browse" click button. This button will open file explorer and allow you to select a new .py to run. if your upload is successful, the filename below the click button will update to the new file name.
 
 ## HW Wayside Controller
+The harware wayside controller has the same responsibilities as the software wayside controller, just being implemented through the Raspberry Pi.
+<img src="./screenshots/Wayside_HW_UI.png">
 
-<img src=".screenshots/
+### Block Selection
+- The left side of the hardware wayside controller UI lists the available blocks that are controlled by the selected wayside. Upon selection of the block, the current information of that block is displayed on the right side of the UI.
+
+### Active Trains
+- The bottom section of the hardware wayside controller UI lists the current active trains that occupy a block in the selected wayside section.
+
+<img src="./screenshots/wayside_hw_pi.png">
+
+### Commanded Speed And Authority
+- The commanded speed and authority is displayed on the LCD screen connected to the Pi.
+- The switch is used to maually change switch positions. On the UI, if you select a block that contains a switch, you can use the switch connected to the Pi to change the direction the switch is facing.
 
 ## Train Model
 <img src="./screenshots/train_model_ui.png">
