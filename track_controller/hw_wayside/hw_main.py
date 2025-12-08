@@ -5,6 +5,7 @@
 from __future__ import annotations
 import os
 import sys
+import argparse
 os.environ["TK_SILENCE_DEPRECATION"] = "1"
 import tkinter as tk
 from typing import List, Dict
@@ -349,15 +350,20 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
 # ------------------------------------------------------------------------------------
 
 def main() -> None:
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Hardware Wayside Controller")
+    parser.add_argument("--server", type=str, help="Server URL for API mode (e.g., http://localhost:5000)")
+    parser.add_argument("--timeout", type=float, default=5.0, help="API timeout in seconds (default: 5.0)")
+    args = parser.parse_args()
 
-    # Build block list for Wayside B 
+    # Build block list for Wayside B
     blocks_B: List[str] = _discover_blocks_B()
 
     root = tk.Tk()
     root.title("Green Line Wayside Controller B (HW)")
     root.geometry("900x750")
 
-    ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
+    ws_b_ctrl = HW_Wayside_Controller("B", blocks_B, server_url=args.server, timeout=args.timeout)
     # Attempt to load and start a default PLC for this wayside (non-fatal)
     try:
         plc_path = os.path.join(os.path.dirname(__file__), "Green_Line_PLC_XandLdown.py")

@@ -86,7 +86,7 @@ class HW_Wayside_Controller:
                 api_dir = os.path.join(os.path.dirname(current_dir), "api")
                 if api_dir not in sys.path:
                     sys.path.insert(0, api_dir)
-                from wayside_api_client import WaysideAPIClient
+                from wayside_api_client import WaysideAPIClient  # type: ignore[import]
                 
                 # Convert wayside_id to numeric (e.g., "A" -> 1, "B" -> 2)
                 numeric_id = ord(wayside_id) - ord('A') + 1 if isinstance(wayside_id, str) and len(wayside_id) == 1 and wayside_id.isalpha() else int(wayside_id)
