@@ -87,14 +87,13 @@ class HW_Wayside_Controller:
                 if api_dir not in sys.path:
                     sys.path.insert(0, api_dir)
                 from wayside_api_client import WaysideAPIClient
-                
+
                 # Convert wayside_id to numeric (e.g., "A" -> 1, "B" -> 2)
                 numeric_id = ord(wayside_id) - ord('A') + 1 if isinstance(wayside_id, str) and len(wayside_id) == 1 and wayside_id.isalpha() else int(wayside_id)
                 self.wayside_api = WaysideAPIClient(wayside_id=numeric_id, server_url=server_url, timeout=timeout)
                 print(f"[HW Wayside {wayside_id}] Using REST API: {server_url}")
             except Exception as e:
-                print(f"[HW Wayside {wayside_id}] Warning: Failed to initialize API client: {e}")
-                print(f"[HW Wayside {wayside_id}] Falling back to file-based I/O")
+                print(f"[HW Wayside {wayside_id}] API init failed: {e}, using file I/O")
                 self.wayside_api = None
         else:
             print(f"[HW Wayside {wayside_id}] Using file-based I/O (no server_url)")
@@ -1341,26 +1340,17 @@ class HW_Wayside_Controller:
                                 data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
                             # If no beacon at current block, keep existing beacon data (don't clear it)
 
-                        # CRITICAL: Update train status back to CTC for real-time position tracking
-                        # This allows CTC to display train positions to the dispatcher
+                        # Update train status back to CTC for real-time position tracking
                         if self.wayside_api:
                             try:
-                                success = self.wayside_api.update_train_status(
+                                self.wayside_api.update_train_status(
                                     train_name=tkey,
                                     position=int(train_pos),
                                     state="moving" if actual_train_speeds.get(tkey, 0) > 0 else "stopped",
                                     active=1 if tkey in self.cmd_trains else 0
                                 )
-                                if success:
-                                    print(f"[HW Wayside {self.wayside_id}] ✅ Updated CTC: {tkey} at block {train_pos}")
-                                else:
-                                    print(f"[HW Wayside {self.wayside_id}] ❌ CTC update failed: {tkey} at block {train_pos}")
                             except Exception as e:
-                                print(f"[HW Wayside {self.wayside_id}] ❌ Failed to update train status to CTC: {e}")
-                                import traceback
-                                traceback.print_exc()
-                        else:
-                            print(f"[HW Wayside {self.wayside_id}] ⚠️  No API client - cannot update CTC for {tkey}")
+                                print(f"[HW Wayside {self.wayside_id}] CTC update failed: {e}")
 
             # Atomic write
             d = os.path.dirname(self.train_comm_file) or '.'

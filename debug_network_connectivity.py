@@ -162,8 +162,8 @@ def test_http_connection(server_url):
 
 def compare_with_working_pi():
     """Compare network settings with the working Raspberry Pi."""
-    print("
-🔄 COMPARING WITH WORKING RASPBERRY PI"    print("-" * 50)
+    print("COMPARING WITH WORKING RASPBERRY PI")  
+    print("-" * 50)
     print("Since the other Raspberry Pi works, let's compare:")
     print("")
     print("1. 📍 Check if both Pis are on the same network:")
@@ -241,8 +241,8 @@ def main():
 
         compare_with_working_pi()
 
-    print("
-💡 QUICK FIXES TO TRY:"    print("1. export SERVER_URL=http://YOUR_PC_IP:5000  # Double-check IP")
+    print("💡 QUICK FIXES TO TRY:")    
+    print("1. export SERVER_URL=http://YOUR_PC_IP:5000  # Double-check IP")
     print("2. On PC: Disable Windows Firewall temporarily")
     print("3. Check router for client isolation/AP isolation")
     print("4. Try connecting this Pi to Ethernet instead of WiFi")

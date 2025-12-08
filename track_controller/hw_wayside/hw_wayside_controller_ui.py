@@ -169,6 +169,18 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         # now it's safe to render once
         self._push_to_display()
 
+        # Start the trains processing cycle (handles train handoffs, commands, etc.)
+        try:
+            self.controller.start_trains(period_s=1.0)
+        except Exception as e:
+            print(f"[HW Wayside UI] Failed to start trains cycle: {e}")
+
+        # Start the PLC cycle (handles switches, lights, track logic)
+        try:
+            self.controller.start_plc(period_s=0.2)
+        except Exception as e:
+            print(f"[HW Wayside UI] Failed to start PLC cycle: {e}")
+
         # Start periodic refresh for real-time updates
         self._refresh_period_ms = 500  # 500ms = 2Hz refresh
         self._schedule_refresh()

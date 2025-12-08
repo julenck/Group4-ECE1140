@@ -349,16 +349,15 @@ class WaysideAPIClient:
                     
             except requests.exceptions.Timeout:
                 if attempt == self.max_retries - 1:
-                    print(f"[Wayside API] ❌ Train status update timed out after {self.timeout}s - check server connectivity")
+                    print(f"[Wayside API] Connection timeout - check server")
 
-            except requests.exceptions.ConnectionError as e:
+            except requests.exceptions.ConnectionError:
                 if attempt == self.max_retries - 1:
-                    print(f"[Wayside API] ❌ Train status update connection failed: {e}")
-                    print(f"[Wayside API] ❌ Check if server is running at {self.server_url}")
+                    print(f"[Wayside API] Connection failed - check server URL")
 
             except requests.exceptions.RequestException as e:
                 if attempt == self.max_retries - 1:
-                    print(f"[Wayside API] ❌ Train status update failed: {e}")
+                    print(f"[Wayside API] Request failed: {e}")
 
         return False
     
