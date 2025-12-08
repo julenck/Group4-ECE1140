@@ -1024,9 +1024,11 @@ class HW_Wayside_Controller:
                         # First time seeing this train - check if it's coming from outside our range
                         # This is a handoff if the train is in our section but we never tracked it
                         is_handoff = now_in_section and train_pos != 0
+                        print(f"[HW Wayside {self.wayside_id}] First time seeing {train} at {train_pos}, is_handoff={is_handoff}")
                     else:
                         last_in_section = (current_last in self.managed_blocks) or (current_last == 0)
                         is_handoff = (not last_in_section) and now_in_section and current_last != 0
+                        print(f"[HW Wayside {self.wayside_id}] {train}: last_pos={current_last}, current_pos={train_pos}, last_in_section={last_in_section}, now_in_section={now_in_section}, is_handoff={is_handoff}")
 
                     if is_handoff:
                         # Read prior controller outputs (wayside_to_train) to obtain remaining auth/speed
@@ -1066,6 +1068,8 @@ class HW_Wayside_Controller:
                     }
 
                     print(f"[HW Wayside {self.wayside_id}] Activated train {train} at block {train_pos} (speed: {speed_to_use:.2f} m/s, auth: {auth_to_use:.0f} m, handoff: {is_handoff})")
+                    if is_handoff:
+                        print(f"[HW Wayside {self.wayside_id}] Handoff details: stored_cumulative={stored_cumulative:.0f}m, stored_auth_start={stored_auth_start_m:.0f}m")
 
                     # Track CTC authority for reactivation detection (matching SW behavior)
                     self.last_ctc_authority[train] = auth_to_use
@@ -1134,9 +1138,11 @@ class HW_Wayside_Controller:
                 current_sug_auth = float(self.active_trains.get(tname, {}).get('Suggested Authority', auth) or auth)
                 current_sug_speed = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed) or speed)
 
-                # Update commanded values if CTC has new instructions (matching SW controller)
+                # Only update commanded values if CTC gives MORE authority than we currently have
+                # This prevents overriding handoff authority with stale CTC values
                 if current_sug_auth > auth:
                     # CTC gave more authority - update our commanded values
+                    print(f"[HW Wayside {self.wayside_id}] CTC override for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m, speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
                     auth = current_sug_auth
                     speed = current_sug_speed
                     state['cmd auth'] = auth
@@ -1146,8 +1152,11 @@ class HW_Wayside_Controller:
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
 
-                # SW controller just uses CTC suggested values directly
-                target_speed = current_sug_speed
+                # Get block speed limit (matching SW controller behavior)
+                speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
+
+                # Cap commanded speed at block speed limit (matching SW controller)
+                target_speed = min(current_sug_speed, speed_limit)
                 
                 # Smoothly adjust commanded speed toward target
                 ACCEL_RATE = 2.0  # m/s per tick acceleration
@@ -1163,6 +1172,8 @@ class HW_Wayside_Controller:
                 # Decrement authority by distance traveled in this period
                 # assume _trains_period is seconds between ticks
                 dec = actual_speed * self._trains_period
+                if dec > 0:
+                    print(f"[HW Wayside {self.wayside_id}] {tname} auth {auth:.1f}m - {dec:.1f}m = {auth-dec:.1f}m (speed: {actual_speed:.2f} m/s, period: {self._trains_period:.1f}s)")
                 auth -= dec
 
                 # If authority exhausted, set to 0 and mark for removal (and write final position to CTC)
@@ -1280,6 +1291,8 @@ class HW_Wayside_Controller:
                                         # Update with current commanded values for this train (convert to mph/yards like SW controller)
                                         cmd_speed_mph = state['cmd speed'] * 2.23694  # m/s to mph
                                         cmd_auth_yds = state['cmd auth'] * 1.09361    # meters to yards
+
+                                        print(f"[HW Wayside {self.wayside_id}] Writing handoff data for {tname}: speed={cmd_speed_mph:.1f} mph, auth={cmd_auth_yds:.0f} yards ({state['cmd auth']:.0f}m), cumulative={self.cumulative_distance.get(tname, 0):.0f}m")
 
                                         if tname not in train_data:
                                             train_data[tname] = {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
