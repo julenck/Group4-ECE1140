@@ -101,19 +101,19 @@ class HW_Display(ttk.Frame):
 
         # Create detail rows
         grid = ttk.Frame(details_frame)
-        def row(lbl, key):
+        def row(lbl, key, val_width=16):
             r = ttk.Frame(grid)
             ttk.Label(r, text=f"{lbl}:", width=14, anchor="w").pack(side="left")
-            ttk.Label(r, textvariable=self.vars[key], width=12, anchor="w").pack(side="left")
+            ttk.Label(r, textvariable=self.vars[key], width=val_width, anchor="w").pack(side="left")
             r.pack(anchor="w", pady=1)
 
         row("Block", "block")
         row("Time", "time")
-        row("Speed (mph)", "speed")
-        row("Authority (yd)", "authority")
+        row("Speed (mph)", "speed", 10)
+        row("Authority (yd)", "authority", 10)
         row("Occupied", "occupied")
         row("Switch", "switch")
-        row("Switch Map", "switch_map")
+        row("Switch Map", "switch_map", 24)  # Wider for switch map (e.g., "0->100, 1->85")
 
         grid.pack(anchor="nw", fill="both", expand=True)
 

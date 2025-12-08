@@ -99,7 +99,10 @@ class I2CLcd:
             self._char(ord(c))
 
     def show_speed_auth(self, block_id: str, speed_mph: float, auth_yds: float):
-        l1 = f"Blk {str(block_id):<3} Spd {int(speed_mph):>2} mph"
-        l2 = f"Auth {int(auth_yds):>3} yd"
-        self.write_line(0, l1)
-        self.write_line(1, l2)
+        # Format: Line1: "B77 10mph A:100yd"  (compact for 16 chars)
+        # Truncate to fit 16 character limit
+        l1 = f"B{str(block_id)[:3]} {int(speed_mph):2}mph A:{int(auth_yds):3}y"
+        l2 = f"Auth:{int(auth_yds):>4} yards"  # Alternative layout
+        # Use first line only for compact display
+        self.write_line(0, l1[:16])
+        self.write_line(1, l2[:16])
