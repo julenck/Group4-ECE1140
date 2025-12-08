@@ -19,7 +19,21 @@
 ## CTC
 The CTC is resonsible for dispatching trains and overlooking active train status.
 
+### CTC Manual Mode
 <img src="./screenshots/ctc_man.png">
+
+- In manual mode, The dispatcher can choose a train, line, destination, and arrival time.
+- The train is selected by the selected by the first selection box, the line is selected by the second selection block, and the destinination is selected by the third selection block.
+- The arrival time must be formated in military time, and must be actual time you want the train to arrive. If the current time is 11:05, and you want the train to arrive in 5 minutes, you must enter 1110
+- You then click the click button labeled "Distpatch" to dispatch the train.
+
+### CTC Automatic Mode
+<img src=".screenshots/ctc_manual.png">
+
+-In automatic mode, the dispatcher ca upload a schedule. The schedule must be a python file.
+
+### CTC Maintenance Mode
+<img src=".screenshots/ctc_maint.png"> 
 
 
 ## SW Wayside Controller
