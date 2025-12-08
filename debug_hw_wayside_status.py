@@ -32,7 +32,7 @@ def check_files():
         except Exception as e:
             print(f"   ❌ Error reading file: {e}")
     else:
-        print("   ❌ File not found"
+        print("   ❌ File not found")
 
     # Wayside to train file
     wayside_file = "track_controller/New_SW_Code/wayside_to_train.json"
@@ -49,12 +49,12 @@ def check_files():
         except Exception as e:
             print(f"   ❌ Error reading file: {e}")
     else:
-        print("   ❌ File not found"
+        print("   ❌ File not found")
 
 def simulate_hw_wayside_logic():
     """Simulate what the HW wayside should be doing."""
-    print("
-🧠 Simulating HW Wayside Logic"    print("=" * 50)
+    print("🧠 Simulating HW Wayside Logic")    
+    print("=" * 50)
 
     # Check if we have SERVER_URL
     server_url = os.environ.get('SERVER_URL')
@@ -95,8 +95,8 @@ def check_api_connectivity(server_url):
     if not server_url:
         return
 
-    print("
-🔗 Testing API Connectivity"    print("=" * 50)
+    print("🔗 Testing API Connectivity")    
+    print("=" * 50)
 
     import requests
 
@@ -149,8 +149,8 @@ def main():
     if server_url:
         check_api_connectivity(server_url)
 
-    print("
-📋 SUMMARY"    print("=" * 60)
+    print("📋 SUMMARY")    
+    print("=" * 60)
     print("If HW wayside is running, you should see:")
     print("1. Console messages about loading CTC inputs")
     print("2. Updates to ctc_track_controller.json train positions")
