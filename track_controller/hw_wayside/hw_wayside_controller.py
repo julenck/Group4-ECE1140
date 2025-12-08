@@ -1345,15 +1345,22 @@ class HW_Wayside_Controller:
                         # This allows CTC to display train positions to the dispatcher
                         if self.wayside_api:
                             try:
-                                self.wayside_api.update_train_status(
+                                success = self.wayside_api.update_train_status(
                                     train_name=tkey,
                                     position=int(train_pos),
                                     state="moving" if actual_train_speeds.get(tkey, 0) > 0 else "stopped",
                                     active=1 if tkey in self.cmd_trains else 0
                                 )
-                                print(f"[HW Wayside {self.wayside_id}] Updated CTC: {tkey} at block {train_pos}")
+                                if success:
+                                    print(f"[HW Wayside {self.wayside_id}] ✅ Updated CTC: {tkey} at block {train_pos}")
+                                else:
+                                    print(f"[HW Wayside {self.wayside_id}] ❌ CTC update failed: {tkey} at block {train_pos}")
                             except Exception as e:
-                                print(f"[HW Wayside {self.wayside_id}] Failed to update train status to CTC: {e}")
+                                print(f"[HW Wayside {self.wayside_id}] ❌ Failed to update train status to CTC: {e}")
+                                import traceback
+                                traceback.print_exc()
+                        else:
+                            print(f"[HW Wayside {self.wayside_id}] ⚠️  No API client - cannot update CTC for {tkey}")
 
             # Atomic write
             d = os.path.dirname(self.train_comm_file) or '.'
