@@ -354,7 +354,8 @@ def main() -> None:
     ws_b_ctrl = HW_Wayside_Controller("B", blocks_B)
     # Attempt to load and start a default PLC for this wayside (non-fatal)
     try:
-        ws_b_ctrl.load_plc("Green_Line_PLC_XandLdown.py")
+        plc_path = os.path.join(os.path.dirname(__file__), "Green_Line_PLC_XandLdown.py")
+        ws_b_ctrl.load_plc(plc_path)
         ws_b_ctrl.start_plc()
     except Exception:
         pass
