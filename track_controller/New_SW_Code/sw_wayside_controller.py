@@ -64,6 +64,7 @@ class sw_wayside_controller:
         self.last_seen_position: dict = {}  # Track last known position to detect newly dispatched trains
         self.cumulative_distance: dict = {}  # Track actual distance traveled since last reset
         self.last_ctc_authority: dict = {}  # Track last authority value from CTC to detect new dispatches
+        self.temp_authority: dict = {}  # Temporary authority due to hazards ahead (train_id: temp_auth_meters)
         
         # Define block ranges for each PLC
         # managed_blocks: blocks this controller controls (for handoff decisions)
@@ -624,6 +625,19 @@ class sw_wayside_controller:
             speed = self.cmd_trains[cmd_train]["cmd speed"]
             pos = self.cmd_trains[cmd_train]["pos"]
             
+            # Check for hazards ahead and calculate temporary authority if needed
+            temp_auth = self.check_hazards_ahead(cmd_train, pos, auth)
+            if temp_auth is not None:
+                # Hazard detected - store temp authority and use it for train control
+                self.temp_authority[cmd_train] = temp_auth
+                auth_for_control = temp_auth  # Use temp authority for speed/movement control
+            else:
+                # No hazard - clear any existing temp authority and use real authority
+                if cmd_train in self.temp_authority:
+                    print(f"[HAZARD CLEARED] {cmd_train} at block {pos}: Resuming normal operation with real_auth={auth:.1f}m")
+                    del self.temp_authority[cmd_train]
+                auth_for_control = auth  # Use real authority
+            
             # Use actual train speed if available, otherwise fall back to commanded speed
             actual_speed = actual_train_speeds.get(cmd_train, speed)
             
@@ -649,17 +663,22 @@ class sw_wayside_controller:
             MIN_SPEED_THRESHOLD = 40  # Start dropping below 10 m/s at 40m authority
             MIN_SPEED = 10  # Don't go below 10 m/s until MIN_SPEED_THRESHOLD
             FINAL_MIN_SPEED = 1  # Final minimum speed before stopping
+            STOP_THRESHOLD = 5  # Below 5m, go to 0
             ACCELERATION = 5  # m/s per second increase
             DECELERATION = 20  # m/s per second decrease
             
-            if auth < MIN_SPEED_THRESHOLD:
-                # Below 40m authority - decelerate from 10 m/s to 1 m/s (minimum)
-                # Linear deceleration from 10 m/s at 40m to 1 m/s at 0m
-                target_speed = FINAL_MIN_SPEED + (MIN_SPEED - FINAL_MIN_SPEED) * (auth / MIN_SPEED_THRESHOLD)
-                target_speed = max(target_speed, FINAL_MIN_SPEED)  # Never go below 1 m/s
-            elif auth < DECEL_THRESHOLD:
+            # Use auth_for_control (temp or real) for speed calculations
+            if auth_for_control <= STOP_THRESHOLD:
+                # Very close or at 0 authority - stop completely
+                target_speed = 0
+            elif auth_for_control < MIN_SPEED_THRESHOLD:
+                # Below 40m authority - decelerate from 10 m/s to 1 m/s
+                # Linear deceleration from 10 m/s at 40m to 1 m/s at STOP_THRESHOLD
+                target_speed = FINAL_MIN_SPEED + (MIN_SPEED - FINAL_MIN_SPEED) * ((auth_for_control - STOP_THRESHOLD) / (MIN_SPEED_THRESHOLD - STOP_THRESHOLD))
+                target_speed = max(target_speed, FINAL_MIN_SPEED)  # Never go below 1 m/s (except at STOP_THRESHOLD)
+            elif auth_for_control < DECEL_THRESHOLD:
                 # Between 150m and 40m - decelerate from full speed to 10 m/s
-                decel_factor = (auth - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
+                decel_factor = (auth_for_control - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
                 target_speed = MIN_SPEED + (sug_speed - MIN_SPEED) * decel_factor
             else:
                 # Normal operation - accelerate toward suggested speed
@@ -694,9 +713,15 @@ class sw_wayside_controller:
                     self.cmd_trains[cmd_train]["cmd auth"] = auth
             
             # Reduce authority based on actual train speed (distance traveled per second)
-            auth = auth - actual_speed
+            # Only reduce if train is actually moving (speed > 0)
+            if speed > 0:
+                auth = auth - actual_speed
+                # If authority goes slightly negative or gets very small, clamp to 0
+                if auth < 5:
+                    auth = 0
             
-            # Check if authority exhausted BEFORE checking handoff
+            # Check if REAL authority exhausted (not temp authority)
+            # Only set Active=0 if real authority runs out
             if auth <= 0: 
                 auth = 0
                 self.cmd_trains[cmd_train]["cmd auth"] = 0  # Update to 0 before removing
@@ -725,6 +750,16 @@ class sw_wayside_controller:
                             print(f"Warning: Failed to update position for {cmd_train} after {max_retries} attempts: {e}")
                 # DON'T remove from cmd_trains - keep it so we can handle reactivation
                 # Just continue to next train (train will sit with auth=0 until CTC reactivates)
+                continue
+            
+            # Check if temp authority exhausted (but real authority still has value)
+            # In this case, train stops but does NOT get deactivated - just waits for hazard to clear
+            if cmd_train in self.temp_authority and auth_for_control <= 0:
+                # Temp authority exhausted - stop train but keep monitoring
+                self.cmd_trains[cmd_train]["cmd auth"] = auth  # Keep real authority value
+                self.cmd_trains[cmd_train]["cmd speed"] = 0     # Stop the train
+                # Do NOT set Active=0 - train will resume when hazard clears
+                # Continue to next iteration to keep checking for hazard clearance
                 continue
             
             self.cmd_trains[cmd_train]["cmd auth"] = auth
@@ -863,6 +898,8 @@ class sw_wayside_controller:
                 self.train_pos_start.pop(tr)
             if tr in self.train_auth_start:
                 self.train_auth_start.pop(tr)
+            if tr in self.temp_authority:
+                self.temp_authority.pop(tr)
             # Don't remove train_direction - preserve it for reactivation
             # if tr in self.train_direction:
             #     self.train_direction.pop(tr)
@@ -955,6 +992,103 @@ class sw_wayside_controller:
         
         self.occupied_blocks[next_block] = 1
         return next_block
+
+    def check_hazards_ahead(self, train_id: str, current_block: int, real_authority: float):
+        """
+        Check for hazards (occupied blocks or failures) ahead on the train's path.
+        Returns temporary authority if hazard found, None otherwise.
+        
+        Args:
+            train_id: Train identifier
+            current_block: Train's current block
+            real_authority: The real authority remaining (in meters)
+            
+        Returns:
+            Temporary authority (meters) or None if no hazards
+        """
+        if current_block not in self.block_graph:
+            return None
+        
+        direction = self.train_direction.get(train_id, 'forward')
+        check_block = current_block
+        safety_buffer = 50.0  # Stop 50m before hazard
+        
+        # Start distance_checked at current block's length (train is somewhere in current block)
+        # This gives us distance from train's position to end of current block
+        current_block_length = self.block_lengths.get(current_block, 100)
+        
+        # Calculate how far into the current block the train has traveled
+        if train_id in self.train_auth_start and train_id in self.cumulative_distance:
+            sug_auth = self.train_auth_start[train_id]
+            traveled_total = sug_auth - real_authority
+            cumulative = self.cumulative_distance.get(train_id, 0)
+            distance_into_current_block = traveled_total - cumulative
+            # Distance remaining in current block
+            distance_checked = current_block_length - distance_into_current_block
+            if distance_checked < 0:
+                distance_checked = 0  # Already at end of block
+        else:
+            # Fallback: assume at start of current block
+            distance_checked = current_block_length
+        
+        # Scan forward along the train's path
+        while distance_checked < real_authority:
+            # Get next block in path
+            if check_block not in self.block_graph:
+                break
+            
+            block_info = self.block_graph[check_block]
+            if direction == 'forward':
+                next_block = block_info['forward_next']
+            else:
+                next_block = block_info['reverse_next']
+            
+            if next_block == -1:
+                break  # End of line
+            
+            # Check if NEXT block has hazards BEFORE adding current block's distance
+            has_hazard = False
+            
+            # Check if block is occupied (but not by this train)
+            if self.occupied_blocks[next_block] == 1:
+                # Make sure it's not occupied by THIS train
+                if self.cmd_trains.get(train_id, {}).get("pos") != next_block:
+                    has_hazard = True
+            
+            # Check for failures (broken track, power failure, circuit failure)
+            if not has_hazard:
+                base_idx = next_block * 3
+                if base_idx < len(self.input_faults):
+                    # Check all three failure types for this block
+                    if (self.input_faults[base_idx] == 1 or      # Broken track
+                        self.input_faults[base_idx + 1] == 1 or  # Power failure
+                        self.input_faults[base_idx + 2] == 1):   # Circuit failure
+                        has_hazard = True
+            
+            if has_hazard:
+                # Found hazard at next_block - calculate temp authority to stop before it
+                # distance_checked is current position in scan (end of check_block)
+                # Give enough buffer for gradual deceleration (at least 150m to start slowing down)
+                temp_auth = distance_checked - safety_buffer
+                # Ensure minimum deceleration distance
+                if temp_auth < 150:
+                    temp_auth = max(temp_auth, 0)  # Don't go negative, but allow values below 150m
+                print(f"[HAZARD DETECTED] {train_id} at block {current_block}: Hazard at block {next_block}, temp_auth={temp_auth:.1f}m (real_auth={real_authority:.1f}m)")
+                return temp_auth
+            
+            # Add current block's length to distance AFTER checking next block
+            block_length = self.block_lengths.get(check_block, 100)
+            distance_checked += block_length
+            
+            # Update direction if transitioning
+            for from_block, to_block, new_direction in self.direction_transitions:
+                if check_block == from_block and next_block == to_block:
+                    direction = new_direction
+                    break
+            
+            check_block = next_block
+        
+        return None  # No hazards found within authority range
 
 
     def override_light(self, block_id: int, state: int):
