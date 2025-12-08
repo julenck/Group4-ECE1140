@@ -87,6 +87,31 @@ The train model is responsible for represent the physical train and simulating p
 ### Dynamics
 <img src="./screenshots/tm_dynamics.png">
 
+-The dynamics section of the train model...
+
+### Lights And Doors
+<img src="./screenshots/tm_doorslights.png">
+
+-The Env / Doors / Lights section of the train model...
+
+### Train Specs
+<img src="./screenshots/tm_specs.png">
+
+- The specs section of the train model...
+
+### Failures
+<img src="./screenshots/tm_fails.png">
+
+- The failures section of the train model...
+  
+### Controls
+<img src="./screenshots/tm_break.png">
+
+- The controls section of the train model simulates the passengers ability to activate the emergency break.
+
+### Announcements
+<img src="./screenshots/tm_announce.png">
+
 ## SW Train Controller
 <img src="./screenshots/sw_train_ctrl_main_UI.png">
 
