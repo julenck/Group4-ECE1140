@@ -136,7 +136,7 @@ The train model is responsible for represent the physical train and simulating p
 ## SW Train Controller
 <img src="./screenshots/sw_train_ctrl_main_UI.png">
 
-The software train controller is created upon the dispatching of a software train by the CTC module. it is responsible for
+The software train controller is created upon the dispatching of a software train by the CTC module. it is responsible for controlling the train.
 
 ### Engineering Panel
 
@@ -152,23 +152,19 @@ The train speed section located on the top left of the UI displays the current s
 
 <img src="./screenshots/sw_train_ctrl_speed.png">
 
-- The train driver is able to i
+- The train driver is able to control the set speed of the train with this text input.
 
 ### Train Information
 
-The train info section located on the top right of the UI...
+The train info section located on the top right of the UI displays important data sent to us from the Train Model, as well as useful data for the Driver.
 
 <img src="./screenshots/sw_train_ctrl_train_info.png">
 
-- This section displays...
-
 ### Train Controls
 
-The train control section located in the middle of the UI...
+The train control section located in the middle of the UI are the driver inputs to change functions of the train.
 
 <img src="./screenshots/sw_train_ctrl_train_ctrl.png">
-
-- In this section the driver can...
  
 ## HW Train Controller
 
