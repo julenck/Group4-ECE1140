@@ -80,6 +80,12 @@ Maintenance mode of the software wayside controller can be accessed by clicking 
 ## HW Wayside Controller
 
 ## Train Model
+<img src="./screenshots/train_model_ui.png">
+
+The train model is responsible for represent the physical train and simulating passenger interaction.
+
+### Dynamics
+<img src="./screenshots/tm_dynamics.png">
 
 ## SW Train Controller
 <img src="./screenshots/sw_train_ctrl_main_UI.png">
