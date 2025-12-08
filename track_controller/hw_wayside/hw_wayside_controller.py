@@ -1052,32 +1052,44 @@ class HW_Wayside_Controller:
                     state['cmd speed'] = 0.0
                     final_pos = state.get('pos', pos)
 
-                    # Deactivate train in CTC with retries using file_lock
-                    max_retries = 3
-                    for retry in range(max_retries):
+                    # Deactivate train in CTC (via API if available, otherwise file I/O)
+                    if self.wayside_api:
                         try:
-                            with self.file_lock:
-                                if not os.path.exists(self.ctc_comm_file):
-                                    break
-                                with open(self.ctc_comm_file, 'r', encoding='utf-8') as f:
-                                    data = json.load(f)
-                                if 'Trains' in data and tname in data['Trains']:
-                                    data['Trains'][tname]['Active'] = 0
-                                    data['Trains'][tname]['Train Position'] = final_pos
+                            self.wayside_api.update_train_status(
+                                train_name=tname,
+                                position=int(final_pos),
+                                state="stopped",
+                                active=0
+                            )
+                        except Exception as e:
+                            print(f"[HW Wayside {self.wayside_id}] API failed to deactivate {tname}: {e}")
+                    else:
+                        # File I/O fallback
+                        max_retries = 3
+                        for retry in range(max_retries):
+                            try:
+                                with self.file_lock:
+                                    if not os.path.exists(self.ctc_comm_file):
+                                        break
+                                    with open(self.ctc_comm_file, 'r', encoding='utf-8') as f:
+                                        data = json.load(f)
+                                    if 'Trains' in data and tname in data['Trains']:
+                                        data['Trains'][tname]['Active'] = 0
+                                        data['Trains'][tname]['Train Position'] = final_pos
+                                    else:
+                                        # Ensure structure exists
+                                        data.setdefault('Trains', {})
+                                        data['Trains'].setdefault(tname, {})
+                                        data['Trains'][tname]['Active'] = 0
+                                        data['Trains'][tname]['Train Position'] = final_pos
+                                    with open(self.ctc_comm_file, 'w', encoding='utf-8') as f:
+                                        json.dump(data, f, indent=2)
+                                break
+                            except (json.JSONDecodeError, IOError) as e:
+                                if retry < max_retries - 1:
+                                    time.sleep(0.01)
                                 else:
-                                    # Ensure structure exists
-                                    data.setdefault('Trains', {})
-                                    data['Trains'].setdefault(tname, {})
-                                    data['Trains'][tname]['Active'] = 0
-                                    data['Trains'][tname]['Train Position'] = final_pos
-                                with open(self.ctc_comm_file, 'w', encoding='utf-8') as f:
-                                    json.dump(data, f, indent=2)
-                            break
-                        except (json.JSONDecodeError, IOError) as e:
-                            if retry < max_retries - 1:
-                                time.sleep(0.01)
-                            else:
-                                print(f"Warning: Failed to deactivate {tname} after {max_retries} attempts: {e}")
+                                    print(f"Warning: Failed to deactivate {tname} after {max_retries} attempts: {e}")
 
                     to_remove.append(tname)
                     continue
@@ -1093,27 +1105,39 @@ class HW_Wayside_Controller:
                 if should_move:
                     new_pos = self.get_next_block(pos, idx, tname)
                     if new_pos == -1:
-                        # Reached end of line: deactivate and cleanup (similar to authority exhaustion)
-                        max_retries = 3
-                        for retry in range(max_retries):
+                        # Reached end of line: deactivate and cleanup (via API if available)
+                        if self.wayside_api:
                             try:
-                                with self.file_lock:
-                                    if not os.path.exists(self.ctc_comm_file):
-                                        break
-                                    with open(self.ctc_comm_file, 'r', encoding='utf-8') as f:
-                                        data = json.load(f)
-                                    data.setdefault('Trains', {})
-                                    data['Trains'].setdefault(tname, {})
-                                    data['Trains'][tname]['Active'] = 0
-                                    data['Trains'][tname]['Train Position'] = pos
-                                    with open(self.ctc_comm_file, 'w', encoding='utf-8') as f:
-                                        json.dump(data, f, indent=2)
-                                break
-                            except (json.JSONDecodeError, IOError) as e:
-                                if retry < max_retries - 1:
-                                    time.sleep(0.01)
-                                else:
-                                    print(f"Warning: Failed to deactivate {tname} after {max_retries} attempts: {e}")
+                                self.wayside_api.update_train_status(
+                                    train_name=tname,
+                                    position=int(pos),
+                                    state="stopped",
+                                    active=0
+                                )
+                            except Exception as e:
+                                print(f"[HW Wayside {self.wayside_id}] API failed to deactivate {tname} at end of line: {e}")
+                        else:
+                            # File I/O fallback
+                            max_retries = 3
+                            for retry in range(max_retries):
+                                try:
+                                    with self.file_lock:
+                                        if not os.path.exists(self.ctc_comm_file):
+                                            break
+                                        with open(self.ctc_comm_file, 'r', encoding='utf-8') as f:
+                                            data = json.load(f)
+                                        data.setdefault('Trains', {})
+                                        data['Trains'].setdefault(tname, {})
+                                        data['Trains'][tname]['Active'] = 0
+                                        data['Trains'][tname]['Train Position'] = pos
+                                        with open(self.ctc_comm_file, 'w', encoding='utf-8') as f:
+                                            json.dump(data, f, indent=2)
+                                    break
+                                except (json.JSONDecodeError, IOError) as e:
+                                    if retry < max_retries - 1:
+                                        time.sleep(0.01)
+                                    else:
+                                        print(f"Warning: Failed to deactivate {tname} after {max_retries} attempts: {e}")
                         to_remove.append(tname)
                         continue
                     else:
@@ -1122,26 +1146,41 @@ class HW_Wayside_Controller:
                         self.train_idx[tname] = self.train_idx.get(tname, 0) + 1
                         self.cumulative_distance[tname] = self.cumulative_distance.get(tname, 0.0) + self.block_lengths.get(pos, 100)
 
-                        # Write new position immediately to CTC so other controllers see it
-                        max_retries = 3
-                        for retry in range(max_retries):
+                        # Write new position immediately to CTC so other controllers see it (via API if available)
+                        if self.wayside_api:
                             try:
-                                with self.file_lock:
-                                    if not os.path.exists(self.ctc_comm_file):
-                                        break
-                                    with open(self.ctc_comm_file, 'r', encoding='utf-8') as f:
-                                        data = json.load(f)
-                                    data.setdefault('Trains', {})
-                                    data['Trains'].setdefault(tname, {})
-                                    data['Trains'][tname]['Train Position'] = new_pos
-                                    with open(self.ctc_comm_file, 'w', encoding='utf-8') as f:
-                                        json.dump(data, f, indent=2)
-                                break
-                            except (json.JSONDecodeError, IOError) as e:
-                                if retry < max_retries - 1:
-                                    time.sleep(0.01)
-                                else:
-                                    print(f"Warning: Failed to write position for {tname} after {max_retries} attempts: {e}")
+                                # Get train speed for state determination
+                                actual_train_speeds = self.load_train_speeds()
+                                train_speed = actual_train_speeds.get(tname, 0.0)
+                                self.wayside_api.update_train_status(
+                                    train_name=tname,
+                                    position=int(new_pos),
+                                    state="moving" if train_speed > 0.1 else "stopped",
+                                    active=1
+                                )
+                            except Exception as e:
+                                print(f"[HW Wayside {self.wayside_id}] API failed to update position for {tname}: {e}")
+                        else:
+                            # File I/O fallback
+                            max_retries = 3
+                            for retry in range(max_retries):
+                                try:
+                                    with self.file_lock:
+                                        if not os.path.exists(self.ctc_comm_file):
+                                            break
+                                        with open(self.ctc_comm_file, 'r', encoding='utf-8') as f:
+                                            data = json.load(f)
+                                        data.setdefault('Trains', {})
+                                        data['Trains'].setdefault(tname, {})
+                                        data['Trains'][tname]['Train Position'] = new_pos
+                                        with open(self.ctc_comm_file, 'w', encoding='utf-8') as f:
+                                            json.dump(data, f, indent=2)
+                                    break
+                                except (json.JSONDecodeError, IOError) as e:
+                                    if retry < max_retries - 1:
+                                        time.sleep(0.01)
+                                    else:
+                                        print(f"Warning: Failed to write position for {tname} after {max_retries} attempts: {e}")
 
                         # If train moved outside visible range, schedule handoff removal
                         if state['pos'] not in self.visible_blocks and state['pos'] != 0:
