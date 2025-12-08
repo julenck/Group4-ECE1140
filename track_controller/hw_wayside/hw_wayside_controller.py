@@ -6,10 +6,17 @@ import threading
 import time
 from hw_vital_check import HW_Vital_Check
 import importlib.util
-import os
 import json
 import csv
 import datetime
+import os
+import sys
+
+# Add hw_wayside directory to path for imports
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+
 
 plc_module = None
 
