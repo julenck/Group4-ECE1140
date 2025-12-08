@@ -28,13 +28,22 @@ The CTC is resonsible for dispatching trains and overlooking active train status
 - You then click the click button labeled "Distpatch" to dispatch the train.
 
 ### CTC Automatic Mode
-<img src=".screenshots/ctc_manual.png">
+<img src="./screenshots/ctc_manual.png">
 
 -In automatic mode, the dispatcher ca upload a schedule. The schedule must be a python file.
 
 ### CTC Maintenance Mode
-<img src=".screenshots/ctc_maint.png"> 
+<img src="./screenshots/ctc_maint.png"> 
 
+-In maintenance mode, the dispatcher can manually change switch postions, and close blocks.
+
+### Active Train, Gate, and Light Data
+
+- The center section of the CTC UI displays current active train information, as well as gate and light states.
+
+### Throughput
+
+- The lower section of the CTC UI displays the throughput in passengers per hour of the train.
 
 ## SW Wayside Controller
 <img src="./screenshots/sw_wayside_UI_ss.png">
