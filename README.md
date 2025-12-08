@@ -11,10 +11,15 @@
 
 # User Help
 **This code requires the following:**
-- Python version ... 
-- Watchdog
-- Pillow
-- 
+- Latest version of [Python](https://www.python.org/downloads/)
+- Use pip to install the following core system packages
+  ```bash
+  pip install watchdog flask flask-cors requests Pillow
+  ```
+- Use pip to install the following packages on Raspberry Pis
+  ```bash
+  pip install lgpio smbus2 GPIOZERO --break-system-packages
+  ```
 
 ## CTC
 The CTC is resonsible for dispatching trains and overlooking active train status.
