@@ -1,6 +1,15 @@
 #HW Wayside_Controller
 
 from __future__ import annotations
+import os
+import sys
+
+# CRITICAL: Add hw_wayside directory to path BEFORE importing local modules
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+
+# Now we can import local modules
 from typing import Dict, Any, List, Optional, Tuple
 import threading
 import time
@@ -9,13 +18,6 @@ import importlib.util
 import json
 import csv
 import datetime
-import os
-import sys
-
-# Add hw_wayside directory to path for imports
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-if _current_dir not in sys.path:
-    sys.path.insert(0, _current_dir)
 
 
 plc_module = None

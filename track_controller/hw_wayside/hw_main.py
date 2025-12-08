@@ -4,11 +4,17 @@
 
 from __future__ import annotations
 import os
+import sys
 os.environ["TK_SILENCE_DEPRECATION"] = "1"
 import tkinter as tk
 from typing import List, Dict
 import json
 import tempfile
+
+# CRITICAL: Add hw_wayside directory to path BEFORE importing local modules
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
 
 from hw_wayside_controller import HW_Wayside_Controller
 from hw_display import HW_Display
