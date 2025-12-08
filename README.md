@@ -17,6 +17,10 @@
 - 
 
 ## CTC
+The CTC is resonsible for dispatching trains and overlooking active train status.
+
+<img src="./screenshots/ctc_man.png">
+
 
 ## SW Wayside Controller
 <img src="./screenshots/sw_wayside_UI_ss.png">
