@@ -13,6 +13,16 @@ import track_controller.New_SW_Code.sw_wayside_controller_ui as wayside_sw
 import ctc.ctc_ui_temp as ctc_ui
 from train_controller.train_manager import TrainManagerUI
 
+# Import hardware wayside components
+try:
+    from track_controller.hw_wayside.hw_wayside_controller import HW_Wayside_Controller
+    from track_controller.hw_wayside.hw_wayside_controller_ui import HW_Wayside_Controller_UI
+    from track_controller.hw_wayside.hw_vital_check import HW_Vital_Check
+    HW_WAYSIDE_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Hardware wayside not available: {e}")
+    HW_WAYSIDE_AVAILABLE = False
+
 def run_ctc_ui(): 
     dispatcher_ui = ctc_ui.CTCUI()
     dispatcher_ui.run()
@@ -37,6 +47,44 @@ def run_wayside_sw_ui_2():
     
     ui2.mainloop()
 
+def run_wayside_hw_ui_2():
+    """Launch Hardware Wayside Controller 2 (X and L Down).
+    
+    Similar to hardware train controller, this can run on Raspberry Pi when server_url is provided.
+    """
+    if not HW_WAYSIDE_AVAILABLE:
+        print("ERROR: Hardware wayside components not available. Using SW wayside instead.")
+        run_wayside_sw_ui_2()
+        return
+    
+    # Get server URL from environment variable (if set)
+    server_url = os.environ.get('SERVER_URL', None)
+    
+    # Define blocks managed by this wayside (70-143)
+    blocks_70_143 = list(range(70, 144))
+    
+    # Create hardware wayside controller with API support
+    controller = HW_Wayside_Controller(
+        wayside_id="B",  # Wayside B (2nd wayside)
+        block_ids=blocks_70_143,
+        server_url=server_url,
+        timeout=5.0
+    )
+    
+    # Create Tk window
+    root = tk.Tk()
+    
+    # Create UI
+    ui = HW_Wayside_Controller_UI(
+        root=root,
+        controller=controller,
+        title="Hardware Wayside B - X and L Down (Blocks 70-143)"
+    )
+    ui.pack(fill=tk.BOTH, expand=True)
+    
+    # Start mainloop
+    root.mainloop()
+
 def main():
     # Start CTC UI in thread
     ctc_thread = threading.Thread(target=run_ctc_ui)
@@ -48,8 +96,8 @@ def main():
     wayside_thread_1.daemon = True
     wayside_thread_1.start() 
 
-    # Start Wayside UI 2 (X and L Down) in thread
-    wayside_thread_2 = threading.Thread(target=run_wayside_sw_ui_2)
+    # Start Wayside UI 2 (X and L Down) in thread - HARDWARE VERSION
+    wayside_thread_2 = threading.Thread(target=run_wayside_hw_ui_2)
     wayside_thread_2.daemon = True
     wayside_thread_2.start()
 
@@ -58,7 +106,7 @@ def main():
     root.title("System Status")
     root.geometry("300x200")
 
-    info_text = "All Systems Running:\n\n• CTC Dispatcher\n• Wayside Controller 1 (Blocks 0-73, 144-150)\n• Wayside Controller 2 (Blocks 70-143)"
+    info_text = "All Systems Running:\n\n• CTC Dispatcher\n• Wayside Controller 1 [SW] (Blocks 0-73, 144-150)\n• Wayside Controller 2 [HW] (Blocks 70-143)"
 
     label = ttk.Label(root, text=info_text, justify=tk.CENTER)
     label.pack(expand=True, padx=10, pady=10)

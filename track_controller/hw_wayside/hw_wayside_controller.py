@@ -51,11 +51,44 @@ def _encode_light_bits(name: str | None) -> Tuple[int, int]:
 
 class HW_Wayside_Controller:
 
-    def __init__(self, wayside_id: str, block_ids: List[str]):
-
+    def __init__(self, wayside_id: str, block_ids: List[str], server_url: Optional[str] = None, timeout: float = 5.0):
+        """Initialize hardware wayside controller.
+        
+        Args:
+            wayside_id: Wayside controller ID (e.g., "A", "B", "1", "2")
+            block_ids: List of block IDs controlled by this wayside
+            server_url: If provided, uses REST API client to connect to remote server.
+                       If None, uses local file-based I/O (default).
+                       Example: "http://192.168.1.100:5000" or "http://localhost:5000"
+            timeout: Network timeout in seconds for remote API (default: 5.0).
+        """
         self.wayside_id = wayside_id
         self.block_ids = [str(b) for b in (block_ids or [])]
         self._lock = threading.Lock()
+        
+        # Initialize API client if server_url is provided (similar to HW train controller)
+        self.server_url = server_url
+        self.wayside_api = None
+        if server_url:
+            try:
+                import sys
+                # Add track_controller/api to path
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                api_dir = os.path.join(os.path.dirname(current_dir), "api")
+                if api_dir not in sys.path:
+                    sys.path.insert(0, api_dir)
+                from wayside_api_client import WaysideAPIClient
+                
+                # Convert wayside_id to numeric (e.g., "A" -> 1, "B" -> 2)
+                numeric_id = ord(wayside_id) - ord('A') + 1 if isinstance(wayside_id, str) and len(wayside_id) == 1 and wayside_id.isalpha() else int(wayside_id)
+                self.wayside_api = WaysideAPIClient(wayside_id=numeric_id, server_url=server_url, timeout=timeout)
+                print(f"[HW Wayside {wayside_id}] Using REST API: {server_url}")
+            except Exception as e:
+                print(f"[HW Wayside {wayside_id}] Warning: Failed to initialize API client: {e}")
+                print(f"[HW Wayside {wayside_id}] Falling back to file-based I/O")
+                self.wayside_api = None
+        else:
+            print(f"[HW Wayside {wayside_id}] Using file-based I/O (no server_url)")
 
         # Vital / feed
         self._emergency = False
@@ -508,10 +541,33 @@ class HW_Wayside_Controller:
     # ------------------ CTC inputs (multi-train) -------------------
 
     def load_ctc_inputs(self) -> None:
-        """Read `self.ctc_comm_file` and populate `self.active_trains`.
+        """Read CTC commands (via API or from ctc_track_controller.json) and populate `self.active_trains`.
 
         This reads the CTC-supplied train information (Active, Suggested Authority, Suggested Speed, Train Position).
         """
+        # Use API client if available, otherwise file I/O
+        if self.wayside_api:
+            try:
+                ctc_commands = self.wayside_api.get_ctc_commands()
+                if ctc_commands:
+                    # API returns data in expected format
+                    trains = ctc_commands.get("Trains", {})
+                    # Ensure expected keys exist for robustness
+                    for tname, tinfo in list(trains.items()):
+                        if not isinstance(tinfo, dict):
+                            trains[tname] = {}
+                            tinfo = trains[tname]
+                        tinfo.setdefault('Train Position', 0)
+                        tinfo.setdefault('Active', 0)
+                        tinfo.setdefault('Suggested Authority', 0)
+                        tinfo.setdefault('Suggested Speed', 0)
+                    self.active_trains = trains
+                    return
+                # else fall through to file I/O
+            except Exception as e:
+                print(f"[HW Wayside {self.wayside_id}] API load_ctc_inputs failed: {e}, falling back to file I/O")
+        
+        # Legacy file I/O (fallback or when API not available)
         try:
             if not os.path.exists(self.ctc_comm_file):
                 return
@@ -1128,8 +1184,25 @@ class HW_Wayside_Controller:
                 self._schedule_trains_tick()
 
     def load_train_speeds(self) -> Dict[str, float]:
-        """Load actual train speeds (m/s) from Train_Model/train_data.json; returns mapping Train N -> m/s"""
+        """Load actual train speeds (via API or from Train_Model/train_data.json); returns mapping Train N -> m/s"""
         train_speeds: Dict[str, float] = {}
+        
+        # Use API client if available, otherwise file I/O
+        if self.wayside_api:
+            try:
+                api_speeds = self.wayside_api.get_train_speeds()
+                if api_speeds:
+                    # API returns speeds in mph with train names as keys
+                    # Convert to m/s (multiply by 0.44704)
+                    for train_name, velocity_mph in api_speeds.items():
+                        velocity_ms = velocity_mph * 0.44704
+                        train_speeds[train_name] = velocity_ms
+                    return train_speeds
+                # else fall through to file I/O
+            except Exception as e:
+                print(f"[HW Wayside {self.wayside_id}] API load_train_speeds failed: {e}, falling back to file I/O")
+        
+        # Legacy file I/O (fallback or when API not available)
         try:
             base = os.path.dirname(__file__)
             # Train_Model dir is sibling of track_controller
@@ -1152,10 +1225,65 @@ class HW_Wayside_Controller:
         return train_speeds
 
     def load_train_outputs(self, trains_to_remove: List[str] = []):
-        """Write commanded speed/authority to `wayside_to_train.json` for up to 5 trains.
+        """Write commanded speed/authority to trains (via API or wayside_to_train.json).
 
         This mirrors SW behavior: update only trains in our managed_blocks (or yard handled by controller 1).
         """
+        # Get actual train speeds first
+        actual_train_speeds = self.load_train_speeds()
+        
+        # Use API client if available
+        if self.wayside_api:
+            try:
+                for tkey in [f'Train {i}' for i in range(1, 6)]:
+                    if tkey in trains_to_remove:
+                        # Send zero commands for removed trains
+                        self.wayside_api.send_train_commands(
+                            train_name=tkey,
+                            commanded_speed=0.0,
+                            commanded_authority=0.0,
+                            current_station="",
+                            next_station=""
+                        )
+                    elif tkey in self.cmd_trains:
+                        train_pos = int(self.cmd_trains[tkey]["pos"])
+                        # Controller 2 should not write outputs for yard (block 0)
+                        if train_pos == 0 and 0 not in self.managed_blocks:
+                            continue
+                        if train_pos in self.managed_blocks or (train_pos == 0 and 0 in self.managed_blocks):
+                            # Convert m/s to mph for commanded speed
+                            cmd_speed_m_s = float(self.cmd_trains[tkey].get('cmd speed', 0.0) or 0.0)
+                            cmd_auth_m = float(self.cmd_trains[tkey].get('cmd auth', 0.0) or 0.0)
+                            cmd_speed_mph = cmd_speed_m_s * 2.23694
+                            cmd_auth_yds = cmd_auth_m * 1.09361
+                            
+                            # Get beacon data
+                            current_station = ""
+                            next_station = ""
+                            if train_pos in self.block_graph:
+                                train_direction = self.train_direction.get(tkey, 'forward')
+                                block_data = self.block_graph[train_pos]
+                                
+                                if train_direction == 'forward' and block_data.get('forward_beacon', {}).get('has_beacon'):
+                                    current_station = block_data['forward_beacon']['current_station']
+                                    next_station = block_data['forward_beacon']['next_station']
+                                elif train_direction == 'reverse' and block_data.get('reverse_beacon', {}).get('has_beacon'):
+                                    current_station = block_data['reverse_beacon']['current_station']
+                                    next_station = block_data['reverse_beacon']['next_station']
+                            
+                            # Send via API
+                            self.wayside_api.send_train_commands(
+                                train_name=tkey,
+                                commanded_speed=cmd_speed_mph,
+                                commanded_authority=cmd_auth_yds,
+                                current_station=current_station,
+                                next_station=next_station
+                            )
+                return  # Successfully sent via API
+            except Exception as e:
+                print(f"[HW Wayside {self.wayside_id}] API load_train_outputs failed: {e}, falling back to file I/O")
+        
+        # Legacy file I/O (fallback or when API not available)
         try:
             # Read existing file or create fresh structure
             try:
