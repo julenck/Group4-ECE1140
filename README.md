@@ -87,22 +87,22 @@ The train model is responsible for represent the physical train and simulating p
 ### Dynamics
 <img src="./screenshots/tm_dynamics.png">
 
--The dynamics section of the train model...
+-The dynamics section of the train model's main purpose is to show information on the movement of the train.
 
 ### Lights And Doors
 <img src="./screenshots/tm_doorslights.png">
 
--The Env / Doors / Lights section of the train model...
+-The Env / Doors / Lights section of the train model is responsible for showing the door and train light status.
 
 ### Train Specs
 <img src="./screenshots/tm_specs.png">
 
-- The specs section of the train model...
+- The specs section of the train model describes the physical attributes of the train that is being represented.
 
 ### Failures
 <img src="./screenshots/tm_fails.png">
 
-- The failures section of the train model...
+- The failures section of the train model allows murphy user to toggle train failures.
   
 ### Controls
 <img src="./screenshots/tm_break.png">
@@ -112,6 +112,8 @@ The train model is responsible for represent the physical train and simulating p
 ### Announcements
 <img src="./screenshots/tm_announce.png">
 
+- The announcement section of the train model displays the announcements that would be displayed to the passsengers on the train.
+  
 ## SW Train Controller
 <img src="./screenshots/sw_train_ctrl_main_UI.png">
 
@@ -145,8 +147,42 @@ The train info section located on the top right of the UI...
 
 The train control section located in the middle of the UI...
 
-<img src="./screenshots/sw_train_ctrl_ctrl.png">
+<img src="./screenshots/sw_train_ctrl_train_ctrl.png">
 
 - In this section the driver can...
  
 ## HW Train Controller
+
+<img src="./screenshots/hw_train_ctrl_ui.png">
+
+### Train Information
+
+The information in this panel shows the important data sent to us from the Train Model, as well as useful data for the Driver.
+
+### Train Controls
+
+Buttons (ON UI)
+- The buttons inputs that the driver sets on the Panel display here. These are read-only.
+
+Engineering Panel
+- The Kp and Ki must be set prior to the train moving. Once it is set using the clickbox labeled "Lock Values", It is unabled to be changed again.
+
+<img src="./screenshots/hw_train_ctrl_bb.png">
+
+### Hardware Buttons and Inputs
+
+Large Buttons
+- Manual Mode: Selection between setting auto mode and manual mode. In auto mode, set speed follows the commanded speed sent from wayside controllers. All other button inputs are blocked from being changed
+- Service Brake: Yellow button used to stop for routine needs (Smaller decelleration amount)
+- Emergency Brake: Red button used to stop for emergency cases and failure detection (Larger decelleration amount)
+
+Smaller Buttons
+- Interior Lights: Toggles ON/OFF lights inside train
+- Exterior Lights: Toggles ON/OFF lights outside train
+- Left Door: Opens/Closes doors on left side of train
+- Right Door: Opens/Closes doors on right side of train
+- Annoucements: Sends annoucement of the upcoming station and the platform side to the Train Model
+
+Potentiometers
+- Set Speed: Changes the speed
+- Set Temperature: Changes the internal cabin temperature
