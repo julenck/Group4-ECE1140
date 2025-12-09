@@ -276,11 +276,12 @@ class CTCUI:
 
         # Auto Frame UI
         self.auto_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        self.uploaded_file_path = None  # Store the schedule file path
         self.uploaded_file_label = tk.Label(self.auto_frame, text="", bg="lightblue", font=('Times New Roman', 12, 'italic'))
         upload_button = tk.Button(self.auto_frame, text="Upload Schedule", command=self.upload_schedule, width=40, height=1, bg="white", relief="flat", bd=0, font=("Times New Roman", 15, "bold"))
         upload_button.grid(row=0, column=0, columnspan=4, pady=10)
         self.uploaded_file_label.grid(row=1, column=0, columnspan=4, pady=(0, 10))
-        run_button = tk.Button(self.auto_frame, text="Run", width=20, height=1, bg="white", relief="flat", bd=0, font=("Times New Roman", 15, "bold"))
+        run_button = tk.Button(self.auto_frame, text="Run", width=20, height=1, bg="white", relief="flat", bd=0, font=("Times New Roman", 15, "bold"), command=self.run_schedule)
         run_button.grid(row=2, column=0, columnspan=4, pady=10)
 
         # Tables Below Mode Area
@@ -291,7 +292,7 @@ class CTCUI:
         self.active_trains_frame, self.active_trains_table = self.create_table_section(
             self.bottom_frame,
             "Active Trains",
-            ("Train", "Line", "Block", "State", "Speed (mph)", "Authority (yards)", "Current Station", "Destination", "Arrival Time"),
+            ("Train", "Line", "Block", "Speed (mph)", "Authority (yards)", "Destination", "Arrival Time"),
             []
         )
         self.active_trains_frame.grid(row=0, column=0, columnspan=3, sticky='nsew', padx=10)
@@ -299,14 +300,14 @@ class CTCUI:
             self.bottom_frame,
             "Lights",
             ("Line", "Block", "Status"),
-            [("Red", "A1", "Green"), ("Red", "A2", "Red")]
+            [""]
         )
         self.lights_frame.grid(row=0, column=3, columnspan=1, sticky='nsew', padx=5)
         self.gates_frame, self.gates_table = self.create_table_section(
             self.bottom_frame,
             "Gates",
             ("Line", "Block", "Status"),
-            [("Red", "A1", "Closed"), ("Red", "A2", "Closed")]
+            [""]
         )
         self.gates_frame.grid(row=0, column=4, columnspan=1, sticky='nsew', padx=5)
         self.throughput_frame = tk.Frame(self.bottom_frame)
@@ -431,11 +432,69 @@ class CTCUI:
             ]
         )
         if file_path:
+            self.uploaded_file_path = file_path  # Store the path
             self.uploaded_file_label.config(
                 text=f"Loaded: {file_path.split('/')[-1]}",
                 fg="darkgreen"
             )
             print(f"Selected schedule file: {file_path}")
+
+    def run_schedule(self):
+        """Run the uploaded schedule file"""
+        if not self.uploaded_file_path:
+            print("[CTC] No schedule file loaded. Please upload a schedule first.")
+            self.uploaded_file_label.config(
+                text="Error: No schedule file loaded",
+                fg="red"
+            )
+            return
+        
+        schedule_path = self.uploaded_file_path
+        print(f"[CTC] Running schedule from: {schedule_path}")
+        self.uploaded_file_label.config(
+            text="Running schedule...",
+            fg="blue"
+        )
+        
+        # Open Train Manager window for automatic dispatch
+        try:
+            from train_controller.train_manager import TrainManagerUI
+            if not hasattr(self, 'train_manager_window_auto') or not self.train_manager_window_auto.winfo_exists():
+                self.train_manager_window_auto = TrainManagerUI()
+        except Exception as e:
+            print(f"Failed to open Train Manager for automatic dispatch: {e}")
+        
+        # Run schedule dispatch in a separate thread to avoid blocking UI
+        def run_dispatch_thread():
+            try:
+                print(f"[CTC] Starting dispatch of schedule: {schedule_path}")
+                
+                # Import dispatch_schedule function from ctc_main_temp
+                import ctc.ctc_main_temp as ctc_main_temp
+                
+                dispatch_schedule = ctc_main_temp.dispatch_schedule
+                print("[CTC] Imported dispatch_schedule successfully")
+                
+                dispatch_schedule(schedule_path)
+                print("[CTC] Schedule dispatch completed successfully")
+                self.uploaded_file_label.config(
+                    text="✓ Schedule dispatch completed",
+                    fg="green"
+                )
+            except Exception as e:
+                print(f"[CTC] Error during schedule dispatch: {e}")
+                import traceback
+                traceback.print_exc()
+                self.uploaded_file_label.config(
+                    text=f"Error: {str(e)}",
+                    fg="red"
+                )
+        
+        # Start dispatch in background thread
+        print("[CTC] Creating dispatch thread")
+        dispatch_thread = self.threading.Thread(target=run_dispatch_thread, daemon=True)
+        dispatch_thread.start()
+        print("[CTC] Dispatch thread started")
 
     def create_table_section(self, parent, title, columns, data):
         tk = self.tk
@@ -482,17 +541,18 @@ class CTCUI:
 
         for train_name, info in trains.items():
             active_flag = track_trains.get(train_name, {}).get('Active', 0)
-            if not active_flag:
-                # skip trains that are not active
+            current_station = info.get("Current Station", "")
+            # Show train if it's active OR if it's at a station (dwelling)
+            # A train at a station will have Active=0 but Current Station will be set
+            if not active_flag and not current_station:
+                # skip trains that are neither active nor at a station
                 continue
             self.active_trains_table.insert("", "end", values=(
                 train_name,
                 info.get("Line", ""),
-                info.get("Position"),
-                info.get("State", ""),
+                info.get("Position", ""),
                 info.get("Suggested Speed", ""),
                 info.get("Authority", ""),
-                info.get("Current Station", ""),
                 info.get("Station Destination", ""),
                 info.get("Arrival Time", ""),
             ))
