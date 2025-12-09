@@ -3,13 +3,13 @@
         "Trains": {
             "Train 1": {
                 "Line": "Green",
-                "Suggested Speed": -2,
-                "Authority": 984,
-                "Station Destination": "Inglewood",
-                "Arrival Time": "19:15",
+                "Suggested Speed": 38,
+                "Authority": 2939,
+                "Station Destination": "Poplar",
+                "Arrival Time": "23:33",
                 "Position": 65,
                 "State": 0,
-                "Current Station": "---"
+                "Current Station": "Glenbury"
             },
             "Train 2": {
                 "Line": "",
