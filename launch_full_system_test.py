@@ -81,9 +81,11 @@ def launch_hw_wayside():
         # Create controller
         controller = HW_Wayside_Controller(
             wayside_id="B",
-            block_ids=blocks_70_143,
-            plc_path="Green_Line_PLC_XandLdown.py"
+            block_ids=blocks_70_143
         )
+        
+        # Load PLC program
+        controller.load_plc("Green_Line_PLC_XandLdown.py")
         
         # Create UI
         root = tk.Tk()
