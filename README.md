@@ -11,16 +11,44 @@
 
 # User Help
 **This code requires the following:**
-- Python version ... 
-- Watchdog
-- Pillow
-- 
+- Latest version of [Python](https://www.python.org/downloads/)
+- Use pip to install the following core system packages
+  ```bash
+  pip install watchdog flask flask-cors requests Pillow
+  ```
+- Use pip to install the following packages on Raspberry Pis
+  ```bash
+  pip install lgpio smbus2 GPIOZERO --break-system-packages
+  ```
 
 ## CTC
 The CTC is resonsible for dispatching trains and overlooking active train status.
 
+### CTC Manual Mode
 <img src="./screenshots/ctc_man.png">
 
+- In manual mode, The dispatcher can choose a train, line, destination, and arrival time.
+- The train is selected by the selected by the first selection box, the line is selected by the second selection block, and the destinination is selected by the third selection block.
+- The arrival time must be formated in military time, and must be actual time you want the train to arrive. If the current time is 11:05, and you want the train to arrive in 5 minutes, you must enter 1110
+- You then click the click button labeled "Distpatch" to dispatch the train.
+
+### CTC Automatic Mode
+<img src="./screenshots/ctc_manual.png">
+
+-In automatic mode, the dispatcher ca upload a schedule. The schedule must be a python file.
+
+### CTC Maintenance Mode
+<img src="./screenshots/ctc_maint.png"> 
+
+-In maintenance mode, the dispatcher can manually change switch postions, and close blocks.
+
+### Active Train, Gate, and Light Data
+
+- The center section of the CTC UI displays current active train information, as well as gate and light states.
+
+### Throughput
+
+- The lower section of the CTC UI displays the throughput in passengers per hour of the train.
 
 ## SW Wayside Controller
 <img src="./screenshots/sw_wayside_UI_ss.png">
@@ -55,13 +83,60 @@ Maintenance mode of the software wayside controller can be accessed by clicking 
 - Below that, the user can select a new plc file by using the "Browse" click button. This button will open file explorer and allow you to select a new .py to run. if your upload is successful, the filename below the click button will update to the new file name.
 
 ## HW Wayside Controller
+The harware wayside controller has the same responsibilities as the software wayside controller, just being implemented through the Raspberry Pi.
+<img src="./screenshots/Wayside_HW_UI.png">
+
+### Block Selection
+- The left side of the hardware wayside controller UI lists the available blocks that are controlled by the selected wayside. Upon selection of the block, the current information of that block is displayed on the right side of the UI.
+
+### Active Trains
+- The bottom section of the hardware wayside controller UI lists the current active trains that occupy a block in the selected wayside section.
+
+<img src="./screenshots/wayside_hw_pi.png">
+
+### Commanded Speed And Authority
+- The commanded speed and authority is displayed on the LCD screen connected to the Pi.
+- The switch is used to maually change switch positions. On the UI, if you select a block that contains a switch, you can use the switch connected to the Pi to change the direction the switch is facing.
 
 ## Train Model
+<img src="./screenshots/train_model_ui.png">
 
+The train model is responsible for represent the physical train and simulating passenger interaction.
+
+### Dynamics
+<img src="./screenshots/tm_dynamics.png">
+
+-The dynamics section of the train model's main purpose is to show information on the movement of the train.
+
+### Lights And Doors
+<img src="./screenshots/tm_doorslights.png">
+
+-The Env / Doors / Lights section of the train model is responsible for showing the door and train light status.
+
+### Train Specs
+<img src="./screenshots/tm_specs.png">
+
+- The specs section of the train model describes the physical attributes of the train that is being represented.
+
+### Failures
+<img src="./screenshots/tm_fails.png">
+
+- The failures section of the train model allows murphy user to toggle train failures.
+  
+### Controls
+<img src="./screenshots/tm_break.png">
+
+- The controls section of the train model simulates the passengers ability to activate the emergency break.
+
+### Announcements
+<img src="./screenshots/tm_announce.png">
+
+- The announcement section of the train model displays the announcements that would be displayed to the passsengers on the train.
+  
 ## SW Train Controller
 <img src="./screenshots/sw_train_ctrl_main_UI.png">
 
-The software train controller is created upon the dispatching of a software train by the CTC module. it is responsible for
+The software train controller is created upon the dispatching of a software train by the CTC module. it is responsible for controlling the train.
 
 ### Engineering Panel
 
@@ -77,22 +152,52 @@ The train speed section located on the top left of the UI displays the current s
 
 <img src="./screenshots/sw_train_ctrl_speed.png">
 
-- The train driver is able to i
+- The train driver is able to control the set speed of the train with this text input.
 
 ### Train Information
 
-The train info section located on the top right of the UI...
+The train info section located on the top right of the UI displays important data sent to us from the Train Model, as well as useful data for the Driver.
 
 <img src="./screenshots/sw_train_ctrl_train_info.png">
 
-- This section displays...
+### Train Controls
+
+The train control section located in the middle of the UI are the driver inputs to change functions of the train.
+
+<img src="./screenshots/sw_train_ctrl_train_ctrl.png">
+ 
+## HW Train Controller
+
+<img src="./screenshots/hw_train_ctrl_ui.png">
+
+### Train Information
+
+The information in this panel shows the important data sent to us from the Train Model, as well as useful data for the Driver.
 
 ### Train Controls
 
-The train control section located in the middle of the UI...
+Buttons (ON UI)
+- The buttons inputs that the driver sets on the Panel display here. These are read-only.
 
-<img src="./screenshots/sw_train_ctrl_ctrl.png">
+Engineering Panel
+- The Kp and Ki must be set prior to the train moving. Once it is set using the clickbox labeled "Lock Values", It is unabled to be changed again.
 
-- In this section the driver can...
- 
-## HW Train Controller
+<img src="./screenshots/hw_train_ctrl_bb.png">
+
+### Hardware Buttons and Inputs
+
+Large Buttons
+- Manual Mode: Selection between setting auto mode and manual mode. In auto mode, set speed follows the commanded speed sent from wayside controllers. All other button inputs are blocked from being changed
+- Service Brake: Yellow button used to stop for routine needs (Smaller decelleration amount)
+- Emergency Brake: Red button used to stop for emergency cases and failure detection (Larger decelleration amount)
+
+Smaller Buttons
+- Interior Lights: Toggles ON/OFF lights inside train
+- Exterior Lights: Toggles ON/OFF lights outside train
+- Left Door: Opens/Closes doors on left side of train
+- Right Door: Opens/Closes doors on right side of train
+- Annoucements: Sends annoucement of the upcoming station and the platform side to the Train Model
+
+Potentiometers
+- Set Speed: Changes the speed
+- Set Temperature: Changes the internal cabin temperature

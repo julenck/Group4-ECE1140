@@ -230,7 +230,7 @@ class train_controller:
         speed_difference = train_velocity - driver_velocity
         
         # Thresholds for engaging/releasing service brake
-        ENGAGE_THRESHOLD = 2.0   # Engage brake if going 2+ mph over target
+        ENGAGE_THRESHOLD = 0.5   # Engage brake if going 2+ mph over target
         RELEASE_THRESHOLD = 0.5  # Release brake when within 0.5 mph of target
         
         # Decide whether to engage or release service brake
@@ -333,40 +333,53 @@ class train_controller:
 
     def detect_and_respond_to_failures(self, state: dict):
         """Detect failures based on Train Model behavior and activate Train Controller failure flags.
-        
+
         Logic:
         - Engine Failure: Only detected when power is applied but train doesn't accelerate
         - Signal Failure: Detected when beacon_read_blocked flag is set
         - Brake Failure: Only detected when service brake is pressed but train doesn't slow
-        
+
         When detected, Train Controller activates corresponding train_controller_* flag and engages emergency brake.
+        When Train Model failure is resolved and emergency brake is released, Train Controller clears its failure flag.
         """
         updates = {}
-        
+
         # Detect engine failure: Only when trying to apply power but train doesn't respond
         if state.get('train_model_engine_failure', False):
             # Detect if power command is significant (> 1000W) - driver is trying to accelerate
             power_applied = state.get('power_command', 0.0) > 1000.0
-            
+
             if power_applied:
                 if not state.get('train_controller_engine_failure', False):
                     print("[Train Controller] ENGINE FAILURE DETECTED - Power applied but train not responding! Engaging emergency brake")
                     updates['train_controller_engine_failure'] = True
-        
+        # Clear engine failure flag if train model failure is resolved and emergency brake was released
+        elif state.get('train_controller_engine_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] ENGINE FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_engine_failure'] = False
+
         # Detect signal pickup failure: Only when Train Model blocks a beacon read
         if state.get('beacon_read_blocked', False):
             if not state.get('train_controller_signal_failure', False):
                 print("[Train Controller] SIGNAL PICKUP FAILURE DETECTED - Failed to read beacon! Engaging emergency brake")
                 updates['train_controller_signal_failure'] = True
                 updates['beacon_read_blocked'] = False  # Clear the flag after detecting
-        
+        # Clear signal failure flag if emergency brake was released (signal failure is momentary)
+        elif state.get('train_controller_signal_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] SIGNAL FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_signal_failure'] = False
+
         # Detect brake failure: Only detectable when service brake is pressed
         if state.get('train_model_brake_failure', False) and state.get('service_brake', False):
             if not state.get('train_controller_brake_failure', False):
                 print("[Train Controller] BRAKE FAILURE DETECTED - Service brake not responding! Engaging emergency brake")
                 updates['train_controller_brake_failure'] = True
                 updates['emergency_brake'] = True  # Engage emergency brake immediately
-        
+        # Clear brake failure flag if train model failure is resolved and emergency brake was released
+        elif state.get('train_controller_brake_failure', False) and not state.get('train_model_brake_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] BRAKE FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_brake_failure'] = False
+
         # Apply updates if any failures were detected/cleared
         if updates:
             self.api.update_state(updates)
@@ -413,6 +426,8 @@ class train_controller_ui(tk.Tk):
         tree_default_font = (font_style, 11)
         heading_font = (font_style, 15, "bold")
         tree_heading_font = (font_style, 13, "bold")
+        speed_display_font = (font_style, 40, "bold")  # Large font for speed displays
+        speed_label_font = (font_style, 14, "bold")    # Font for speed labels
 
         style = ttk.Style(self)
         style.configure("TLabelframe.Label", font=heading_font)
@@ -451,33 +466,55 @@ class train_controller_ui(tk.Tk):
             "seven_segment": 0x70
         }
 
-        #main frame which shows important train information panel
+        #main frame which shows speed displays and information panel
         main_frame = ttk.Frame(self)
         main_frame.pack(fill="both", expand=True, padx=10, pady=6)
 
+        # Speed control panel on the left (static size)
+        speed_frame = ttk.LabelFrame(main_frame, text="Speed Control")
+        speed_frame.pack(side="left", fill="y", padx=(0,10))
+        speed_frame.pack_propagate(False)  # Prevent frame from resizing based on contents
+        speed_frame.configure(width=320, height=400)  # Fixed size to accommodate larger numbers
+
+        # Current speed display section (top half)
+        current_speed_frame = ttk.Frame(speed_frame)
+        current_speed_frame.pack(fill="x", pady=(30,15), padx=10)
+
+        ttk.Label(current_speed_frame, text="Current Speed", font=speed_label_font).pack()
+        self.current_speed_label = ttk.Label(current_speed_frame, text="0.0 MPH", font=speed_display_font)
+        self.current_speed_label.pack(pady=(8,0))
+
+        # Driver set speed display section (bottom half)
+        driver_speed_frame = ttk.Frame(speed_frame)
+        driver_speed_frame.pack(fill="x", pady=(15,30), padx=10)
+
+        ttk.Label(driver_speed_frame, text="Driver Set Speed", font=speed_label_font).pack()
+        self.driver_speed_label = ttk.Label(driver_speed_frame, text="0.0 MPH", font=speed_display_font)
+        self.driver_speed_label.pack(pady=(8,0))
+
+        # Information panel frame on the right
         info_panel_frame = ttk.LabelFrame(main_frame, text="Train Information Panel", padding=(8,8))
-        info_panel_frame.pack(fill="both", expand=True, padx=(0,8))
+        info_panel_frame.pack(side="right", fill="both", expand=True)
 
         columns = ("parameter", "value", "unit")
         self.info_treeview = ttk.Treeview(info_panel_frame, columns=columns, show="headings")
         self.info_treeview.heading("parameter", text="Parameter")
         self.info_treeview.heading("value", text="Value")
         self.info_treeview.heading("unit", text="Unit")
-        self.info_treeview.column("parameter", anchor="w", width=320)
-        self.info_treeview.column("value", anchor="center", width=120)
-        self.info_treeview.column("unit", anchor="center", width=80)
+        self.info_treeview.column("parameter", anchor="w", width=200)
+        self.info_treeview.column("value", anchor="center", width=180)
+        self.info_treeview.column("unit", anchor="center", width=70)
         self.info_treeview.pack(fill="both", expand=True)
 
         self.important_parameters = [
             ("Commanded Speed", "", "mph"),
             ("Commanded Authority", "", "yards"),
             ("Speed Limit", "", "mph"),
-            ("Current Speed", "", "mph"),
-            ("Driver Set Speed", "", "mph"),  # Add driver_velocity display
             ("Power Availability", "", "W"),
             ("Cabin Temperature", "", "F°"),
             ("Set Temperature", "", "F°"),  # Add set_temperature display
             ("Station Side", "", "Left/Right"),
+            ("Current Station", "", "Station"),
             ("Next Station", "", "Station"),
             ("Announcement", "", ""),  # Add announcement row
             ("Failure(s)", "", "Type(s)"),
@@ -669,6 +706,10 @@ class train_controller_ui(tk.Tk):
             # Reload state one final time before display to ensure all updates are reflected
             state = self.api.get_state()
 
+            # Update speed displays
+            self.current_speed_label.config(text=f"{state.get('train_velocity', 0.0):.1f} MPH")
+            self.driver_speed_label.config(text=f"{state.get('driver_velocity', 0.0):.1f} MPH")
+
             # Update important parameters in the treeview
             children = self.info_treeview.get_children()
             for iid in children:
@@ -679,10 +720,6 @@ class train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", f"{state.get('commanded_authority', 0.0):.1f}")
                 elif param == "Speed Limit":
                     self.info_treeview.set(iid, "value", f"{state.get('speed_limit', 0.0):.1f}")
-                elif param == "Current Speed":
-                    self.info_treeview.set(iid, "value", f"{state.get('train_velocity', 0.0):.1f}")
-                elif param == "Driver Set Speed":
-                    self.info_treeview.set(iid, "value", f"{state.get('driver_velocity', 0):.1f}")
                 elif param == "Power Availability":
                     self.info_treeview.set(iid, "value", f"{state.get('power_command', 0.0):.1f}")
                 elif param == "Cabin Temperature":
@@ -691,6 +728,8 @@ class train_controller_ui(tk.Tk):
                     self.info_treeview.set(iid, "value", f"{state.get('set_temperature', 0):.1f}")
                 elif param == "Station Side":
                     self.info_treeview.set(iid, "value", state.get('station_side', ''))
+                elif param == "Current Station":
+                    self.info_treeview.set(iid, "value", state.get('current_station', ''))
                 elif param == "Next Station":
                     self.info_treeview.set(iid, "value", state.get('next_stop', ''))
                 elif param == "Announcement":

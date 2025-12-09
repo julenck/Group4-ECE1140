@@ -86,8 +86,8 @@ class HW_Wayside_Controller:
                 api_dir = os.path.join(os.path.dirname(current_dir), "api")
                 if api_dir not in sys.path:
                     sys.path.insert(0, api_dir)
-                from wayside_api_client import WaysideAPIClient
-
+                from wayside_api_client import WaysideAPIClient  # type: ignore[import]
+                
                 # Convert wayside_id to numeric (e.g., "A" -> 1, "B" -> 2)
                 numeric_id = ord(wayside_id) - ord('A') + 1 if isinstance(wayside_id, str) and len(wayside_id) == 1 and wayside_id.isalpha() else int(wayside_id)
                 self.wayside_api = WaysideAPIClient(wayside_id=numeric_id, server_url=server_url, timeout=timeout)
@@ -188,6 +188,13 @@ class HW_Wayside_Controller:
         # Multi-train state (parity with SW controller)
         self.active_trains: Dict[str, Dict[str, Any]] = {}
         self.cmd_trains: Dict[str, Dict[str, Any]] = {}  # {"Train 1": {"cmd auth": yards, "cmd speed": mph, "pos": int}}
+
+        # SW-compatible train tracking (add these missing structures)
+        self.train_auth_start: Dict[str, int] = {}  # Starting authority for each train
+        self.cumulative_distance: Dict[str, float] = {}  # Track actual distance traveled since last reset
+        self.train_direction: Dict[str, str] = {}  # Track direction for each train ('forward' or 'reverse')
+        self.last_seen_position: Dict[str, int] = {}  # Track last known position for handoff detection
+        self.train_idx: Dict[str, int] = {}  # Track index in green_order for each train
         
         # Use absolute paths based on project root (same approach as SW controller)
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -546,6 +553,68 @@ class HW_Wayside_Controller:
             if moved:
                 self._recompute_occupied()
 
+    def traveled_enough(self, sug_auth: int, cmd_auth: int, idx: int, train_id: str) -> bool:
+        """Check if train has traveled far enough to move to the next block"""
+        # Calculate distance traveled since activation/reset
+        traveled = sug_auth - cmd_auth
+
+        # Get cumulative distance that needs to be traveled to complete current block
+        cumulative = self.cumulative_distance.get(train_id, 0)
+
+        # Get current block length
+        if train_id in self.cmd_trains:
+            current_block = self.cmd_trains[train_id]["pos"]
+            current_block_length = self.block_lengths.get(current_block, 100)
+        else:
+            current_block_length = 100
+
+        # Total distance needed to complete current block
+        distance_needed = cumulative + current_block_length
+
+        # Move to next block only if traveled distance EXCEEDS distance needed
+        return traveled > distance_needed
+
+    def get_next_block(self, current_block: int, block_idx: int, train_id: str):
+        """Get next block based on current block and train direction"""
+        self.occupied_blocks[current_block] = 0
+
+        if current_block not in self.block_graph:
+            # Fallback to green_order if block not in graph
+            if current_block == 151:
+                self.train_idx[train_id] = 0
+                return -1
+            else:
+                if block_idx + 1 < len(self.green_order):
+                    next_block = self.green_order[block_idx + 1]
+                    self.occupied_blocks[next_block] = 1
+                    return next_block
+                return -1
+
+        # Use block_graph to determine next block based on direction
+        direction = self.train_direction.get(train_id, 'forward')
+        block_info = self.block_graph[current_block]
+
+        if direction == 'forward':
+            next_block = block_info['forward_next']
+        else:
+            next_block = block_info['reverse_next']
+
+        # Check for direction transition points
+        for from_block, to_block, new_direction in self.direction_transitions:
+            if current_block == from_block and next_block == to_block:
+                self.train_direction[train_id] = new_direction
+                break
+
+        if next_block == -1:
+            # End of line, reset or switch direction if bidirectional
+            if block_info['bidirectional']:
+                self.train_direction[train_id] = 'reverse' if direction == 'forward' else 'forward'
+            self.train_idx[train_id] = 0
+            return -1
+
+        self.occupied_blocks[next_block] = 1
+        return next_block
+
     # ------------------ CTC inputs (multi-train) -------------------
 
     def load_ctc_inputs(self) -> None:
@@ -851,82 +920,139 @@ class HW_Wayside_Controller:
         self._trains_timer.start()
 
     def _run_trains_tick(self):
+        """SW-compatible train processing logic"""
         try:
-            # Load latest CTC inputs and actual train speeds
+            # Load CTC inputs and actual train speeds (matching SW behavior)
             self.load_ctc_inputs()
             actual_train_speeds = self.load_train_speeds()
 
-            # First, clear occupancy for trains that left our visible range
-            for train in list(self.active_trains.keys()):
-                try:
-                    train_pos = int(self.active_trains[train].get('Train Position', 0))
-                except Exception:
-                    train_pos = 0
+            to_remove = []
+
+            # First pass: clear occupied blocks for trains that have left our visible range
+            for train in self.active_trains:
+                train_pos = self.active_trains[train]["Train Position"]
+                # If train is outside our visible range and we have it marked as occupied somewhere, clear it
                 if train_pos not in self.visible_blocks and train_pos != 0:
+                    # Check if we were tracking this train and need to clear its old position
                     if train in self.last_seen_position:
                         last_pos = self.last_seen_position[train]
-                        # If we were marking this block occupied, clear it
-                        if last_pos in self.visible_blocks:
-                            try:
-                                if str(last_pos) in self._occupied:
-                                    self._occupied.discard(str(last_pos))
-                            except Exception:
-                                pass
+                        if last_pos in self.visible_blocks and 0 <= last_pos < len(self.occupied_blocks):
+                            if self.occupied_blocks[last_pos] == 1:
+                                self.occupied_blocks[last_pos] = 0
 
-            # Process activations / pick-ups
-            for tname, tinfo in list(self.active_trains.items()):
-                try:
-                    active = int(tinfo.get('Active', 0)) == 1
-                except Exception:
-                    active = False
-                if not active:
-                    continue
+            for train in self.active_trains:
+                if train not in self.cmd_trains and self.active_trains[train]["Active"]==1:
+                    # Initialize handoff data variables (will be set if handoff occurs)
+                    stored_cumulative = 0.0
+                    stored_auth_start_m = 0.0
+                    train_pos = self.active_trains[train]["Train Position"]
+                    sug_auth = self.active_trains[train]["Suggested Authority"]
 
-                if tname not in self.cmd_trains:
-                    # Candidate for activation
-                    try:
-                        pos = int(tinfo.get('Train Position', 0))
-                    except Exception:
-                        pos = 0
+                    # Always update last seen position for tracking
+                    current_last_pos = self.last_seen_position.get(train, 0)
 
-                    # Skip trains outside our managed blocks
-                    if pos not in self.managed_blocks and pos != 0:
-                        self.last_seen_position[tname] = pos
+                    # Skip trains not in our managed section
+                    # Only Controller 1 (XandLup) manages yard (block 0) - ALL trains start from yard
+                    if train_pos == 0 and self.wayside_id != "A":
+                        # Controller 2 should not pick up trains from yard
+                        self.last_seen_position[train] = train_pos
                         continue
 
+                    # If train is at yard (block 0), ONLY Controller 1 should activate it
+                    # Controller 2 should never activate a train at block 0
+                    if train_pos == 0:
+                        # Additional check: ensure we're Controller 1
+                        if self.wayside_id != "A":
+                            self.last_seen_position[train] = train_pos
+                            continue
+
+                    if train_pos not in self.managed_blocks and train_pos != 0:
+                        # Update last seen position even if we're not managing it
+                        self.last_seen_position[train] = train_pos
+                        continue
+
+                    if train_pos != 0:
+                        # Check if this is a handoff from another controller
+                        # If train was outside our managed section and is now inside, pick it up
+                        last_in_our_section = current_last_pos in self.managed_blocks or current_last_pos == 0
+                        now_in_our_section = train_pos in self.managed_blocks
+                        is_handoff = not last_in_our_section and now_in_our_section and current_last_pos != 0
+
+                        if not is_handoff:
+                            # Not a handoff - apply normal activation rules
+                            # Only activate if:
+                            # 1. Fresh dispatch from station with authority increase
+                            # 2. Train is at a station block (valid starting point)
+
+                            if train_pos not in self.station_blocks and len(self.station_blocks) > 0:
+                                # Train is mid-track (not at a station), not a handoff - skip to avoid authority reset
+                                self.last_seen_position[train] = train_pos
+                                continue
+
+                            # Even if at a station, check if it's a fresh dispatch or just passing through
+                            # If we just saw this train at a different position, it's in transit - don't reactivate
+                            if current_last_pos != 0 and current_last_pos != train_pos:
+                                # Train was already moving and entered this station
+                                # This is NOT a fresh dispatch, so skip to avoid reactivation
+                                self.last_seen_position[train] = train_pos
+                                continue
+
+                            # If train hasn't moved since we last saw it, check if authority has increased (new dispatch)
+                            if current_last_pos == train_pos:
+                                # Train is stationary at same position
+                                # Check if this is a new dispatch by comparing authority
+                                last_auth = self.train_auth_start.get(train, 0)
+                                if sug_auth <= last_auth:
+                                    # Authority hasn't increased - train is just waiting, don't reactivate
+                                    continue
+                                # Authority increased - this is a new dispatch, proceed with activation below
+
                     # CTC sends authority in meters and speed in mph
-                    sug_auth_m = float(tinfo.get('Suggested Authority', 0) or 0)  # meters
-                    sug_speed_mph = float(tinfo.get('Suggested Speed', 0) or 0)  # mph
+                    sug_auth_m = float(self.active_trains[train].get('Suggested Authority', 0) or 0)  # meters
+                    sug_speed_mph = float(self.active_trains[train].get('Suggested Speed', 0) or 0)  # mph
                     sug_speed_ms = sug_speed_mph * 0.44704  # Convert mph to m/s for internal use
 
                     # Determine if this is a handoff: last seen outside our managed_blocks and now inside
                     # OR if we've never seen this train before but it's now in our range (first pickup)
-                    current_last = self.last_seen_position.get(tname, None)
+                    current_last = self.last_seen_position.get(train, None)
                     
                     # Check if this is a handoff or first-time pickup
-                    now_in_section = (pos in self.managed_blocks)
+                    now_in_section = (train_pos in self.managed_blocks)
                     
                     if current_last is None:
                         # First time seeing this train - check if it's coming from outside our range
                         # This is a handoff if the train is in our section but we never tracked it
-                        is_handoff = now_in_section and pos != 0
+                        is_handoff = now_in_section and train_pos != 0
+                        print(f"[HW Wayside {self.wayside_id}] First time seeing {train} at {train_pos}, is_handoff={is_handoff}")
                     else:
                         last_in_section = (current_last in self.managed_blocks) or (current_last == 0)
                         is_handoff = (not last_in_section) and now_in_section and current_last != 0
+                        print(f"[HW Wayside {self.wayside_id}] {train}: last_pos={current_last}, current_pos={train_pos}, last_in_section={last_in_section}, now_in_section={now_in_section}, is_handoff={is_handoff}")
 
                     if is_handoff:
                         # Read prior controller outputs (wayside_to_train) to obtain remaining auth/speed
+                        print(f"[HW Wayside {self.wayside_id}] Taking over train {train} via handoff at block {train_pos}")
                         try:
                             with open(self.train_comm_file, 'r', encoding='utf-8') as f:
                                 train_data = json.load(f)
                                 # File stores in mph/yards, convert to m/s and meters
-                                current_auth_yds = train_data.get(tname, {}).get('Commanded Authority', sug_auth_m * 1.09361)
-                                current_speed_mph = train_data.get(tname, {}).get('Commanded Speed', sug_speed_mph)
+                                current_auth_yds = train_data.get(train, {}).get('Commanded Authority', sug_auth_m * 1.09361)
+                                current_speed_mph = train_data.get(train, {}).get('Commanded Speed', sug_speed_mph)
                                 current_auth = float(current_auth_yds) * 0.9144  # yards to meters
                                 current_speed = float(current_speed_mph) * 0.44704  # mph to m/s
-                        except Exception:
+
+                                # Read stored cumulative distance and auth start for accurate handoff
+                                stored_cumulative = train_data.get(train, {}).get('Cumulative Distance', 0)
+                                stored_auth_start = train_data.get(train, {}).get('Train Auth Start', current_auth)
+                                stored_auth_start_m = float(stored_auth_start) * 0.9144  # yards to meters
+
+                                print(f"[HW Wayside {self.wayside_id}] Read handoff data for {train}: speed={current_speed_mph:.1f} mph ({current_speed:.2f} m/s), auth={current_auth_yds:.0f} yards ({current_auth:.0f} m), cumulative={stored_cumulative:.0f}m, auth_start={stored_auth_start_m:.0f}m")
+                        except Exception as e:
+                            print(f"[HW Wayside {self.wayside_id}] Failed to read handoff data for {train}, using CTC values: {e}")
                             current_auth = sug_auth_m
                             current_speed = sug_speed_ms
+                            stored_cumulative = 0
+                            stored_auth_start_m = sug_auth_m  # Use current CTC value as fallback
                         auth_to_use = float(current_auth)
                         speed_to_use = float(current_speed)
                     else:
@@ -934,36 +1060,41 @@ class HW_Wayside_Controller:
                         speed_to_use = float(sug_speed_ms)  # m/s
 
                     # Initialize commanded train entry
-                    self.cmd_trains[tname] = {
+                    self.cmd_trains[train] = {
                         'cmd auth': auth_to_use,
                         'cmd speed': speed_to_use,
-                        'pos': pos,
+                        'pos': train_pos,
                     }
-                    
+
+                    print(f"[HW Wayside {self.wayside_id}] Activated train {train} at block {train_pos} (speed: {speed_to_use:.2f} m/s, auth: {auth_to_use:.0f} m, handoff: {is_handoff})")
+                    if is_handoff:
+                        print(f"[HW Wayside {self.wayside_id}] Handoff details: stored_cumulative={stored_cumulative:.0f}m, stored_auth_start={stored_auth_start_m:.0f}m")
+
                     # Track CTC authority for reactivation detection (matching SW behavior)
-                    self.last_ctc_authority[tname] = auth_to_use
+                    self.last_ctc_authority[train] = auth_to_use
 
                     # Initialize per-train tracking
-                    if pos in self.green_order:
-                        self.train_idx[tname] = self.green_order.index(pos)
+                    if train_pos in self.green_order:
+                        self.train_idx[train] = self.green_order.index(train_pos)
                     else:
-                        self.train_idx[tname] = 0
-                    self.train_pos_start[tname] = self.train_idx[tname]
-                    # For handoff, set auth_start to suggested authority from CTC (in meters)
+                        self.train_idx[train] = 0
+                    self.train_pos_start[train] = self.train_idx[train]
+                    # For handoff, use the stored cumulative distance from the previous controller
                     if is_handoff:
-                        self.train_auth_start[tname] = float(sug_auth_m)
-                        traveled_before = float(sug_auth_m) - auth_to_use
-                        self.cumulative_distance[tname] = traveled_before
+                        # Use the stored values from the handoff data instead of calculating
+                        self.train_auth_start[train] = stored_auth_start_m
+                        self.cumulative_distance[train] = stored_cumulative
+                        print(f"[HW Wayside {self.wayside_id}] Using stored handoff data for {train}: auth_start={stored_auth_start_m:.0f}m, cumulative_distance={stored_cumulative:.0f}m")
                     else:
-                        self.train_auth_start[tname] = auth_to_use  # meters
+                        self.train_auth_start[train] = auth_to_use  # meters
                         # initialize cumulative distance heuristics
-                        if pos == 0:
-                            self.cumulative_distance[tname] = 0.0
+                        if train_pos == 0:
+                            self.cumulative_distance[train] = 0.0
                         else:
                             # default assume at end of station block
-                            self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
+                            self.cumulative_distance[train] = -float(self.block_lengths.get(train_pos, 100))
 
-                    self.last_seen_position[tname] = pos
+                    self.last_seen_position[train] = train_pos
 
             # Now update each commanded train: decrement authority, possibly move, write outputs
             to_remove = []
@@ -1002,32 +1133,29 @@ class HW_Wayside_Controller:
                         auth = new_auth
                         speed = new_speed
 
+                # Get current CTC values (these may have changed)
+                current_sug_auth = float(self.active_trains.get(tname, {}).get('Suggested Authority', auth) or auth)
+                current_sug_speed = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed) or speed)
+
+                # Only update commanded values if CTC gives MORE authority than we currently have
+                # This prevents overriding handoff authority with stale CTC values
+                if current_sug_auth > auth:
+                    # CTC gave more authority - update our commanded values
+                    print(f"[HW Wayside {self.wayside_id}] CTC override for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m, speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
+                    auth = current_sug_auth
+                    speed = current_sug_speed
+                    state['cmd auth'] = auth
+                    state['cmd speed'] = speed
+                    self.train_auth_start[tname] = auth
+
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
 
-                # Get suggested speed from CTC and speed limit for current block
-                sug_speed = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed) or speed)
+                # Get block speed limit (matching SW controller behavior)
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
-                
-                # Calculate target speed based on authority remaining (like SW does)
-                # When authority is low, reduce speed to help train stop
-                DECEL_THRESHOLD = 150  # Start decelerating when less than 150m authority
-                MIN_SPEED_THRESHOLD = 40  # Start dropping below 10 m/s at 40m authority
-                MIN_SPEED = 10  # Don't go below 10 m/s until MIN_SPEED_THRESHOLD
-                FINAL_MIN_SPEED = 1  # Final minimum speed before stopping
-                
-                if auth <= 0:
-                    target_speed = 0
-                elif auth < MIN_SPEED_THRESHOLD:
-                    # Very low authority - reduce to final minimum
-                    target_speed = FINAL_MIN_SPEED
-                elif auth < DECEL_THRESHOLD:
-                    # Low authority - linear interpolation from MIN_SPEED to sug_speed
-                    ratio = (auth - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
-                    target_speed = MIN_SPEED + ratio * (min(sug_speed, speed_limit) - MIN_SPEED)
-                else:
-                    # Normal operation - use min of suggested speed and block limit
-                    target_speed = min(sug_speed, speed_limit)
+
+                # Cap commanded speed at block speed limit (matching SW controller)
+                target_speed = min(current_sug_speed, speed_limit)
                 
                 # Smoothly adjust commanded speed toward target
                 ACCEL_RATE = 2.0  # m/s per tick acceleration
@@ -1043,6 +1171,8 @@ class HW_Wayside_Controller:
                 # Decrement authority by distance traveled in this period
                 # assume _trains_period is seconds between ticks
                 dec = actual_speed * self._trains_period
+                if dec > 0:
+                    print(f"[HW Wayside {self.wayside_id}] {tname} auth {auth:.1f}m - {dec:.1f}m = {auth-dec:.1f}m (speed: {actual_speed:.2f} m/s, period: {self._trains_period:.1f}s)")
                 auth -= dec
 
                 # If authority exhausted, set to 0 and mark for removal (and write final position to CTC)
@@ -1182,9 +1312,44 @@ class HW_Wayside_Controller:
                                     else:
                                         print(f"Warning: Failed to write position for {tname} after {max_retries} attempts: {e}")
 
-                        # If train moved outside visible range, schedule handoff removal
+                        # If train moved outside visible range, write commanded values for handoff and schedule removal
                         if state['pos'] not in self.visible_blocks and state['pos'] != 0:
                             if tname not in self.trains_to_handoff:
+                                # Write commanded values to shared file for next controller (SW-compatible handoff)
+                                print(f"[HW Wayside {self.wayside_id}] Handing off train {tname} at block {state['pos']} (speed: {state['cmd speed']:.2f} m/s, auth: {state['cmd auth']:.0f} m)")
+                                try:
+                                    with self.file_lock:
+                                        # Read existing train_comm_file
+                                        try:
+                                            with open(self.train_comm_file, 'r', encoding='utf-8') as f:
+                                                train_data = json.load(f)
+                                        except:
+                                            train_data = {}
+
+                                        # Update with current commanded values for this train (convert to mph/yards like SW controller)
+                                        cmd_speed_mph = state['cmd speed'] * 2.23694  # m/s to mph
+                                        cmd_auth_yds = state['cmd auth'] * 1.09361    # meters to yards
+
+                                        print(f"[HW Wayside {self.wayside_id}] Writing handoff data for {tname}: speed={cmd_speed_mph:.1f} mph, auth={cmd_auth_yds:.0f} yards ({state['cmd auth']:.0f}m), cumulative={self.cumulative_distance.get(tname, 0):.0f}m")
+
+                                        if tname not in train_data:
+                                            train_data[tname] = {"Commanded Speed": 0, "Commanded Authority": 0, "Beacon": {"Current Station": "", "Next Station": ""}, "Train Speed": 0}
+
+                                        train_data[tname]["Commanded Speed"] = cmd_speed_mph
+                                        train_data[tname]["Commanded Authority"] = cmd_auth_yds
+                                        # Also store cumulative distance for accurate handoff calculation
+                                        train_data[tname]["Cumulative Distance"] = self.cumulative_distance.get(tname, 0)
+                                        train_data[tname]["Train Auth Start"] = self.train_auth_start.get(tname, state['cmd auth'])
+
+                                        # Write back to file
+                                        with open(self.train_comm_file, 'w', encoding='utf-8') as f:
+                                            json.dump(train_data, f, indent=2)
+
+                                        print(f"[HW Wayside {self.wayside_id}] Wrote handoff data for {tname}: speed={cmd_speed_mph:.1f} mph, auth={cmd_auth_yds:.0f} yards")
+
+                                except Exception as e:
+                                    print(f"[HW Wayside {self.wayside_id}] Warning: Failed to write handoff data for {tname}: {e}")
+
                                 self.trains_to_handoff.append(tname)
 
             # Write commanded outputs to train file (similar to SW behavior)
@@ -1796,10 +1961,28 @@ class HW_Wayside_Controller:
         b = str(block_id)
         with self._lock:
             occupied_here = (b in self._occupied)
+
+            # For blocks we manage, show commanded values from active trains instead of simulated values
+            speed_mph = 0.0
+            authority_yards = 0
+
+            if b in self.block_ids:
+                # Check if any train is currently commanded to occupy this block
+                for train_id, train_data in self.cmd_trains.items():
+                    if str(train_data.get('pos', '')) == b:
+                        # This train is commanded to be at this block - show its commanded values
+                        speed_mph = train_data.get('cmd speed', 0.0)
+                        authority_yards = train_data.get('cmd auth', 0)
+                        break
+                else:
+                    # No train commanded to this block, show simulated values for maintenance mode
+                    speed_mph = self._speed_mph
+                    authority_yards = self._authority_yds
+
             state = {
                 "block_id": b,
-                "speed_mph": self._speed_mph if b in self.block_ids else 0.0,
-                "authority_yards": self._authority_yds if b in self.block_ids else 0,
+                "speed_mph": speed_mph,
+                "authority_yards": authority_yards,
                 "occupied": occupied_here,
                 "switch": self._switch_state.get(b, "-"),
                 "light": self._light_state.get(b, "-"),

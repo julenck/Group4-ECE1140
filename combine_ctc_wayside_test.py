@@ -111,6 +111,11 @@ def main():
     # NOTE: Wayside 2 runs on separate Raspberry Pi
     # Use run_wayside_hw_ui_2() on Raspberry Pi with SERVER_URL set
 
+    wayside_thread_2 = threading.Thread(target=run_wayside_hw_ui_2)
+    wayside_thread_2.daemon = True
+    wayside_thread_2.start()
+
+
     # Create a simple status window
     root = tk.Tk()
     root.title("System Status")
