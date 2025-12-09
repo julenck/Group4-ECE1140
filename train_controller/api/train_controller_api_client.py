@@ -131,7 +131,7 @@ class train_controller_api_client:
                         not_found_attempts += 1
                         if not_found_attempts == 1:  # Only print once
                             print(f"[API Client] Train {self.train_id} not found on server, waiting for dispatch...")
-                        elif not_found_attempts % 10 == 0:  # Print every 10 attempts
+                        elif not_found_attempts % 50 == 0:  # Print every 50 attempts (less spam)
                             print(f"[API Client] Still waiting for Train {self.train_id} to be dispatched...")
                         break  # Break inner loop to continue outer loop
                     else:
@@ -146,9 +146,9 @@ class train_controller_api_client:
                     if attempt == self.max_retries - 1:
                         print(f"[API Client] Request failed: {e}")
 
-            # Wait before retrying for 404
+            # Wait before retrying for 404 (reduced to avoid blocking UI)
             if not_found_attempts > 0:
-                time.sleep(1)  # Wait 1 second between 404 retries
+                time.sleep(0.1)  # Wait 0.1 second between 404 retries
 
         # All retries failed - fall back to cache or defaults
         print(f"[API Client] All connection attempts failed, using fallback")
