@@ -312,10 +312,11 @@ def dispatch_train(train, line, station, arrival_time_str,
             print(f"[MAIN_LOOP] Station {i}: {test}, is_single_station_dispatch={is_single_station_dispatch}, destination={station}")
             print(f"next station ={test}")
             # Authority for trains is based on the destination station's index
-            # The authority is the distance FROM the destination station TO the next station
-            authority_meters = route_info["Meters to next"][dest_id]
+            # For manual mode dispatch, authority is the distance to reach the target station
+            # Read directly from the CTC track map at the target station index
+            authority_meters = route_info["Meters to next"][i]
             authority_yards = int(authority_meters * 1.094)
-            print(f"authority in meters = {authority_meters} (from track map at destination station index {dest_id})")
+            print(f"authority in meters = {authority_meters} (from track map at station index {i})")
             next_station_loc = route_by_sequence[i]["block"]
             print(f"next station loc = {next_station_loc}")
             
@@ -374,8 +375,9 @@ def dispatch_train(train, line, station, arrival_time_str,
             
             # If not at final destination, set Active = 1 with new authority for next leg
             if test != station:
-                # Authority is always based on the final destination station
-                next_authority_meters = route_info["Meters to next"][dest_id]
+                # For manual mode dispatch, read next authority from CTC track map
+                # When at station i, next authority is to station i+1
+                next_authority_meters = route_info["Meters to next"][i+1]
                 next_authority_yards = int(next_authority_meters * 1.094)
                 
                 # Update ctc_data.json with new authority and clear current station
