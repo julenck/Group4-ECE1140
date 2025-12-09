@@ -7,11 +7,86 @@ for communication between Train Controller and Train Model modules.
 import json
 import os
 import threading
+import tempfile
 from typing import Dict, Optional
 
 # Global file lock for thread-safe access to train_states.json
 # Using RLock (reentrant lock) to allow same thread to acquire lock multiple times
 _file_lock = threading.Lock()
+
+def safe_write_json(filepath: str, data: dict) -> bool:
+    """Thread-safe atomic JSON file write with validation.
+    
+    Writes to a temporary file first, then atomically renames to target.
+    This prevents partial writes and race conditions.
+    
+    Args:
+        filepath: Target JSON file path
+        data: Dictionary to write as JSON
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Sort keys if writing to train_states.json
+        if "train_states.json" in filepath and isinstance(data, dict):
+            data = {k: data[k] for k in sorted(data.keys())}
+        
+        # Validate JSON structure by serializing first
+        json_str = json.dumps(data, indent=4)
+        
+        # Count braces to ensure balance
+        if json_str.count('{') != json_str.count('}'):
+            print(f"[API] ERROR: Unbalanced braces in JSON data")
+            return False
+        
+        # Write to temporary file in same directory
+        dir_name = os.path.dirname(filepath)
+        with tempfile.NamedTemporaryFile(mode='w', dir=dir_name, delete=False, suffix='.tmp') as tmp_file:
+            tmp_file.write(json_str)
+            tmp_path = tmp_file.name
+        
+        # Atomic rename (overwrites target file)
+        # On Windows, os.replace() can fail with "Access Denied" if file is open
+        # Use retry logic with brief delay
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if os.path.exists(filepath):
+                    # On Windows, try to remove first if replace fails
+                    try:
+                        os.replace(tmp_path, filepath)
+                        break  # Success!
+                    except PermissionError:
+                        if attempt < max_retries - 1:
+                            import time
+                            time.sleep(0.01)  # Wait 10ms and retry
+                            continue
+                        else:
+                            # Last attempt - try remove then rename
+                            os.remove(filepath)
+                            os.rename(tmp_path, filepath)
+                            break
+                else:
+                    os.rename(tmp_path, filepath)
+                    break
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise  # Re-raise on last attempt
+                import time
+                time.sleep(0.01)
+        
+        return True
+        
+    except Exception as e:
+        print(f"[API] ERROR: Failed to write {filepath}: {e}")
+        # Clean up temp file if it exists
+        try:
+            if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+        return False
 
 class train_controller_api:
     """Manages train state persistence and module communication using JSON."""
@@ -28,8 +103,12 @@ class train_controller_api:
         base_dir = os.path.dirname(os.path.dirname(__file__))
         self.data_dir = os.path.join(base_dir, "data")
         os.makedirs(self.data_dir, exist_ok=True)
-        
+
         self.state_file = os.path.join(self.data_dir, "train_states.json")
+
+        # Persistent kp/ki storage to prevent reset due to file corruption
+        self._persistent_kp = None
+        self._persistent_ki = None
         
         # Default state template with inputs/outputs sections
         self.default_inputs = {
@@ -51,25 +130,26 @@ class train_controller_api:
             'beacon_read_blocked': False,
         }
         
+        # CRITICAL: Field order must match server and API client to prevent JSON reordering issues
         self.default_outputs = {
             # Outputs TO Train Model (Train Controller commands)
             'manual_mode': False,
             'driver_velocity': 0.0,
             'service_brake': False,
+            'emergency_brake': False,
+            'power_command': 0.0,
+            'kp': None,  # Must be set through UI
+            'ki': None,  # Must be set through UI
             'right_door': False,
             'left_door': False,
-            'interior_lights': False,
-            'exterior_lights': False,
+            'interior_lights': True,  # Default ON (matches server)
+            'exterior_lights': True,  # Default ON (matches server)
             'set_temperature': 70.0,
             'temperature_up': False,
             'temperature_down': False,
             'announcement': '',
             'announce_pressed': False,
-            'emergency_brake': False,
-            'kp': None,  # Must be set through UI
-            'ki': None,  # Must be set through UI
             'engineering_panel_locked': False,
-            'power_command': 0.0,
         }
         
         # Legacy flat structure for backward compatibility
@@ -77,6 +157,8 @@ class train_controller_api:
         
         # Check if train state already exists before initializing
         # Only initialize if this is a NEW train
+        # CRITICAL: Be conservative - if we can't determine if train exists, assume it DOES exist
+        # This prevents accidentally resetting kp/ki to None due to file corruption or race conditions
         train_exists = False
         if os.path.exists(self.state_file):
             try:
@@ -85,13 +167,32 @@ class train_controller_api:
                     if self.train_id is not None:
                         train_key = f"train_{self.train_id}"
                         train_exists = train_key in existing_states
+                        # If train has kp/ki set in the file, definitely don't reinitialize!
+                        if train_exists and isinstance(existing_states.get(train_key), dict):
+                            train_dict = existing_states[train_key]
+                            # Check both nested and flat formats
+                            has_kp_ki = False
+                            if 'outputs' in train_dict:
+                                kp_val = train_dict['outputs'].get('kp')
+                                ki_val = train_dict['outputs'].get('ki')
+                                if kp_val is not None or ki_val is not None:
+                                    has_kp_ki = True
+                                    print(f"[API INIT] train_{self.train_id} has kp={kp_val}, ki={ki_val} - will NOT reinitialize")
+                            elif 'kp' in train_dict or 'ki' in train_dict:
+                                has_kp_ki = True
+                                print(f"[API INIT] train_{self.train_id} has flat kp/ki - will NOT reinitialize")
+                            if has_kp_ki:
+                                train_exists = True  # Extra safety - never reinitialize if kp/ki are set!
                     else:
                         train_exists = bool(existing_states)
-            except:
-                pass
+            except Exception as e:
+                # If we can't read the file, assume train exists (conservative approach)
+                # This prevents accidentally resetting kp/ki due to temporary file issues
+                print(f"[API INIT] Warning: Could not read state file: {e} - assuming train exists to be safe")
+                train_exists = True
         
         # Only initialize state file if train doesn't exist yet
-        # This prevents overwriting existing state (lights, power_command, etc.)
+        # This prevents overwriting existing state (lights, power_command, kp/ki, etc.)
         if not train_exists:
             try:
                 print(f"[API INIT] Initializing NEW train_controller_api for train_id={train_id}")
@@ -99,18 +200,21 @@ class train_controller_api:
                 initial_state = self.train_states.copy()
                 initial_state['driver_velocity'] = initial_state['commanded_speed']
                 initial_state['set_temperature'] = initial_state['train_temperature']
-                # Ensure kp and ki are None (must be set through UI)
+                # Ensure kp and ki are None (must be set through UI) - for new trains only!
                 initial_state['kp'] = None
                 initial_state['ki'] = None
                 initial_state['interior_lights'] = True  # Default lights ON for new trains
                 initial_state['exterior_lights'] = True
-                print(f"[API INIT] Setting kp={initial_state['kp']}, ki={initial_state['ki']}")
+                print(f"[API INIT] Initializing new train with kp={initial_state['kp']}, ki={initial_state['ki']}")
                 self.save_state(initial_state)
                 print(f"[API INIT] State saved successfully")
             except Exception as e:
                 print(f"[API INIT] Error initializing state file: {e}")
         else:
-            print(f"[API INIT] Train {train_id} already exists, preserving existing state")
+            if self.train_id is not None:
+                print(f"[API INIT] train_{self.train_id} already exists - skipping initialization (preserves kp/ki)")
+            else:
+                print(f"[API INIT] Train already exists, preserving existing state")
 
     def update_state(self, state_dict: dict) -> None:
         """Update train state with new values.
@@ -124,9 +228,9 @@ class train_controller_api:
 
     def get_state(self) -> dict:
         """Get current train state.
-        
+
         Returns:
-            dict: Current state of the train (merged inputs + outputs). Returns default state if there are any issues.
+            dict: Current state of the train (merged inputs + outputs). NEVER returns defaults during runtime.
         """
         with _file_lock:
             try:
@@ -136,6 +240,8 @@ class train_controller_api:
                         try:
                             with open(self.state_file, 'r') as f:
                                 all_states = json.load(f)
+                                # Track last successful read for kp/ki preservation
+                                self._last_good_state = all_states.copy()
                                 break  # Success!
                         except json.JSONDecodeError as e:
                             if attempt < 2:  # Retry on first 2 attempts
@@ -144,55 +250,169 @@ class train_controller_api:
                                 continue
                             else:  # Final attempt failed
                                 print(f"[WARNING] JSON decode error after 3 attempts (race condition): {e}")
-                                return self.train_states.copy()
+                                # CRITICAL: Return defaults but preserve kp/ki from cache/persistent storage to prevent reset
+                                result = self.train_states.copy()
+                                if hasattr(self, '_last_good_state') and self._last_good_state:
+                                    # Preserve kp/ki from last good read
+                                    if 'kp' in self._last_good_state:
+                                        result['kp'] = self._last_good_state['kp']
+                                    if 'ki' in self._last_good_state:
+                                        result['ki'] = self._last_good_state['ki']
+                                # Also preserve from persistent storage
+                                if self._persistent_kp is not None and result.get('kp') is None:
+                                    result['kp'] = self._persistent_kp
+                                if self._persistent_ki is not None and result.get('ki') is None:
+                                    result['ki'] = self._persistent_ki
+                                return result
                     else:
                         # This shouldn't happen, but just in case
-                        return self.train_states.copy()
-                    
+                        return {}
+
                     # Successfully loaded all_states, now process it
                     try:
-                            
-                            # If train_id is specified, read from train_X section
-                            if self.train_id is not None:
-                                train_key = f"train_{self.train_id}"
+
+                        # If train_id is specified, read from train_X section
+                        if self.train_id is not None:
+                            train_key = f"train_{self.train_id}"
+                            if train_key in all_states:
+                                section = all_states[train_key]
+                                # Check if it has new inputs/outputs structure
+                                if 'inputs' in section and 'outputs' in section:
+                                    # Merge defaults first, then inputs and outputs
+                                    result = self.train_states.copy()
+                                    result.update(section.get('inputs', {}))
+                                    result.update(section.get('outputs', {}))
+
+                                    # CRITICAL: Preserve persistent kp/ki values if file has None
+                                    if self._persistent_kp is not None and result.get('kp') is None:
+                                        result['kp'] = self._persistent_kp
+                                    if self._persistent_ki is not None and result.get('ki') is None:
+                                        result['ki'] = self._persistent_ki
+
+                                    # Update persistent storage with any non-None values
+                                    if result.get('kp') is not None:
+                                        self._persistent_kp = result['kp']
+                                    if result.get('ki') is not None:
+                                        self._persistent_ki = result['ki']
+
+                                    return result
+                                else:
+                                    # Old flat structure - merge with defaults
+                                    result = self.train_states.copy()
+                                    result.update(section)
+
+                                    # Preserve persistent kp/ki values
+                                    if self._persistent_kp is not None and result.get('kp') is None:
+                                        result['kp'] = self._persistent_kp
+                                    if self._persistent_ki is not None and result.get('ki') is None:
+                                        result['ki'] = self._persistent_ki
+
+                                    # Update persistent storage
+                                    if result.get('kp') is not None:
+                                        self._persistent_kp = result['kp']
+                                    if result.get('ki') is not None:
+                                        self._persistent_ki = result['ki']
+
+                                    return result
+                            else:
+                                # Train doesn't exist - return empty dict instead of defaults
+                                print(f"[API] Train {self.train_id} not found in file")
+                                return {}
+                        else:
+                            # Legacy mode: read from root level, support both old and new structure
+                            # CRITICAL FIX: If per-train structure exists, use train_1 as default for legacy mode
+                            has_per_train_structure = any(key.startswith('train_') for key in all_states.keys())
+                            if has_per_train_structure:
+                                print(f"[API] WARNING: Legacy mode detected per-train structure, using train_1 as default")
+                                train_key = "train_1"
                                 if train_key in all_states:
                                     section = all_states[train_key]
-                                    # Check if it has new inputs/outputs structure
                                     if 'inputs' in section and 'outputs' in section:
-                                        # Merge defaults first, then inputs and outputs
                                         result = self.train_states.copy()
                                         result.update(section.get('inputs', {}))
                                         result.update(section.get('outputs', {}))
+
+                                        # Preserve persistent kp/ki values
+                                        if self._persistent_kp is not None and result.get('kp') is None:
+                                            result['kp'] = self._persistent_kp
+                                        if self._persistent_ki is not None and result.get('ki') is None:
+                                            result['ki'] = self._persistent_ki
+
+                                        # Update persistent storage
+                                        if result.get('kp') is not None:
+                                            self._persistent_kp = result['kp']
+                                        if result.get('ki') is not None:
+                                            self._persistent_ki = result['ki']
+
                                         return result
-                                    else:
-                                        # Old flat structure - merge with defaults
-                                        result = self.train_states.copy()
-                                        result.update(section)
-                                        return result
-                                else:
-                                    # Return default state if train section doesn't exist
-                                    default = self.train_states.copy()
-                                    default['train_id'] = self.train_id
-                                    return default
+                                # Train not found - return empty dict instead of defaults
+                                return {}
+
+                            # Original legacy behavior for truly legacy files
+                            if 'inputs' in all_states and 'outputs' in all_states:
+                                result = self.train_states.copy()
+                                result.update(all_states.get('inputs', {}))
+                                result.update(all_states.get('outputs', {}))
+
+                                # Preserve persistent kp/ki values
+                                if self._persistent_kp is not None and result.get('kp') is None:
+                                    result['kp'] = self._persistent_kp
+                                if self._persistent_ki is not None and result.get('ki') is None:
+                                    result['ki'] = self._persistent_ki
+
+                                # Update persistent storage
+                                if result.get('kp') is not None:
+                                    self._persistent_kp = result['kp']
+                                if result.get('ki') is not None:
+                                    self._persistent_ki = result['ki']
+
+                                return result
                             else:
-                                # Legacy mode: read from root level, support both old and new structure
-                                if 'inputs' in all_states and 'outputs' in all_states:
-                                    result = self.train_states.copy()
-                                    result.update(all_states.get('inputs', {}))
-                                    result.update(all_states.get('outputs', {}))
-                                    return result
-                                else:
-                                    result = self.train_states.copy()
-                                    result.update(all_states)
-                                    return result
+                                result = self.train_states.copy()
+                                result.update(all_states)
+
+                                # Preserve persistent kp/ki values
+                                if self._persistent_kp is not None and result.get('kp') is None:
+                                    result['kp'] = self._persistent_kp
+                                if self._persistent_ki is not None and result.get('ki') is None:
+                                    result['ki'] = self._persistent_ki
+
+                                # Update persistent storage
+                                if result.get('kp') is not None:
+                                    self._persistent_kp = result['kp']
+                                if result.get('ki') is not None:
+                                    self._persistent_ki = result['ki']
+
+                                return result
                     except Exception as e:
                         print(f"[WARNING] Error processing state: {e}")
-                        return self.train_states.copy()
+                        # Return defaults but preserve kp/ki from last good read
+                        result = self.train_states.copy()
+                        if hasattr(self, '_last_good_state') and self._last_good_state:
+                            if 'kp' in self._last_good_state:
+                                result['kp'] = self._last_good_state['kp']
+                            if 'ki' in self._last_good_state:
+                                result['ki'] = self._last_good_state['ki']
+                        return result
                 else:
-                    return self.train_states.copy()
+                    # File doesn't exist - return defaults but preserve kp/ki from last good read
+                    result = self.train_states.copy()
+                    if hasattr(self, '_last_good_state') and self._last_good_state:
+                        if 'kp' in self._last_good_state:
+                            result['kp'] = self._last_good_state['kp']
+                        if 'ki' in self._last_good_state:
+                            result['ki'] = self._last_good_state['ki']
+                    return result
             except Exception as e:
                 print(f"Error accessing state file: {e}")
-                return self.train_states.copy()
+                # Return defaults but preserve kp/ki from last good read
+                result = self.train_states.copy()
+                if hasattr(self, '_last_good_state') and self._last_good_state:
+                    if 'kp' in self._last_good_state:
+                        result['kp'] = self._last_good_state['kp']
+                    if 'ki' in self._last_good_state:
+                        result['ki'] = self._last_good_state['ki']
+                return result
 
     def save_state(self, state: dict) -> None:
         """Save train state to file with inputs/outputs structure.
@@ -217,11 +437,20 @@ class train_controller_api:
                 if self.train_id is not None:
                     # Multi-train mode: update specific train's section at ROOT level only
                     if os.path.exists(self.state_file):
-                        with open(self.state_file, 'r') as f:
-                            all_states = json.load(f)
+                        try:
+                            with open(self.state_file, 'r') as f:
+                                content = f.read()
+                                if not content or content.strip() == '':
+                                    print(f"[API] ERROR: train_states.json is EMPTY! Skipping save to prevent data loss.")
+                                    raise IOError("Empty file detected - race condition victim")
+                                all_states = json.loads(content)
+                        except json.JSONDecodeError as e:
+                            print(f"[API] ERROR: train_states.json is CORRUPTED: {e}")
+                            print(f"[API] CRITICAL: Refusing to save - would lose existing data!")
+                            raise IOError("Corrupted file detected - refusing to overwrite")
                     else:
                         all_states = {}
-                    
+
                     # Clean up legacy flat fields - only keep train_X entries
                     keys_to_remove = [k for k in all_states.keys() if not k.startswith('train_')]
                     for k in keys_to_remove:
@@ -230,19 +459,38 @@ class train_controller_api:
                     train_key = f"train_{self.train_id}"
                     
                     # Read existing state from file (if it exists), otherwise start with defaults
+                    # CRITICAL: Preserve existing inputs/outputs separately - don't reset both if one is missing!
                     if train_key in all_states and isinstance(all_states[train_key], dict):
                         existing = all_states[train_key]
-                        if 'inputs' in existing and 'outputs' in existing:
+                        # Check inputs and outputs SEPARATELY
+                        if 'inputs' in existing and isinstance(existing['inputs'], dict):
                             inputs = existing['inputs'].copy()
-                            outputs = existing['outputs'].copy()
                         else:
                             inputs = self.default_inputs.copy()
-                            outputs = self.default_outputs.copy()
+                        
+                        if 'outputs' in existing and isinstance(existing['outputs'], dict):
+                            outputs = existing['outputs'].copy()
+                        else:
+                            # Check if we're about to lose kp/ki values
+                            if 'kp' in existing or 'ki' in existing:
+                                print(f"[API] Warning: train_{self.train_id} has flat kp/ki but missing outputs - preserving values")
+                                outputs = self.default_outputs.copy()
+                                outputs['kp'] = existing.get('kp', None)
+                                outputs['ki'] = existing.get('ki', None)
+                            else:
+                                outputs = self.default_outputs.copy()
                     else:
                         inputs = self.default_inputs.copy()
                         outputs = self.default_outputs.copy()
                     
                     # Update ONLY the fields present in complete_state (preserves other fields)
+                    # DEBUG: Log what we're about to update
+                    output_updates = {k: v for k, v in complete_state.items() if k in self.default_outputs}
+                    if output_updates:
+                        print(f"[API] DEBUG: Updating outputs for train_{self.train_id}: {list(output_updates.keys())}")
+                        if 'kp' in output_updates or 'ki' in output_updates:
+                            print(f"[API] DEBUG: kp={output_updates.get('kp')}, ki={output_updates.get('ki')}")
+                    
                     for key, value in complete_state.items():
                         # Skip nested train_X sections and train_id
                         if key.startswith('train_') and isinstance(value, dict):
@@ -261,17 +509,41 @@ class train_controller_api:
                         'outputs': outputs
                     }
                     
-                    # Direct write (file lock prevents race conditions)
-                    with open(self.state_file, 'w') as f:
-                        json.dump(all_states, f, indent=4)
+                    # Atomic write with sorted keys (prevents race conditions and corruption)
+                    sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
+                    if not safe_write_json(self.state_file, sorted_states):
+                        print(f"[API] CRITICAL: Failed to save train_{self.train_id} state atomically!")
+                        raise IOError("Atomic write failed")
                 else:
                     # Legacy mode: save with inputs/outputs structure at root
+                    # CRITICAL FIX: Don't corrupt per-train structure! If per-train structure exists,
+                    # legacy mode should NOT add flat inputs/outputs at root level.
                     if os.path.exists(self.state_file):
-                        with open(self.state_file, 'r') as f:
-                            all_states = json.load(f)
+                        try:
+                            with open(self.state_file, 'r') as f:
+                                content = f.read()
+                                if not content or content.strip() == '':
+                                    print(f"[API] ERROR: train_states.json is EMPTY! Skipping save to prevent data loss.")
+                                    raise IOError("Empty file detected - race condition victim")
+                                all_states = json.loads(content)
+                        except json.JSONDecodeError as e:
+                            print(f"[API] ERROR: train_states.json is CORRUPTED: {e}")
+                            print(f"[API] CRITICAL: Refusing to save - would lose existing data!")
+                            raise IOError("Corrupted file detected - refusing to overwrite")
                     else:
                         all_states = {}
-                    
+
+                    # CRITICAL: Check if per-train structure exists
+                    has_per_train_structure = any(key.startswith('train_') for key in all_states.keys())
+
+                    if has_per_train_structure:
+                        # DON'T add flat inputs/outputs at root - it corrupts per-train data!
+                        # Instead, warn and skip the save to prevent corruption
+                        print(f"[API] WARNING: Legacy mode detected per-train structure in train_states.json!")
+                        print(f"[API] WARNING: Refusing to save to prevent corruption. Use train-specific mode instead.")
+                        print(f"[API] WARNING: Software controller should specify train_id instead of using legacy mode.")
+                        return  # Skip the save entirely to prevent corruption
+
                     if 'inputs' not in all_states:
                         all_states['inputs'] = self.default_inputs.copy()
                     if 'outputs' not in all_states:
@@ -284,9 +556,11 @@ class train_controller_api:
                         elif key in self.default_outputs:
                             all_states['outputs'][key] = value
                     
-                    # Direct write (file lock prevents race conditions)
-                    with open(self.state_file, 'w') as f:
-                        json.dump(all_states, f, indent=4)
+                    # Atomic write with sorted keys (prevents race conditions and corruption)
+                    sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
+                    if not safe_write_json(self.state_file, sorted_states):
+                        print(f"[API] CRITICAL: Failed to save legacy state atomically!")
+                        raise IOError("Atomic write failed")
 
             except Exception as e:
                 print(f"[ERROR] Failed to save train state: {e}")

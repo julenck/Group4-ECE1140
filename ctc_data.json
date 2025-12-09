@@ -3,10 +3,10 @@
         "Trains": {
             "Train 1": {
                 "Line": "Green",
-                "Suggested Speed": 38,
-                "Authority": 2939,
-                "Station Destination": "Poplar",
-                "Arrival Time": "23:33",
+                "Suggested Speed": 15,
+                "Authority": 547,
+                "Station Destination": "Mt. Lebanon",
+                "Arrival Time": "15:20",
                 "Position": 65,
                 "State": 0,
                 "Current Station": "Glenbury"

@@ -62,6 +62,25 @@ class TrainModelUI(ttk.Frame):
         self.train_id = train_id
         self.server_url = server_url
         self.train_data_path = TRAIN_DATA_FILE
+        
+        # Initialize API client if server_url provided (Phase 3 REST API integration)
+        self.api_client = None
+        if server_url and train_id:
+            try:
+                # Import the Train Model API client
+                train_model_dir = os.path.dirname(os.path.abspath(__file__))
+                sys.path.insert(0, train_model_dir)
+                from train_model_api_client import TrainModelAPIClient
+                self.api_client = TrainModelAPIClient(train_id=train_id, server_url=server_url)
+                print(f"[Train Model {train_id}] Using REST API: {server_url}")
+            except Exception as e:
+                print(f"[Train Model {train_id}] Warning: Failed to initialize API client: {e}")
+                print(f"[Train Model {train_id}] Falling back to file-based I/O")
+                self.api_client = None
+        elif server_url and not train_id:
+            print(f"[Train Model] Warning: server_url provided but train_id is None - using file I/O")
+        elif not server_url:
+            print(f"[Train Model {train_id or 'root'}] Using file-based I/O (no server_url)")
 
         style = ttk.Style(self)
         try:
@@ -371,13 +390,6 @@ class TrainModelUI(ttk.Frame):
         safe_write_json(TRAIN_STATES_FILE, all_states)
 
     def write_train_data(self, specs, outputs, td_inputs):
-        data = safe_read_json(self.train_data_path)
-        if not isinstance(data, dict):
-            data = {}
-        data.setdefault("specs", data.get("specs", self.specs))
-        data.setdefault("inputs", data.get("inputs", {}))
-        data.setdefault("outputs", data.get("outputs", {}))
-        
         # Outputs = Train Model computed values (motion + temperature + doors + station)
         outputs_to_write = {
             "velocity_mph": outputs.get("velocity_mph", 0.0),
@@ -396,6 +408,40 @@ class TrainModelUI(ttk.Frame):
         
         # Keep all inputs as-is (they update the outputs through the model)
         filtered_inputs = dict(td_inputs) if isinstance(td_inputs, dict) else {}
+        
+        # PHASE 3: Use API client if available, otherwise fall back to file I/O
+        if self.api_client:
+            # Use REST API to write physics outputs
+            try:
+                physics_ok = self.api_client.update_physics(
+                    velocity=outputs_to_write["velocity_mph"],
+                    position=outputs_to_write["position_yds"],
+                    acceleration=outputs_to_write["acceleration_ftps2"],
+                    temperature=outputs_to_write["temperature_F"]
+                )
+                # Update beacon data (station info and door side only)
+                beacon_ok = self.api_client.update_beacon_data(
+                    current_station=outputs_to_write["station_name"],
+                    next_stop=outputs_to_write["next_station"],
+                    station_side=outputs_to_write["door_side"]
+                )
+                # Only skip file I/O if BOTH API calls succeeded
+                if physics_ok and beacon_ok:
+                    return  # Success! Don't write to file
+                else:
+                    print(f"[Train Model {self.train_id}] API update incomplete (physics={physics_ok}, beacon={beacon_ok}), falling back to file I/O")
+                    # Fall through to file I/O to ensure data is saved
+            except Exception as e:
+                print(f"[Train Model {self.train_id}] API write failed: {e}, falling back to file I/O")
+                # Fall through to file I/O on error
+        
+        # Legacy file I/O (fallback or when API client not available)
+        data = safe_read_json(self.train_data_path)
+        if not isinstance(data, dict):
+            data = {}
+        data.setdefault("specs", data.get("specs", self.specs))
+        data.setdefault("inputs", data.get("inputs", {}))
+        data.setdefault("outputs", data.get("outputs", {}))
         
         if self.train_id is None:
             current_inputs = data.get("inputs", {})
@@ -435,7 +481,9 @@ class TrainModelUI(ttk.Frame):
 
     def _run_cycle(self, schedule: bool):
         # Sync wayside controller data to train inputs first
-        sync_wayside_to_train_data()
+        # (Skip if using API - server handles this sync automatically)
+        if not self.api_client:
+            sync_wayside_to_train_data()
         
         td = ensure_train_data(self.train_data_path)
         ctrl = self.get_train_state()
@@ -581,6 +629,9 @@ class TrainModelUI(ttk.Frame):
                 pass
 
     def _update_ui(self, outputs, ctrl, merged_inputs, disembarking):
+        # Guard: Don't update if UI components aren't fully initialized yet
+        if not hasattr(self, 'info_labels') or not self.info_labels:
+            return
         try:
             self.info_labels["Velocity (mph)"].config(text=f"{outputs['velocity_mph']:.2f}")
             self.info_labels["Acceleration (ft/s²)"].config(

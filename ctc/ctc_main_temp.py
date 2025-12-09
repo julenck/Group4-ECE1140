@@ -1,5 +1,6 @@
 
 import json, time, os
+import tempfile
 from datetime import datetime
 from .ctc_main_helper_functions import JSONFileWatcher
 from watchdog.observers import Observer
@@ -40,6 +41,50 @@ def safe_json_write(file_path, data, max_retries=3, delay=0.1):
                 return False
     return False
 
+def safe_write_json(file_path, data):
+    """Thread-safe JSON write with validation to prevent corruption."""
+    try:
+        # Validate structure first
+        test_json = json.dumps(data, indent=4)
+        if test_json.count('{') != test_json.count('}'):
+            print(f"[safe_write_json] ERROR: Imbalanced braces! Not writing {file_path}")
+            return False
+        
+        # Write to temp file first, then atomic rename
+        temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(file_path) or '.', suffix='.json')
+        with os.fdopen(temp_fd, 'w') as f:
+            json.dump(data, f, indent=4)
+        
+        # Atomic rename (replaces old file)
+        # On Windows, retry if file is locked by another process
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                os.replace(temp_path, file_path)
+                return True
+            except PermissionError as e:
+                if attempt < max_retries - 1:
+                    time.sleep(0.01)  # Wait 10ms and retry
+                    continue
+                else:
+                    # Last attempt - try remove then rename (Windows workaround)
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                        os.rename(temp_path, file_path)
+                        return True
+                    except:
+                        raise e  # Re-raise original error
+        return True
+    except Exception as e:
+        print(f"[safe_write_json] ERROR writing {file_path}: {e}")
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+        return False
+
 def track_update_handler(new_data, train, data_file_ctc_data):
     try:
         train_pos = new_data["Trains"][train]["Train Position"]
@@ -74,47 +119,9 @@ def dispatch_train(train, line, station, arrival_time_str,
     print(f"CTC data file -> {data_file_ctc_data}")
     print(f"Track controller file -> {data_file_track_cont}")
 
-    # Only reset JSON files if NOT in single-station dispatch mode
-    # In single-station mode (used by dispatch_schedule), we preserve state across calls
-    if not is_single_station_dispatch:
-        print("Resetting CTC JSON files to default state...")
-        
-        # Reset ctc_data.json
-        default_ctc_data = {
-            "Dispatcher": {
-                "Trains": {}
-            }
-        }
-        for i in range(1, 6):
-            tname = f"Train {i}"
-            default_ctc_data["Dispatcher"]["Trains"][tname] = {
-                "Line": "",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": "",
-                "Position": "",
-                "State": "",
-                "Current Station": ""
-            }
-        safe_json_write(data_file_ctc_data, default_ctc_data)
-        print("ctc_data.json reset complete")
-        
-        # Reset ctc_track_controller.json
-        default_track = {"Trains": {}}
-        for i in range(1, 6):
-            tname = f"Train {i}"
-            default_track["Trains"][tname] = {
-                "Active": 0,
-                "Suggested Speed": 0,
-                "Suggested Authority": 0,
-                "Train Position": 0,
-                "Train State": 0
-            }
-        safe_json_write(data_file_track_cont, default_track)
-        print("ctc_track_controller.json reset complete")
-    else:
-        print("[SINGLE_STATION_DISPATCH] Skipping file reset to preserve train state across multiple stations")
+    # For manual dispatch, don't reset all trains - only ensure structure exists
+    # The _ensure_train_entries function will create missing trains without resetting existing ones
+    print("[DISPATCH] Ensuring train entries exist in JSON files")
 
     # Ensure the track controller file exists (create minimal structure if missing)
     if not os.path.exists(data_file_track_cont):
@@ -149,8 +156,8 @@ def dispatch_train(train, line, station, arrival_time_str,
                 "Authority": "",
                 "Station Destination": "",
                 "Arrival Time": "",
-                "Position": "",
-                "State": "",
+                "Position": 0,
+                "State": 0,
                 "Current Station": ""
             })
 
@@ -165,15 +172,33 @@ def dispatch_train(train, line, station, arrival_time_str,
         for t in trains:
             trains_dict.setdefault(t, {
                 "Active": 0,
-                "Suggested Authority": 0,
                 "Suggested Speed": 0,
-                "Train Position": None,
-                "Train State": ""
+                "Suggested Authority": 0,
+                "Train Position": 0,
+                "Train State": 0
             })
 
-        safe_json_write(data_file_track_cont, track_updates)
+        return track_updates
 
-    _ensure_train_entries()
+    track_updates = _ensure_train_entries()
+
+    # Reset ONLY the train being dispatched
+    track_updates["Trains"][train] = {
+        "Active": 0,  # Will be set to 1 later
+        "Suggested Speed": 0,
+        "Suggested Authority": 0,
+        "Train Position": 0,
+        "Train State": 0
+    }
+
+    try:
+        with open(data_file_track_cont, 'w') as f:
+            json.dump(track_updates, f, indent=4)
+        print(f"[CTC Dispatch] {train} reset in ctc_track_controller.json (other trains preserved)")
+    except Exception as e:
+        print(f"Warning: failed to update ctc_track_controller.json: {e}")
+
+        safe_json_write(data_file_track_cont, track_updates)
 
     dest_id = route_lookup_via_station[station]["id"]
     print(f"dest id ={dest_id}")
@@ -249,10 +274,11 @@ def dispatch_train(train, line, station, arrival_time_str,
             print(f"[MAIN_LOOP] Station {i}: {test}, is_single_station_dispatch={is_single_station_dispatch}, destination={station}")
             print(f"next station ={test}")
             # Authority for trains is based on the destination station's index
-            # The authority is the distance FROM the destination station TO the next station
-            authority_meters = route_info["Meters to next"][dest_id]
+            # For manual mode dispatch, authority is the distance to reach the target station
+            # Read directly from the CTC track map at the target station index
+            authority_meters = route_info["Meters to next"][i]
             authority_yards = int(authority_meters * 1.094)
-            print(f"authority in meters = {authority_meters} (from track map at destination station index {dest_id})")
+            print(f"authority in meters = {authority_meters} (from track map at station index {i})")
             next_station_loc = route_by_sequence[i]["block"]
             print(f"next station loc = {next_station_loc}")
             
@@ -311,8 +337,9 @@ def dispatch_train(train, line, station, arrival_time_str,
             
             # If not at final destination, set Active = 1 with new authority for next leg
             if test != station:
-                # Authority is always based on the final destination station
-                next_authority_meters = route_info["Meters to next"][dest_id]
+                # For manual mode dispatch, read next authority from CTC track map
+                # When at station i, next authority is to station i+1
+                next_authority_meters = route_info["Meters to next"][i+1]
                 next_authority_yards = int(next_authority_meters * 1.094)
                 
                 # Update ctc_data.json with new authority and clear current station

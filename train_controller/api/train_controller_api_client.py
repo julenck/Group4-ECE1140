@@ -8,6 +8,7 @@ Author: James Struyk, Julen Coca-Knorr
 """
 import requests
 import json
+import time
 from typing import Dict, Optional
 
 class train_controller_api_client:
@@ -31,6 +32,10 @@ class train_controller_api_client:
         
         # Cache for state when server is unreachable
         self._cached_state = None
+
+        # CRITICAL: Persistent storage for kp/ki to survive connection failures
+        self._persistent_kp = None
+        self._persistent_ki = None
         
         # Default state (fallback if server unreachable)
         self.default_state = {
@@ -58,26 +63,25 @@ class train_controller_api_client:
             # Signal for Train Controller (set by Train Model when beacon read is blocked)
             "beacon_read_blocked": False,
             
+            # CRITICAL: Field order must match server and local API to prevent JSON reordering issues
             # Internal Train Controller State
             "manual_mode": False,
             "driver_velocity": 0.0,
             "service_brake": False,
+            "emergency_brake": False,
+            "power_command": 0.0,
+            "kp": None,  # Must be set through UI (matches server and local API)
+            "ki": None,  # Must be set through UI (matches server and local API)
             "right_door": False,
             "left_door": False,
-            "interior_lights": False,
-            "exterior_lights": False,
+            "interior_lights": True,  # Default ON (matches server)
+            "exterior_lights": True,  # Default ON (matches server)
             "set_temperature": 70.0,
             "temperature_up": False,
             "temperature_down": False,
             "announcement": "",
             "announce_pressed": False,
-            "emergency_brake": False,
-            "kp": 0.0,
-            "ki": 0.0,
-            "engineering_panel_locked": False,
-            
-            # Outputs TO Train Model
-            "power_command": 0.0
+            "engineering_panel_locked": False
         }
         
         # Test connection
@@ -100,38 +104,75 @@ class train_controller_api_client:
     
     def get_state(self) -> dict:
         """Get current train state from server.
-        
+
         Returns:
             dict: Current train state. Returns cached/default state if server unreachable.
         """
-        for attempt in range(self.max_retries):
-            try:
-                response = requests.get(self.state_endpoint, timeout=self.timeout)
-                if response.status_code == 200:
-                    state = response.json()
-                    self._cached_state = state  # Update cache
-                    return state
-                elif response.status_code == 404:
-                    # Train doesn't exist yet, return defaults
-                    if attempt == 0:  # Only print once
-                        print(f"[API Client] Train {self.train_id} not found on server, using defaults")
-                    return self.default_state.copy()
-                else:
+        # Special handling for 404: keep trying indefinitely until train exists
+        # This prevents falling back to defaults that reset kp/ki when server lags
+        not_found_attempts = 0
+        max_not_found_attempts = 30  # Try for up to ~30 seconds (with 1s timeout)
+
+        while not_found_attempts < max_not_found_attempts:
+            for attempt in range(self.max_retries):
+                try:
+                    response = requests.get(self.state_endpoint, timeout=self.timeout)
+                    if response.status_code == 200:
+                        state = response.json()
+                        # CRITICAL: Preserve persistent kp/ki values - don't let server None overwrite client values
+                        if self._persistent_kp is not None and state.get('kp') is None:
+                            state['kp'] = self._persistent_kp
+                        if self._persistent_ki is not None and state.get('ki') is None:
+                            state['ki'] = self._persistent_ki
+                        # Update persistent storage with any non-None values from server
+                        if state.get('kp') is not None:
+                            self._persistent_kp = state['kp']
+                        if state.get('ki') is not None:
+                            self._persistent_ki = state['ki']
+                        self._cached_state = state  # Update cache
+                        return state
+                    elif response.status_code == 404:
+                        # Train doesn't exist yet - keep trying instead of using defaults
+                        not_found_attempts += 1
+                        if not_found_attempts == 1:  # Only print once
+                            print(f"[API Client] Train {self.train_id} not found on server, waiting for dispatch...")
+                        elif not_found_attempts % 50 == 0:  # Print every 50 attempts (less spam)
+                            print(f"[API Client] Still waiting for Train {self.train_id} to be dispatched...")
+                        break  # Break inner loop to continue outer loop
+                    else:
+                        if attempt == self.max_retries - 1:
+                            print(f"[API Client] Server error {response.status_code}, using cache")
+
+                except requests.exceptions.Timeout:
                     if attempt == self.max_retries - 1:
-                        print(f"[API Client] Server error {response.status_code}, using cache")
-                    
-            except requests.exceptions.Timeout:
-                if attempt == self.max_retries - 1:
-                    print(f"[API Client] Request timed out after {self.timeout}s (attempt {attempt + 1}/{self.max_retries})")
-                    
-            except requests.exceptions.RequestException as e:
-                if attempt == self.max_retries - 1:
-                    print(f"[API Client] Request failed: {e}")
-        
-        # All retries failed - use cached state or default
+                        print(f"[API Client] Request timed out after {self.timeout}s (attempt {attempt + 1}/{self.max_retries})")
+
+                except requests.exceptions.RequestException as e:
+                    if attempt == self.max_retries - 1:
+                        print(f"[API Client] Request failed: {e}")
+
+            # Wait before retrying for 404 (reduced to avoid blocking UI)
+            if not_found_attempts > 0:
+                time.sleep(0.1)  # Wait 0.1 second between 404 retries
+
+        # All retries failed - fall back to cache or defaults
+        print(f"[API Client] All connection attempts failed, using fallback")
         if self._cached_state is not None:
-            return self._cached_state.copy()
-        return self.default_state.copy()
+            cached_copy = self._cached_state.copy()
+            # Preserve persistent kp/ki values even when using cache
+            if self._persistent_kp is not None:
+                cached_copy['kp'] = self._persistent_kp
+            if self._persistent_ki is not None:
+                cached_copy['ki'] = self._persistent_ki
+            return cached_copy
+        # Return defaults as last resort (hardware controller expects certain keys)
+        # Preserve any persistent kp/ki values
+        fallback_state = self.default_state.copy()
+        if self._persistent_kp is not None:
+            fallback_state['kp'] = self._persistent_kp
+        if self._persistent_ki is not None:
+            fallback_state['ki'] = self._persistent_ki
+        return fallback_state
     
     def update_state(self, state_dict: dict) -> None:
         """Update train state on server.
@@ -146,6 +187,11 @@ class train_controller_api_client:
                     # Update local cache with successful write
                     if self._cached_state is not None:
                         self._cached_state.update(state_dict)
+                    # CRITICAL: Update persistent kp/ki storage when we successfully set them
+                    if 'kp' in state_dict and state_dict['kp'] is not None:
+                        self._persistent_kp = state_dict['kp']
+                    if 'ki' in state_dict and state_dict['ki'] is not None:
+                        self._persistent_ki = state_dict['ki']
                     return  # Success
                 elif attempt == self.max_retries - 1:
                     print(f"[API Client] Update failed with status {response.status_code}")

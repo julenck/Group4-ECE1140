@@ -28,7 +28,7 @@ def safe_read_json(path):
         try:
             with open(path, "r") as f:
                 data = json.load(f)
-                return data if isinstance(data, (dict, list)) else {}
+                return data if isinstance(data, (dict, list)) else None
         except json.JSONDecodeError:
             # Race condition - file was being written
             if attempt < 2:
@@ -36,7 +36,8 @@ def safe_read_json(path):
                 continue
             else:
                 print(f"[WARNING] Failed to read {path} after 3 attempts (race condition)")
-                return {}
+            #   return {}
+                return data
         except FileNotFoundError:
             return {}
         except Exception as e:
@@ -45,6 +46,10 @@ def safe_read_json(path):
 
 
 def safe_write_json(path, data):
+    # Sort keys if writing to train_states.json to maintain consistent order (train_1, train_2, etc.)
+    if "train_states.json" in path and isinstance(data, dict):
+        data = {k: data[k] for k in sorted(data.keys())}
+    
     payload = json.dumps(data, indent=4)
     out_dir = os.path.dirname(os.path.abspath(path))
     if out_dir and not os.path.exists(out_dir):

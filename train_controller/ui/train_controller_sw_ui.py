@@ -427,7 +427,7 @@ class train_controller:
 		speed_difference = train_velocity - driver_velocity
 		
 		# Thresholds for engaging/releasing service brake
-		ENGAGE_THRESHOLD = 2.0   # Engage brake if going 2+ mph over target
+		ENGAGE_THRESHOLD = 0.5   # Engage brake if going 2+ mph over target
 		RELEASE_THRESHOLD = 0.5  # Release brake when within 0.5 mph of target
 		
 		# Decide whether to engage or release service brake
@@ -590,18 +590,31 @@ class train_controller_ui(tk.Tk):
         emergency_brake_release_timer: Timer ID for emergency brake auto-release.
     """
     
-    def __init__(self, train_id=None):
+    def __init__(self, train_id=1, server_url=None, timeout=5.0):
         """Initialize the driver interface.
         
         Args:
             train_id: Optional train ID for multi-train support. If None, uses root level (legacy).
+            server_url: If provided, uses REST API client to connect to remote server.
+                       If None, uses local file-based API (default).
+                       Example: "http://192.168.1.100:5000" or "http://localhost:5000"
+            timeout: Network timeout in seconds for remote API (default: 5.0).
         """
         super().__init__()
         
         self.train_id = train_id
+        self.server_url = server_url
         
-        # Initialize API with train_id
-        self.api = train_controller_api(train_id=train_id)
+        # Initialize API based on server_url parameter (same as hardware controller)
+        if server_url:
+            # Remote mode - use client API
+            from api.train_controller_api_client import train_controller_api_client
+            self.api = train_controller_api_client(train_id=train_id, server_url=server_url, timeout=timeout)
+            print(f"[SW UI] Using REMOTE API: {server_url} (timeout: {timeout}s)")
+        else:
+            # Local mode - use file-based API
+            self.api = train_controller_api(train_id=train_id)
+            print(f"[SW UI] Using LOCAL API (file-based)")
         
         # Create controller instance with shared API
         self.controller = train_controller(self.api)
@@ -615,6 +628,8 @@ class train_controller_ui(tk.Tk):
         
         # Configure window
         title = f"Train {train_id} - Train Controller" if train_id else "Train Controller - Driver Interface"
+        if server_url:
+            title += " [SERVER MODE]"
         self.title(title)
         self.geometry("1200x800")
         self.configure(bg='lightgray')
@@ -825,29 +840,34 @@ class train_controller_ui(tk.Tk):
     
     def detect_and_respond_to_failures(self, state: dict):
         """Detect failures based on Train Model behavior and activate Train Controller failure flags.
-        
+
         Logic:
         - Engine Failure: Only detected when power is applied but train doesn't accelerate
         - Signal Failure: Detected immediately when train_model_signal_failure is active
         - Brake Failure: Only detected when service brake is pressed but train doesn't slow
-        
+
         When detected, Train Controller activates corresponding train_controller_* flag and engages emergency brake.
+        When Train Model failure is resolved and emergency brake is released, Train Controller clears its failure flag.
         """
         updates = {}
-        
+
         # Detect engine failure: Only when trying to apply power but train doesn't respond
         # Engine failure is latent until driver tries to accelerate
         if state.get('train_model_engine_failure', False):
             # Detect if power command is significant (> 1000W) - driver is trying to accelerate
             power_applied = state.get('power_command', 0.0) > 1000.0
-            
+
             # Engine failure detected when significant power is applied
             # The train won't accelerate properly (Train Model blocks acceleration)
             if power_applied:
                 if not state.get('train_controller_engine_failure', False):
                     print("[Train Controller] ENGINE FAILURE DETECTED - Power applied but train not responding! Engaging emergency brake")
                     updates['train_controller_engine_failure'] = True
-        
+        # Clear engine failure flag if train model failure is resolved and emergency brake was released
+        elif state.get('train_controller_engine_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] ENGINE FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_engine_failure'] = False
+
         # Detect signal pickup failure: Only when Train Model blocks a beacon read
         # Train Model sets beacon_read_blocked=True when it encounters a new beacon but can't read it
         if state.get('beacon_read_blocked', False):
@@ -855,7 +875,11 @@ class train_controller_ui(tk.Tk):
                 print("[Train Controller] SIGNAL PICKUP FAILURE DETECTED - Failed to read beacon! Engaging emergency brake")
                 updates['train_controller_signal_failure'] = True
                 updates['beacon_read_blocked'] = False  # Clear the flag after detecting
-        
+        # Clear signal failure flag if emergency brake was released (signal failure is momentary)
+        elif state.get('train_controller_signal_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] SIGNAL FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_signal_failure'] = False
+
         # Detect brake failure: Only detectable when service brake is pressed
         # Train Model activates train_model_brake_failure, but driver only knows when they try to brake
         # Once detected, train_controller_brake_failure stays set until manually cleared
@@ -864,7 +888,11 @@ class train_controller_ui(tk.Tk):
                 print("[Train Controller] BRAKE FAILURE DETECTED - Service brake not responding! Engaging emergency brake")
                 updates['train_controller_brake_failure'] = True
                 updates['emergency_brake'] = True  # Engage emergency brake immediately
-        
+        # Clear brake failure flag if train model failure is resolved and emergency brake was released
+        elif state.get('train_controller_brake_failure', False) and not state.get('train_model_brake_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] BRAKE FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_brake_failure'] = False
+
         # Apply updates if any failures were detected/cleared
         if updates:
             self.api.update_state(updates)
@@ -1040,11 +1068,8 @@ class train_controller_ui(tk.Tk):
         self.speed_entry.configure(state=button_state)
         self.set_speed_btn.configure(state=button_state)
         
-        # Emergency brake: ALWAYS enabled (can press in any mode), disabled only after activation
-        if emergency_brake_active:
-            self.emergency_brake_btn.configure(state='disabled')
-        else:
-            self.emergency_brake_btn.configure(state='normal')
+        # Emergency brake: ALWAYS enabled (can press in any mode) for toggling on/off
+        self.emergency_brake_btn.configure(state='normal')
         
         # Manual mode button is ALWAYS enabled so driver can switch modes
         mode_text = "Manual Mode: ON" if manual_mode else "Automatic Mode"
