@@ -2,6 +2,7 @@
 """
 Complete System Launcher for Handoff Testing
 Launches: CTC, SW Wayside, HW Wayside, Train Model, Train Controllers
+All in the MAIN thread to avoid Tkinter threading issues.
 
 Usage on Pi or Mac:
     cd "/path/to/Group4-ECE1140 CODE"
@@ -10,7 +11,6 @@ Usage on Pi or Mac:
 
 import os
 import sys
-import threading
 import tkinter as tk
 from tkinter import ttk
 
@@ -22,138 +22,114 @@ if project_root not in sys.path:
 print("=" * 60)
 print("🚂 LAUNCHING COMPLETE TRAIN SYSTEM FOR HANDOFF TEST")
 print("=" * 60)
+print("Note: All windows will open sequentially in main thread")
+print("=" * 60)
 
 # ============================================================================
-# 1. CTC (Dispatcher)
+# Create all components (non-blocking setup)
 # ============================================================================
-def launch_ctc():
-    print("\n[1/5] 🎛️  Launching CTC Dispatcher...")
+def setup_all_components():
+    """Set up all controllers and UIs in Toplevel windows"""
+    
+    components = {}
+    
+    # Create main root window (hidden)
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+    
     try:
+        # 1. CTC
+        print("\n[1/5] 🎛️  Setting up CTC...")
         from ctc.ctc_ui_temp import CTCUI
-        ctc_ui = CTCUI()
-        ctc_ui.run()
+        components['ctc'] = CTCUI()
+        components['ctc'].title("CTC Dispatcher")
+        print("✅ CTC ready")
     except Exception as e:
-        print(f"❌ CTC failed to launch: {e}")
-        import traceback
-        traceback.print_exc()
-
-# ============================================================================
-# 2. SW Wayside Controller (Blocks 0-69)
-# ============================================================================
-def launch_sw_wayside():
-    print("\n[2/5] 🔧 Launching SW Wayside Controller (Blocks 0-69)...")
+        print(f"❌ CTC failed: {e}")
+    
     try:
+        # 2. SW Wayside
+        print("\n[2/5] 🔧 Setting up SW Wayside...")
         from track_controller.New_SW_Code import sw_wayside_controller
         from track_controller.New_SW_Code import sw_vital_check
         from track_controller.New_SW_Code.sw_wayside_controller_ui import sw_wayside_controller_ui
         
         vital = sw_vital_check.sw_vital_check()
-        controller = sw_wayside_controller.sw_wayside_controller(
-            vital, 
-            "Green_Line_PLC_XandLup.py"
-        )
-        ui = sw_wayside_controller_ui(controller)
-        ui.title("SW Wayside Controller - Blocks 0-69")
-        ui.geometry("1200x800")
-        ui.mainloop()
+        sw_controller = sw_wayside_controller.sw_wayside_controller(vital, "Green_Line_PLC_XandLup.py")
+        components['sw_wayside'] = sw_wayside_controller_ui(sw_controller)
+        components['sw_wayside'].title("SW Wayside - Blocks 0-69")
+        components['sw_wayside'].geometry("1000x700+0+0")
+        print("✅ SW Wayside ready")
     except Exception as e:
-        print(f"❌ SW Wayside failed to launch: {e}")
-        import traceback
-        traceback.print_exc()
-
-# ============================================================================
-# 3. HW Wayside Controller (Blocks 70-143)
-# ============================================================================
-def launch_hw_wayside():
-    print("\n[3/5] ⚙️  Launching HW Wayside Controller (Blocks 70-143)...")
+        print(f"❌ SW Wayside failed: {e}")
+    
     try:
-        # Add hw_wayside to path
+        # 3. HW Wayside
+        print("\n[3/5] ⚙️  Setting up HW Wayside...")
         hw_dir = os.path.join(project_root, "track_controller", "hw_wayside")
         if hw_dir not in sys.path:
             sys.path.insert(0, hw_dir)
         
         from track_controller.hw_wayside.hw_wayside_controller import HW_Wayside_Controller
         from track_controller.hw_wayside.hw_wayside_controller_ui import HW_Wayside_Controller_UI
-        from track_controller.hw_wayside.hw_display import HW_Display
         
-        blocks_70_143 = list(range(70, 144))
+        hw_controller = HW_Wayside_Controller("B", list(range(70, 144)))
+        hw_controller.load_plc("Green_Line_PLC_XandLdown.py")
+        hw_controller.start_trains(period_s=1.0)
         
-        # Create controller
-        controller = HW_Wayside_Controller(
-            wayside_id="B",
-            block_ids=blocks_70_143
-        )
-        
-        # Load PLC program
-        controller.load_plc("Green_Line_PLC_XandLdown.py")
-        
-        # Create UI
-        root = tk.Tk()
-        root.geometry("1200x800")
-        ui = HW_Wayside_Controller_UI(root, controller, "HW Wayside Controller - Blocks 70-143")
-        ui.pack(fill='both', expand=True)
-        
-        # Start controller's train loop
-        controller.start_trains(period_s=1.0)
-        
-        root.mainloop()
+        hw_window = tk.Toplevel(root)
+        hw_window.geometry("1000x700+1020+0")
+        components['hw_wayside_ui'] = HW_Wayside_Controller_UI(hw_window, hw_controller, "HW Wayside - Blocks 70-143")
+        components['hw_wayside_ui'].pack(fill='both', expand=True)
+        components['hw_wayside'] = hw_controller
+        print("✅ HW Wayside ready")
     except Exception as e:
-        print(f"❌ HW Wayside failed to launch: {e}")
+        print(f"❌ HW Wayside failed: {e}")
         import traceback
         traceback.print_exc()
-
-# ============================================================================
-# 4. Train Model
-# ============================================================================
-def launch_train_model():
-    print("\n[4/5] 🚆 Launching Train Model...")
+    
     try:
+        # 4. Train Model
+        print("\n[4/5] 🚆 Setting up Train Model...")
         from Train_Model.train_model_ui import TrainModelUI
-        train_ui = TrainModelUI()
-        train_ui.run()
+        components['train_model'] = TrainModelUI()
+        components['train_model'].title("Train Model")
+        components['train_model'].geometry("900x600+0+740")
+        print("✅ Train Model ready")
     except Exception as e:
-        print(f"❌ Train Model failed to launch: {e}")
+        print(f"❌ Train Model failed: {e}")
         import traceback
         traceback.print_exc()
-
-# ============================================================================
-# 5. Train Controllers (Software - handles Kp/Ki)
-# ============================================================================
-def launch_train_controllers():
-    print("\n[5/5] 🎮 Launching Train Controllers...")
+    
     try:
+        # 5. Train Controllers
+        print("\n[5/5] 🎮 Setting up Train Controllers...")
         from train_controller.train_manager import TrainManagerUI
-        manager_ui = TrainManagerUI()
-        manager_ui.run()
+        components['train_controller'] = TrainManagerUI()
+        components['train_controller'].title("Train Controllers")
+        components['train_controller'].geometry("900x600+1020+740")
+        print("✅ Train Controllers ready")
     except Exception as e:
-        print(f"❌ Train Controllers failed to launch: {e}")
+        print(f"❌ Train Controllers failed: {e}")
         import traceback
         traceback.print_exc()
+    
+    return root, components
 
 # ============================================================================
 # Main Launcher
 # ============================================================================
 def main():
-    print("\n📦 Starting all components in separate threads...\n")
+    print("\n📦 Setting up all components in main thread...\n")
     
-    # Launch each component in its own thread
-    threads = [
-        threading.Thread(target=launch_ctc, daemon=True, name="CTC"),
-        threading.Thread(target=launch_sw_wayside, daemon=True, name="SW_Wayside"),
-        threading.Thread(target=launch_hw_wayside, daemon=True, name="HW_Wayside"),
-        threading.Thread(target=launch_train_model, daemon=True, name="Train_Model"),
-        threading.Thread(target=launch_train_controllers, daemon=True, name="Train_Controllers"),
-    ]
-    
-    for thread in threads:
-        thread.start()
-        print(f"✅ Started: {thread.name}")
+    root, components = setup_all_components()
     
     print("\n" + "=" * 60)
-    print("🎉 ALL SYSTEMS LAUNCHED!")
+    print("🎉 ALL SYSTEMS READY!")
     print("=" * 60)
+    print(f"Launched {len(components)} components")
     print("\n📋 Testing Instructions:")
-    print("1. Wait for all 5 windows to open")
+    print("1. All windows should now be visible")
     print("2. In Train Controller: Set Kp/Ki for Train 1 (e.g., Kp=5000, Ki=100)")
     print("3. In CTC: Dispatch Train 1 to 'Edgebrook' station")
     print("4. Watch train travel through SW Wayside (blocks 0-69)")
@@ -165,9 +141,8 @@ def main():
     print("   - Train stops smoothly at station")
     print("\n" + "=" * 60)
     
-    # Keep main thread alive
-    for thread in threads:
-        thread.join()
+    # Start main event loop
+    root.mainloop()
 
 if __name__ == "__main__":
     try:
