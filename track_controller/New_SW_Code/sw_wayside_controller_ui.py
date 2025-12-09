@@ -597,8 +597,8 @@ class sw_wayside_controller_ui:
             
             ttk.Label(headers_frame, text="Train", style="TrainData.TLabel", width=10).grid(row=0, column=0, padx=5, sticky="w")
             ttk.Label(headers_frame, text="Position", style="TrainData.TLabel", width=10).grid(row=0, column=1, padx=5, sticky="w")
-            ttk.Label(headers_frame, text="Speed (m/s)", style="TrainData.TLabel", width=12).grid(row=0, column=2, padx=5, sticky="w")
-            ttk.Label(headers_frame, text="Authority (m)", style="TrainData.TLabel", width=12).grid(row=0, column=3, padx=5, sticky="w")
+            ttk.Label(headers_frame, text="Speed (mph)", style="TrainData.TLabel", width=12).grid(row=0, column=2, padx=5, sticky="w")
+            ttk.Label(headers_frame, text="Authority (yds)", style="TrainData.TLabel", width=12).grid(row=0, column=3, padx=5, sticky="w")
             
             # Add separator
             ttk.Separator(train_data_frame, orient='horizontal').pack(fill='x', pady=2)
@@ -616,10 +616,10 @@ class sw_wayside_controller_ui:
                 pos_label = ttk.Label(train_frame, text=str(data.get('pos', 'N/A')), style="TrainData.TLabel", width=10)
                 pos_label.grid(row=0, column=1, padx=5, sticky="w")
                 
-                speed_label = ttk.Label(train_frame, text=f"{data.get('cmd speed', 0):.2f}", style="TrainData.TLabel", width=12)
+                speed_label = ttk.Label(train_frame, text=f"{data.get('cmd speed', 0) * 2.23694:.2f}", style="TrainData.TLabel", width=12)
                 speed_label.grid(row=0, column=2, padx=5, sticky="w")
-                
-                auth_label = ttk.Label(train_frame, text=f"{data.get('cmd auth', 0):.2f}", style="TrainData.TLabel", width=12)
+
+                auth_label = ttk.Label(train_frame, text=f"{data.get('cmd auth', 0) * 1.09361:.2f}", style="TrainData.TLabel", width=12)
                 auth_label.grid(row=0, column=3, padx=5, sticky="w")
                 
                 # Store labels for updating
@@ -646,9 +646,9 @@ class sw_wayside_controller_ui:
         #             if train_data[train]["pos"] <= 73 or train_data[train]["pos"] >= 144:
         #                 train_label = ttk.Label(self.train_data_frame, text=f"Train {train}:", style="smaller.TLabel")
         #                 train_label.grid(row=int(train[-1])-1, column=0, padx=5, pady=5, sticky="w")
-        #                 speed_label = ttk.Label(self.train_data_frame, text=f"  Commanded Speed: {train_data[train]['cmd speed']} m/s", style="smaller.TLabel")
+        #                 speed_label = ttk.Label(self.train_data_frame, text=f"  Commanded Speed: {train_data[train]['cmd speed'] * 2.23694:.2f} mph", style="smaller.TLabel")
         #                 speed_label.grid(row=int(train[-1])-1, column=1, padx=5, pady=5, sticky="w")
-        #                 auth_label = ttk.Label(self.train_data_frame, text=f"  Commanded Authority: {train_data[train]['cmd auth']} m", style="smaller.TLabel" )
+        #                 auth_label = ttk.Label(self.train_data_frame, text=f"  Commanded Authority: {train_data[train]['cmd auth'] * 1.09361:.2f} yds", style="smaller.TLabel" )
         #                 auth_label.grid(row=int(train[-1])-1, column=2, padx=5, pady=5, sticky="w")
         #                 pos_label = ttk.Label(self.train_data_frame, text=f"  Position: {train_data[train]['pos']}", style="smaller.TLabel")
         #                 pos_label.grid(row=int(train[-1])-1, column=3, padx=5, pady=5, sticky="w")
@@ -898,8 +898,8 @@ class sw_wayside_controller_ui:
             if train_id in train_data:
                 data = train_data[train_id]
                 labels["pos"].config(text=str(data.get('pos', 'N/A')))
-                labels["speed"].config(text=f"{data.get('cmd speed', 0):.2f}")
-                labels["auth"].config(text=f"{data.get('cmd auth', 0):.2f}")
+                labels["speed"].config(text=f"{data.get('cmd speed', 0) * 2.23694:.2f}")
+                labels["auth"].config(text=f"{data.get('cmd auth', 0) * 1.09361:.2f}")
             else:
                 # Train no longer active, rebuild the frame
                 self.build_input_frame()

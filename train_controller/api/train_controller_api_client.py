@@ -119,12 +119,17 @@ class train_controller_api_client:
                     response = requests.get(self.state_endpoint, timeout=self.timeout)
                     if response.status_code == 200:
                         state = response.json()
-                        self._cached_state = state  # Update cache
-                        # CRITICAL: Update persistent kp/ki storage when we get valid values
-                        if 'kp' in state and state['kp'] is not None:
+                        # CRITICAL: Preserve persistent kp/ki values - don't let server None overwrite client values
+                        if self._persistent_kp is not None and state.get('kp') is None:
+                            state['kp'] = self._persistent_kp
+                        if self._persistent_ki is not None and state.get('ki') is None:
+                            state['ki'] = self._persistent_ki
+                        # Update persistent storage with any non-None values from server
+                        if state.get('kp') is not None:
                             self._persistent_kp = state['kp']
-                        if 'ki' in state and state['ki'] is not None:
+                        if state.get('ki') is not None:
                             self._persistent_ki = state['ki']
+                        self._cached_state = state  # Update cache
                         return state
                     elif response.status_code == 404:
                         # Train doesn't exist yet - keep trying instead of using defaults
@@ -161,7 +166,7 @@ class train_controller_api_client:
                 cached_copy['ki'] = self._persistent_ki
             return cached_copy
         # Return defaults as last resort (hardware controller expects certain keys)
-        # But preserve any persistent kp/ki values
+        # Preserve any persistent kp/ki values
         fallback_state = self.default_state.copy()
         if self._persistent_kp is not None:
             fallback_state['kp'] = self._persistent_kp
