@@ -399,16 +399,29 @@ class sw_wayside_controller:
                             # Authority increased - this is a new dispatch, proceed with activation below
                     else:
                         # This is a handoff - take over the train
-                        # Read current authority from the shared JSON file (written by previous controller)
+                        # Read current authority and handoff metadata from the shared JSON file (written by previous controller)
+                        stored_cumulative = 0
+                        stored_auth_start = sug_auth
                         try:
                             with open(self.train_comm_file, 'r') as f:
                                 train_data = json.load(f)
-                                current_auth = train_data.get(train, {}).get("Commanded Authority", sug_auth)
-                                current_speed = train_data.get(train, {}).get("Commanded Speed", self.active_trains[train]["Suggested Speed"])
+                                # CRITICAL FIX: File stores in mph/yards, convert to m/s and meters
+                                # Previous controller writes in mph/yards (see load_train_outputs)
+                                current_auth_yds = train_data.get(train, {}).get("Commanded Authority", sug_auth * 1.09361)
+                                current_speed_mph = train_data.get(train, {}).get("Commanded Speed", self.active_trains[train]["Suggested Speed"] * 2.23694)
+                                # Convert yards to meters and mph to m/s
+                                current_auth = float(current_auth_yds) * 0.9144  # yards to meters
+                                current_speed = float(current_speed_mph) * 0.44704  # mph to m/s
+                                
+                                # Read handoff metadata for accurate distance tracking (matches HW behavior)
+                                stored_cumulative = float(train_data.get(train, {}).get("Cumulative Distance", 0))
+                                stored_auth_start = float(train_data.get(train, {}).get("Train Auth Start", sug_auth))
                         except:
                             # If file not found or error, use CTC values
                             current_auth = sug_auth
                             current_speed = self.active_trains[train]["Suggested Speed"]
+                            stored_cumulative = 0
+                            stored_auth_start = sug_auth
                     
                     # Use handoff authority if this is a handoff, otherwise use suggested authority
                     if is_handoff:
@@ -442,18 +455,13 @@ class sw_wayside_controller:
                     self.train_pos_start[train] = self.train_idx[train]
                     self.occupied_blocks[train_pos] = 1
                     
-                    # For handoff, we need to calculate how much authority was originally given
-                    # traveled = original_auth - current_auth, so original_auth = traveled + current_auth
+                    # For handoff, use the stored values from the handoff file for accurate tracking
                     if is_handoff:
-                        # Distance traveled = sug_auth (CTC original) - current_auth (remaining)
-                        traveled_before_handoff = sug_auth - auth_to_use
-                        # Train will calculate distance as: traveled_total = train_auth_start - cmd_auth
-                        # We want: traveled_total = traveled_before_handoff + distance_in_new_controller
-                        # So: train_auth_start - cmd_auth = traveled_before_handoff + (train_auth_start - cmd_auth_new)
-                        # Set train_auth_start = sug_auth (CTC original)
-                        self.train_auth_start[train] = sug_auth
-                        # cumulative_distance should reflect distance already traveled
-                        self.cumulative_distance[train] = traveled_before_handoff
+                        # Use stored handoff metadata from previous controller (matches HW behavior)
+                        # This ensures consistent distance tracking across controller boundaries
+                        self.train_auth_start[train] = stored_auth_start
+                        self.cumulative_distance[train] = stored_cumulative
+                        print(f"[SW Wayside {self.wayside_id}] Handoff received for {train}: auth_start={stored_auth_start:.0f}m, cumulative={stored_cumulative:.0f}m, remaining_auth={auth_to_use:.0f}m")
                     else:
                         self.train_auth_start[train] = auth_to_use
                         # Initialize cumulative distance tracker
@@ -1093,6 +1101,11 @@ class sw_wayside_controller:
                     data[train_id]["Commanded Authority"] = cmd_auth_yds
                     # Write actual train speed from train_data.json (also convert to mph)
                     data[train_id]["Train Speed"] = actual_train_speeds.get(train_id, 0) * 2.23694
+                    
+                    # CRITICAL: Write handoff metadata for HW wayside (cumulative distance and auth start)
+                    # This allows HW to properly calculate traveled distance after handoff
+                    data[train_id]["Cumulative Distance"] = self.cumulative_distance.get(train_id, 0)
+                    data[train_id]["Train Auth Start"] = self.train_auth_start.get(train_id, self.cmd_trains[train_id]["cmd auth"])
                     
                     # Update beacon data based on train direction and current block
                     if train_pos in self.block_graph:
