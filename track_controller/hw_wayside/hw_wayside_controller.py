@@ -1171,13 +1171,19 @@ class HW_Wayside_Controller:
                 FINAL_MIN_SPEED = 1  # Final minimum speed before stopping
                 STOP_THRESHOLD = 5  # Below 5m, stop completely
                 
+                # Check if we're near the END of our authority journey or just started with low authority
+                # If auth is close to auth_start, we just got fresh authority - don't decelerate yet
+                auth_start_val = self.train_auth_start.get(tname, auth)
+                auth_consumed_fraction = 1.0 - (auth / auth_start_val) if auth_start_val > 0 else 0
+                
                 if auth <= STOP_THRESHOLD:
                     target_speed = 0
                 elif auth < MIN_SPEED_THRESHOLD:
                     # Very low authority - reduce to final minimum
                     target_speed = FINAL_MIN_SPEED
-                elif auth < DECEL_THRESHOLD:
-                    # Low authority - linear interpolation from MIN_SPEED to commanded speed (not capped by limit)
+                elif auth < DECEL_THRESHOLD and auth_consumed_fraction > 0.3:
+                    # Low authority AND we've consumed >30% of journey - apply deceleration
+                    # This prevents premature deceleration right after station departures
                     ratio = (auth - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
                     target_speed = MIN_SPEED + ratio * (speed - MIN_SPEED)
                 else:
@@ -2099,6 +2105,11 @@ class HW_Wayside_Controller:
                     pos = int(info.get('Train Position'))
                 except Exception:
                     pos = None
+                
+                # ONLY show trains within our managed blocks (simulate limited visibility)
+                if pos is not None and str(pos) not in self.block_ids:
+                    continue
+                
                 cmd = self.cmd_trains.get(tname, {})
                 # Calculate next station based on train position
                 next_station = '-'
