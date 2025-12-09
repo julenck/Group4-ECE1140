@@ -900,6 +900,9 @@ class HW_Wayside_Controller:
                             self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
 
                     self.last_seen_position[tname] = pos
+                    
+                    # Mark block as occupied (matching SW behavior)
+                    self._occupied.add(str(pos))
 
             # Now update each commanded train: decrement authority, possibly move, write outputs
             to_remove = []
@@ -976,10 +979,11 @@ class HW_Wayside_Controller:
                 
                 state['cmd speed'] = speed
 
-                # Decrement authority by distance traveled in this period
-                # assume _trains_period is seconds between ticks
-                dec = actual_speed * self._trains_period
-                auth -= dec
+                # Decrement authority by distance traveled (matching SW logic)
+                if actual_speed > 0:
+                    auth = auth - actual_speed
+                    if auth < 5:
+                        auth = 0
 
                 # If authority exhausted, set to 0 and mark for removal (and write final position to CTC)
                 if auth <= 0:
@@ -1190,6 +1194,11 @@ class HW_Wayside_Controller:
                         data[tkey]["Commanded Speed"] = cmd_speed_m_s * 2.23694
                         data[tkey]["Commanded Authority"] = cmd_auth_m * 1.09361
                         data[tkey]["Train Speed"] = actual_train_speeds.get(tkey, 0.0) * 2.23694
+                        
+                        # CRITICAL: Write handoff metadata (matching SW behavior)
+                        # This allows SW to properly calculate traveled distance after handoff FROM HW
+                        data[tkey]["Cumulative Distance"] = self.cumulative_distance.get(tkey, 0)
+                        data[tkey]["Train Auth Start"] = self.train_auth_start.get(tkey, cmd_auth_m)
                         
                         # Populate beacon data based on train position and direction (matching SW behavior)
                         if train_pos in self.block_graph:
