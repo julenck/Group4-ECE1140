@@ -1145,12 +1145,12 @@ class HW_Wayside_Controller:
                 current_sug_speed_mph = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed * 2.23694) or (speed * 2.23694))
                 current_sug_speed = current_sug_speed_mph * 0.44704  # Convert mph to m/s
 
-                # Only update commanded values if CTC gives MORE authority than we currently have
+                # Only update commanded values if CTC gives MORE authority than initial auth_start
                 # This prevents overriding handoff authority with stale CTC values
-                # Allow a tolerance of 50 yards (45.72m) to account for rounding/timing differences
-                if current_sug_auth > (auth + 50):
-                    # CTC gave significantly more authority - this is a new dispatch, update our commanded values
-                    print(f"[HW Wayside {self.wayside_id}] CTC override for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m, speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
+                initial_auth = self.train_auth_start.get(tname, 0)
+                if current_sug_auth > initial_auth:
+                    # CTC gave more authority than initial - this is a new dispatch, update our commanded values
+                    print(f"[HW Wayside {self.wayside_id}] CTC override for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m (initial was {initial_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
                     auth = current_sug_auth
                     speed = current_sug_speed
                     state['cmd auth'] = auth
@@ -1177,12 +1177,13 @@ class HW_Wayside_Controller:
                     # Very low authority - reduce to final minimum
                     target_speed = FINAL_MIN_SPEED
                 elif auth < DECEL_THRESHOLD:
-                    # Low authority - linear interpolation from MIN_SPEED to sug_speed
+                    # Low authority - linear interpolation from MIN_SPEED to commanded speed (not capped by limit)
                     ratio = (auth - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
-                    target_speed = MIN_SPEED + ratio * (min(current_sug_speed, speed_limit) - MIN_SPEED)
+                    target_speed = MIN_SPEED + ratio * (speed - MIN_SPEED)
                 else:
-                    # Normal operation - use min of suggested speed and block limit
-                    target_speed = min(current_sug_speed, speed_limit)
+                    # Normal operation - preserve commanded speed (from handoff or CTC), only cap if excessive
+                    # Allow speed to exceed block limit slightly for smooth handoffs
+                    target_speed = min(speed, speed_limit * 1.2)
                 
                 # Smoothly adjust commanded speed toward target
                 ACCEL_RATE = 2.0  # m/s per tick acceleration
@@ -1205,41 +1206,14 @@ class HW_Wayside_Controller:
                     # Update state immediately so UI sees decreasing authority
                     state['cmd auth'] = auth
 
-                # If authority exhausted, set to 0 and mark for removal (and write final position to CTC)
+                # If authority exhausted, set to 0 but DON'T remove from cmd_trains
+                # Keep train visible at station until CTC reactivates or marks inactive
                 if auth <= 0:
                     auth = 0.0
                     state['cmd auth'] = 0.0
                     state['cmd speed'] = 0.0
-                    final_pos = state.get('pos', pos)
-
-                    # Deactivate train in CTC with retries using file_lock
-                    max_retries = 3
-                    for retry in range(max_retries):
-                        try:
-                            with self.file_lock:
-                                if not os.path.exists(self.ctc_comm_file):
-                                    break
-                                with open(self.ctc_comm_file, 'r', encoding='utf-8') as f:
-                                    data = json.load(f)
-                                if 'Trains' in data and tname in data['Trains']:
-                                    data['Trains'][tname]['Active'] = 0
-                                    data['Trains'][tname]['Train Position'] = final_pos
-                                else:
-                                    # Ensure structure exists
-                                    data.setdefault('Trains', {})
-                                    data['Trains'].setdefault(tname, {})
-                                    data['Trains'][tname]['Active'] = 0
-                                    data['Trains'][tname]['Train Position'] = final_pos
-                                with open(self.ctc_comm_file, 'w', encoding='utf-8') as f:
-                                    json.dump(data, f, indent=2)
-                            break
-                        except (json.JSONDecodeError, IOError) as e:
-                            if retry < max_retries - 1:
-                                time.sleep(0.01)
-                            else:
-                                print(f"Warning: Failed to deactivate {tname} after {max_retries} attempts: {e}")
-
-                    to_remove.append(tname)
+                    # Update state but don't mark for removal - let reactivation logic handle it
+                    # Train will stay visible in active trains list with 0 speed/auth
                     continue
 
                 # update state
@@ -1975,8 +1949,11 @@ class HW_Wayside_Controller:
                 for train_id, train_data in self.cmd_trains.items():
                     if str(train_data.get('pos', '')) == b:
                         # This train is commanded to be at this block - show its commanded values
-                        speed_mph = train_data.get('cmd speed', 0.0)
-                        authority_yards = train_data.get('cmd auth', 0)
+                        # Convert internal units: m/s -> mph, meters -> yards
+                        speed_ms = train_data.get('cmd speed', 0.0)
+                        auth_m = train_data.get('cmd auth', 0)
+                        speed_mph = float(speed_ms) * 2.23694  # m/s to mph
+                        authority_yards = int(float(auth_m) * 1.09361)  # meters to yards
                         break
                 else:
                     # No train commanded to this block, show simulated values for maintenance mode
