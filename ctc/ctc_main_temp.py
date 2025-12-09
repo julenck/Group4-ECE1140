@@ -98,6 +98,44 @@ def track_update_handler(new_data, train, data_file_ctc_data):
     except Exception as e:
         print(f"Train position data missing: {e}")
 
+def generate_station_throughput(station_name, line_name):
+    """
+    Generate random passenger throughput for a station.
+    Returns (passengers_entering, passengers_leaving) tuple.
+    Random numbers between 0 and 25 passengers for each direction.
+    """
+    import random
+    entering = random.randint(0, 25)
+    leaving = random.randint(0, 25)
+    return entering, leaving
+
+def update_throughput(data_file_ctc_data, station_name, line_name):
+    """
+    Update passenger throughput for a line when a train stops at a station.
+    Adds net passengers (entering - leaving) to the running total.
+    Ensures throughput stays positive (>= 0).
+    """
+    entering, leaving = generate_station_throughput(station_name, line_name)
+    net_passengers = entering - leaving
+    
+    data = safe_json_read(data_file_ctc_data)
+    if data:
+        # Initialize Throughput section if it doesn't exist
+        if "Throughput" not in data:
+            data["Throughput"] = {}
+        if line_name not in data["Throughput"]:
+            data["Throughput"][line_name] = 0
+        
+        # Add net passengers to running total, but ensure it never goes below 0
+        new_throughput = data["Throughput"][line_name] + net_passengers
+        data["Throughput"][line_name] = max(0, new_throughput)
+        
+        print(f"[THROUGHPUT] {station_name}: {entering} entering, {leaving} leaving ({net_passengers:+d}). {line_name} total: {data['Throughput'][line_name]} passengers")
+        
+        safe_json_write(data_file_ctc_data, data)
+        return data["Throughput"].get(line_name, 0)
+    return 0
+
 def dispatch_train(train, line, station, arrival_time_str,
                    data_file_ctc_data='ctc_data.json',
                    data_file_track_cont='../ctc_track_controller.json',
@@ -318,6 +356,9 @@ def dispatch_train(train, line, station, arrival_time_str,
                 safe_json_write(data_file_ctc_data, data)
             
             print(f"Train arrived at {test}")
+            
+            # Update passenger throughput for this station
+            update_throughput(data_file_ctc_data, test, line)
             
             # Wait for track controller to set Active = 0 (when authority exhausted)
             print(f"[CTC] Waiting for {train} to stop at station (authority exhausted)...")

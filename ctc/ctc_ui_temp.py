@@ -31,6 +31,9 @@ class CTCUI:
                     "Train 4": {"Line": "", "Suggested Speed": "", "Authority": "", "Station Destination": "", "Arrival Time": "", "Position": "", "State": "", "Current Station": ""},
                     "Train 5": {"Line": "", "Suggested Speed": "", "Authority": "", "Station Destination": "", "Arrival Time": "", "Position": "", "State": "", "Current Station": ""}
                 }
+            },
+            "Throughput": {
+                "Green": 0
             }
         }
 
@@ -313,8 +316,11 @@ class CTCUI:
         self.throughput_frame = tk.Frame(self.bottom_frame)
         self.throughput_frame.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(10, 0))
         self.throughput_frame.grid_columnconfigure((0, 1), weight=1)
-        tk.Label(self.throughput_frame, text=f"Red Line: 20 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=0, sticky='w', padx=20)
-        tk.Label(self.throughput_frame, text="Green Line: 14 passengers/hour", font=('Times New Roman', 20, 'bold')).grid(row=0, column=1, sticky='w', padx=20)
+        self.green_line_label = tk.Label(self.throughput_frame, text="Green Line: 0 passengers", font=('Times New Roman', 20, 'bold'))
+        self.green_line_label.grid(row=0, column=0, sticky='w', padx=20)
+        
+        # Start updating throughput labels periodically
+        self.update_throughput_labels()
 
     def manual_dispatch(self):
         train = self.manual_train_box.get()
@@ -563,6 +569,21 @@ class CTCUI:
         self.date_label.config(text=now.date())
         self.time_label.config(text=f"      {now.strftime('%H:%M:%S')}")
         self.root.after(1000, self.update_datetime)
+
+    def update_throughput_labels(self):
+        """Update throughput labels from ctc_data.json every 500ms."""
+        try:
+            data = self.load_data()
+            throughput = data.get("Throughput", {})
+            
+            green_total = throughput.get("Green", 0)
+            
+            self.green_line_label.config(text=f"Green Line: {green_total} passengers")
+        except Exception as e:
+            print(f"Error updating throughput labels: {e}")
+        
+        # Schedule next update
+        self.root.after(500, self.update_throughput_labels)
 
     def show_frame(self, frame, clicked_button=None):
         frame.tkraise()
