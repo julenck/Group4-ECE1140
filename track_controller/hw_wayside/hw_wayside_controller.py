@@ -1008,8 +1008,9 @@ class HW_Wayside_Controller:
                                     continue
                                 # Authority increased - this is a new dispatch, proceed with activation below
 
-                    # CTC sends authority in meters and speed in mph
-                    sug_auth_m = float(self.active_trains[train].get('Suggested Authority', 0) or 0)  # meters
+                    # CTC sends authority in YARDS and speed in MPH
+                    sug_auth_yds = float(self.active_trains[train].get('Suggested Authority', 0) or 0)  # yards
+                    sug_auth_m = sug_auth_yds * 0.9144  # Convert yards to meters for internal use
                     sug_speed_mph = float(self.active_trains[train].get('Suggested Speed', 0) or 0)  # mph
                     sug_speed_ms = sug_speed_mph * 0.44704  # Convert mph to m/s for internal use
 
@@ -1138,13 +1139,17 @@ class HW_Wayside_Controller:
                         speed = new_speed
 
                 # Get current CTC values (these may have changed)
-                current_sug_auth = float(self.active_trains.get(tname, {}).get('Suggested Authority', auth) or auth)
-                current_sug_speed = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed) or speed)
+                # CTC sends Suggested Authority in YARDS (not meters)
+                current_sug_auth_yds = float(self.active_trains.get(tname, {}).get('Suggested Authority', auth * 1.09361) or (auth * 1.09361))
+                current_sug_auth = current_sug_auth_yds * 0.9144  # Convert yards to meters
+                current_sug_speed_mph = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed * 2.23694) or (speed * 2.23694))
+                current_sug_speed = current_sug_speed_mph * 0.44704  # Convert mph to m/s
 
                 # Only update commanded values if CTC gives MORE authority than we currently have
                 # This prevents overriding handoff authority with stale CTC values
-                if current_sug_auth > auth:
-                    # CTC gave more authority - update our commanded values
+                # Allow a tolerance of 50 yards (45.72m) to account for rounding/timing differences
+                if current_sug_auth > (auth + 50):
+                    # CTC gave significantly more authority - this is a new dispatch, update our commanded values
                     print(f"[HW Wayside {self.wayside_id}] CTC override for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m, speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
                     auth = current_sug_auth
                     speed = current_sug_speed
@@ -1191,10 +1196,14 @@ class HW_Wayside_Controller:
                 state['cmd speed'] = speed
 
                 # Decrement authority by distance traveled (matching SW logic)
+                # Speed is in m/s, so distance per tick (1 second) = speed
                 if actual_speed > 0:
-                    auth = auth - actual_speed
+                    distance_traveled = actual_speed  # meters per second
+                    auth = auth - distance_traveled
                     if auth < 5:
                         auth = 0
+                    # Update state immediately so UI sees decreasing authority
+                    state['cmd auth'] = auth
 
                 # If authority exhausted, set to 0 and mark for removal (and write final position to CTC)
                 if auth <= 0:
@@ -1268,10 +1277,16 @@ class HW_Wayside_Controller:
                         to_remove.append(tname)
                         continue
                     else:
-                        # Move into next block: update pos and index, add cumulative distance
+                        # Move into next block: clear old occupancy, update pos and index, add cumulative distance
+                        # Clear occupancy from old block
+                        self._occupied.discard(str(pos))
+                        
                         state['pos'] = new_pos
                         self.train_idx[tname] = self.train_idx.get(tname, 0) + 1
                         self.cumulative_distance[tname] = self.cumulative_distance.get(tname, 0.0) + self.block_lengths.get(pos, 100)
+                        
+                        # Mark new block as occupied
+                        self._occupied.add(str(new_pos))
 
                         # Write new position immediately to CTC so other controllers see it
                         max_retries = 3

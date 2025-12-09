@@ -225,14 +225,14 @@ class HW_Display(ttk.Frame):
                 cmd_auth = train.get('cmd_auth', 0)
                 next_station = train.get('next_station', '-')
 
-                # Format speed and authority
+                # Format speed and authority with 2 decimal places
                 try:
-                    speed_str = f"{float(cmd_speed):.0f}"
+                    speed_str = f"{float(cmd_speed):.2f}"
                 except:
                     speed_str = str(cmd_speed)
 
                 try:
-                    auth_str = f"{int(cmd_auth):,}"
+                    auth_str = f"{float(cmd_auth):.2f}"
                 except:
                     auth_str = str(cmd_auth)
 
