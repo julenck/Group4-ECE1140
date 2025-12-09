@@ -103,8 +103,12 @@ class train_controller_api:
         base_dir = os.path.dirname(os.path.dirname(__file__))
         self.data_dir = os.path.join(base_dir, "data")
         os.makedirs(self.data_dir, exist_ok=True)
-        
+
         self.state_file = os.path.join(self.data_dir, "train_states.json")
+
+        # Persistent kp/ki storage to prevent reset due to file corruption
+        self._persistent_kp = None
+        self._persistent_ki = None
         
         # Default state template with inputs/outputs sections
         self.default_inputs = {
@@ -246,7 +250,7 @@ class train_controller_api:
                                 continue
                             else:  # Final attempt failed
                                 print(f"[WARNING] JSON decode error after 3 attempts (race condition): {e}")
-                                # CRITICAL: Return defaults but preserve kp/ki from cache to prevent reset
+                                # CRITICAL: Return defaults but preserve kp/ki from cache/persistent storage to prevent reset
                                 result = self.train_states.copy()
                                 if hasattr(self, '_last_good_state') and self._last_good_state:
                                     # Preserve kp/ki from last good read
@@ -254,6 +258,11 @@ class train_controller_api:
                                         result['kp'] = self._last_good_state['kp']
                                     if 'ki' in self._last_good_state:
                                         result['ki'] = self._last_good_state['ki']
+                                # Also preserve from persistent storage
+                                if self._persistent_kp is not None and result.get('kp') is None:
+                                    result['kp'] = self._persistent_kp
+                                if self._persistent_ki is not None and result.get('ki') is None:
+                                    result['ki'] = self._persistent_ki
                                 return result
                     else:
                         # This shouldn't happen, but just in case
@@ -273,11 +282,37 @@ class train_controller_api:
                                     result = self.train_states.copy()
                                     result.update(section.get('inputs', {}))
                                     result.update(section.get('outputs', {}))
+
+                                    # CRITICAL: Preserve persistent kp/ki values if file has None
+                                    if self._persistent_kp is not None and result.get('kp') is None:
+                                        result['kp'] = self._persistent_kp
+                                    if self._persistent_ki is not None and result.get('ki') is None:
+                                        result['ki'] = self._persistent_ki
+
+                                    # Update persistent storage with any non-None values
+                                    if result.get('kp') is not None:
+                                        self._persistent_kp = result['kp']
+                                    if result.get('ki') is not None:
+                                        self._persistent_ki = result['ki']
+
                                     return result
                                 else:
                                     # Old flat structure - merge with defaults
                                     result = self.train_states.copy()
                                     result.update(section)
+
+                                    # Preserve persistent kp/ki values
+                                    if self._persistent_kp is not None and result.get('kp') is None:
+                                        result['kp'] = self._persistent_kp
+                                    if self._persistent_ki is not None and result.get('ki') is None:
+                                        result['ki'] = self._persistent_ki
+
+                                    # Update persistent storage
+                                    if result.get('kp') is not None:
+                                        self._persistent_kp = result['kp']
+                                    if result.get('ki') is not None:
+                                        self._persistent_ki = result['ki']
+
                                     return result
                             else:
                                 # Train doesn't exist - return empty dict instead of defaults
@@ -296,6 +331,19 @@ class train_controller_api:
                                         result = self.train_states.copy()
                                         result.update(section.get('inputs', {}))
                                         result.update(section.get('outputs', {}))
+
+                                        # Preserve persistent kp/ki values
+                                        if self._persistent_kp is not None and result.get('kp') is None:
+                                            result['kp'] = self._persistent_kp
+                                        if self._persistent_ki is not None and result.get('ki') is None:
+                                            result['ki'] = self._persistent_ki
+
+                                        # Update persistent storage
+                                        if result.get('kp') is not None:
+                                            self._persistent_kp = result['kp']
+                                        if result.get('ki') is not None:
+                                            self._persistent_ki = result['ki']
+
                                         return result
                                 # Train not found - return empty dict instead of defaults
                                 return {}
@@ -305,10 +353,36 @@ class train_controller_api:
                                 result = self.train_states.copy()
                                 result.update(all_states.get('inputs', {}))
                                 result.update(all_states.get('outputs', {}))
+
+                                # Preserve persistent kp/ki values
+                                if self._persistent_kp is not None and result.get('kp') is None:
+                                    result['kp'] = self._persistent_kp
+                                if self._persistent_ki is not None and result.get('ki') is None:
+                                    result['ki'] = self._persistent_ki
+
+                                # Update persistent storage
+                                if result.get('kp') is not None:
+                                    self._persistent_kp = result['kp']
+                                if result.get('ki') is not None:
+                                    self._persistent_ki = result['ki']
+
                                 return result
                             else:
                                 result = self.train_states.copy()
                                 result.update(all_states)
+
+                                # Preserve persistent kp/ki values
+                                if self._persistent_kp is not None and result.get('kp') is None:
+                                    result['kp'] = self._persistent_kp
+                                if self._persistent_ki is not None and result.get('ki') is None:
+                                    result['ki'] = self._persistent_ki
+
+                                # Update persistent storage
+                                if result.get('kp') is not None:
+                                    self._persistent_kp = result['kp']
+                                if result.get('ki') is not None:
+                                    self._persistent_ki = result['ki']
+
                                 return result
                     except Exception as e:
                         print(f"[WARNING] Error processing state: {e}")
