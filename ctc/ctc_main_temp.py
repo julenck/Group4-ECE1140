@@ -215,26 +215,28 @@ def dispatch_train(train, line, station, arrival_time_str,
                 "Train Position": 0,
                 "Train State": 0
             })
-    
+
+        return track_updates
+
+    track_updates = _ensure_train_entries()
+
     # Reset ONLY the train being dispatched
-    track_data["Trains"][train] = {
+    track_updates["Trains"][train] = {
         "Active": 0,  # Will be set to 1 later
         "Suggested Speed": 0,
         "Suggested Authority": 0,
         "Train Position": 0,
         "Train State": 0
     }
-    
+
     try:
         with open(data_file_track_cont, 'w') as f:
-            json.dump(track_data, f, indent=4)
+            json.dump(track_updates, f, indent=4)
         print(f"[CTC Dispatch] {train} reset in ctc_track_controller.json (other trains preserved)")
     except Exception as e:
         print(f"Warning: failed to update ctc_track_controller.json: {e}")
 
         safe_json_write(data_file_track_cont, track_updates)
-
-    _ensure_train_entries()
 
     dest_id = route_lookup_via_station[station]["id"]
     print(f"dest id ={dest_id}")
