@@ -89,11 +89,9 @@ def launch_hw_wayside():
         
         # Create UI
         root = tk.Tk()
-        root.title("HW Wayside Controller - Blocks 70-143")
         root.geometry("1200x800")
-        
-        display = HW_Display()
-        ui = HW_Wayside_Controller_UI(root, controller, display)
+        ui = HW_Wayside_Controller_UI(root, controller, "HW Wayside Controller - Blocks 70-143")
+        ui.pack(fill='both', expand=True)
         
         # Start controller's train loop
         controller.start_trains(period_s=1.0)
