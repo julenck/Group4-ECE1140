@@ -28,7 +28,7 @@ def safe_read_json(path):
         try:
             with open(path, "r") as f:
                 data = json.load(f)
-                return data if isinstance(data, (dict, list)) else {}
+                return data if isinstance(data, (dict, list)) else None
         except json.JSONDecodeError:
             # Race condition - file was being written
             if attempt < 2:
@@ -36,7 +36,8 @@ def safe_read_json(path):
                 continue
             else:
                 print(f"[WARNING] Failed to read {path} after 3 attempts (race condition)")
-                return {}
+            #   return {}
+                return data
         except FileNotFoundError:
             return {}
         except Exception as e:
