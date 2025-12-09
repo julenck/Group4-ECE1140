@@ -119,47 +119,9 @@ def dispatch_train(train, line, station, arrival_time_str,
     print(f"CTC data file -> {data_file_ctc_data}")
     print(f"Track controller file -> {data_file_track_cont}")
 
-    # Only reset JSON files if NOT in single-station dispatch mode
-    # In single-station mode (used by dispatch_schedule), we preserve state across calls
-    if not is_single_station_dispatch:
-        print("Resetting CTC JSON files to default state...")
-        
-        # Reset ctc_data.json
-        default_ctc_data = {
-            "Dispatcher": {
-                "Trains": {}
-            }
-        }
-        for i in range(1, 6):
-            tname = f"Train {i}"
-            default_ctc_data["Dispatcher"]["Trains"][tname] = {
-                "Line": "",
-                "Suggested Speed": "",
-                "Authority": "",
-                "Station Destination": "",
-                "Arrival Time": "",
-                "Position": "",
-                "State": "",
-                "Current Station": ""
-            }
-        safe_json_write(data_file_ctc_data, default_ctc_data)
-        print("ctc_data.json reset complete")
-        
-        # Reset ctc_track_controller.json
-        default_track = {"Trains": {}}
-        for i in range(1, 6):
-            tname = f"Train {i}"
-            default_track["Trains"][tname] = {
-                "Active": 0,
-                "Suggested Speed": 0,
-                "Suggested Authority": 0,
-                "Train Position": 0,
-                "Train State": 0
-            }
-        safe_json_write(data_file_track_cont, default_track)
-        print("ctc_track_controller.json reset complete")
-    else:
-        print("[SINGLE_STATION_DISPATCH] Skipping file reset to preserve train state across multiple stations")
+    # For manual dispatch, don't reset all trains - only ensure structure exists
+    # The _ensure_train_entries function will create missing trains without resetting existing ones
+    print("[DISPATCH] Ensuring train entries exist in JSON files")
 
     # Ensure the track controller file exists (create minimal structure if missing)
     if not os.path.exists(data_file_track_cont):
