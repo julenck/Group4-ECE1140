@@ -32,6 +32,10 @@ class train_controller_api_client:
         
         # Cache for state when server is unreachable
         self._cached_state = None
+
+        # CRITICAL: Persistent storage for kp/ki to survive connection failures
+        self._persistent_kp = None
+        self._persistent_ki = None
         
         # Default state (fallback if server unreachable)
         self.default_state = {
@@ -116,6 +120,11 @@ class train_controller_api_client:
                     if response.status_code == 200:
                         state = response.json()
                         self._cached_state = state  # Update cache
+                        # CRITICAL: Update persistent kp/ki storage when we get valid values
+                        if 'kp' in state and state['kp'] is not None:
+                            self._persistent_kp = state['kp']
+                        if 'ki' in state and state['ki'] is not None:
+                            self._persistent_ki = state['ki']
                         return state
                     elif response.status_code == 404:
                         # Train doesn't exist yet - keep trying instead of using defaults
@@ -144,9 +153,21 @@ class train_controller_api_client:
         # All retries failed - fall back to cache or defaults
         print(f"[API Client] All connection attempts failed, using fallback")
         if self._cached_state is not None:
-            return self._cached_state.copy()
+            cached_copy = self._cached_state.copy()
+            # Preserve persistent kp/ki values even when using cache
+            if self._persistent_kp is not None:
+                cached_copy['kp'] = self._persistent_kp
+            if self._persistent_ki is not None:
+                cached_copy['ki'] = self._persistent_ki
+            return cached_copy
         # Return defaults as last resort (hardware controller expects certain keys)
-        return self.default_state.copy()
+        # But preserve any persistent kp/ki values
+        fallback_state = self.default_state.copy()
+        if self._persistent_kp is not None:
+            fallback_state['kp'] = self._persistent_kp
+        if self._persistent_ki is not None:
+            fallback_state['ki'] = self._persistent_ki
+        return fallback_state
     
     def update_state(self, state_dict: dict) -> None:
         """Update train state on server.
@@ -161,6 +182,11 @@ class train_controller_api_client:
                     # Update local cache with successful write
                     if self._cached_state is not None:
                         self._cached_state.update(state_dict)
+                    # CRITICAL: Update persistent kp/ki storage when we successfully set them
+                    if 'kp' in state_dict and state_dict['kp'] is not None:
+                        self._persistent_kp = state_dict['kp']
+                    if 'ki' in state_dict and state_dict['ki'] is not None:
+                        self._persistent_ki = state_dict['ki']
                     return  # Success
                 elif attempt == self.max_retries - 1:
                     print(f"[API Client] Update failed with status {response.status_code}")
