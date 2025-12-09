@@ -1158,8 +1158,26 @@ class HW_Wayside_Controller:
                 # Get block speed limit (matching SW controller behavior)
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
 
-                # Cap commanded speed at block speed limit (matching SW controller)
-                target_speed = min(current_sug_speed, speed_limit)
+                # Calculate target speed based on authority remaining (comprehensive SW-style logic)
+                # When authority is low, reduce speed to help train stop smoothly
+                DECEL_THRESHOLD = 150  # Start decelerating when less than 150m authority
+                MIN_SPEED_THRESHOLD = 40  # Start dropping below 10 m/s at 40m authority
+                MIN_SPEED = 10  # Don't go below 10 m/s until MIN_SPEED_THRESHOLD
+                FINAL_MIN_SPEED = 1  # Final minimum speed before stopping
+                STOP_THRESHOLD = 5  # Below 5m, stop completely
+                
+                if auth <= STOP_THRESHOLD:
+                    target_speed = 0
+                elif auth < MIN_SPEED_THRESHOLD:
+                    # Very low authority - reduce to final minimum
+                    target_speed = FINAL_MIN_SPEED
+                elif auth < DECEL_THRESHOLD:
+                    # Low authority - linear interpolation from MIN_SPEED to sug_speed
+                    ratio = (auth - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
+                    target_speed = MIN_SPEED + ratio * (min(current_sug_speed, speed_limit) - MIN_SPEED)
+                else:
+                    # Normal operation - use min of suggested speed and block limit
+                    target_speed = min(current_sug_speed, speed_limit)
                 
                 # Smoothly adjust commanded speed toward target
                 ACCEL_RATE = 2.0  # m/s per tick acceleration
