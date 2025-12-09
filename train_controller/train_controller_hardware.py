@@ -227,7 +227,8 @@ class train_controller_hardware:
         try:
             v0, _ = self._read_ads1115_single_ended(address, 0)
             ratio0 = max(0.0, min(1.0, v0 / V_POT))
-            commanded_speed = self.api.get_state().get('commanded_speed', 0.0)
+            # Handle None value for commanded_speed (server may set it to None initially)
+            commanded_speed = self.api.get_state().get('commanded_speed') or 0.0
             return round(ratio0 * commanded_speed, 2)
         except Exception as e:
             print(f"set_driver_velocity_adc error: {e}")

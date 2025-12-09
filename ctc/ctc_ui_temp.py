@@ -35,6 +35,29 @@ class CTCUI:
         }
 
         self.setup_json_file()
+        
+        # Phase 3: Initialize CTC API client for REST API communication
+        self.ctc_api = None
+        server_url = os.environ.get('CTC_SERVER_URL', 'http://localhost:5000')  # Default to localhost
+        try:
+            from ctc.api.ctc_api_client import CTCAPIClient
+            self.ctc_api = CTCAPIClient(server_url=server_url)
+            print(f"[CTC] Using REST API: {server_url}")
+        except Exception as e:
+            print(f"[CTC] Warning: Failed to initialize API client: {e}")
+            print(f"[CTC] Falling back to file-based I/O")
+            self.ctc_api = None
+        
+        # Initialize TrainManager for train controller dispatch
+        try:
+            from train_controller.train_manager import TrainManager
+            self.train_manager = TrainManager()
+            print("[CTC] TrainManager initialized - ready to dispatch trains")
+            print("[CTC] Use 'Controller Type' dropdown to select Hardware or Software controller")
+        except Exception as e:
+            print(f"[CTC] Warning: Failed to initialize TrainManager: {e}")
+            self.train_manager = None
+        
         self.root = tk.Tk()
         self.root.title("CTC User Interface")
         self.root.geometry("1500x700")
@@ -107,8 +130,34 @@ class CTCUI:
         return {}
 
     def save_data(self, data):
-        with open(self.data_file, "w") as f:
-            self.json.dump(data, f, indent=4)
+        """Thread-safe save with validation to prevent corruption."""
+        import tempfile
+        import os
+        
+        # Validate data structure before writing
+        try:
+            # Test serialization first
+            test_json = self.json.dumps(data, indent=4)
+            # Ensure balanced braces
+            if test_json.count('{') != test_json.count('}'):
+                print(f"[CTC UI] ERROR: Imbalanced braces in data! Not writing to file.")
+                return
+        except Exception as e:
+            print(f"[CTC UI] ERROR: Invalid data structure: {e}")
+            return
+        
+        # Write to temp file first, then atomic rename
+        try:
+            temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(self.data_file), suffix='.json')
+            with os.fdopen(temp_fd, 'w') as f:
+                self.json.dump(data, f, indent=4)
+            
+            # Atomic rename (replaces old file)
+            os.replace(temp_path, self.data_file)
+        except Exception as e:
+            print(f"[CTC UI] ERROR writing {self.data_file}: {e}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
 
     def setup_ui(self):
@@ -185,8 +234,19 @@ class CTCUI:
         self.manual_dest_box.grid(row=1, column=2, padx=5, sticky='ew')
         self.manual_time_box.grid(row=1, column=3, padx=5, sticky='ew')
 
+        # Controller Type Selector (Row 2)
+        tk.Label(self.manual_frame, text="Controller Type:", font=label_font, bg="lightgreen").grid(row=2, column=0, sticky='e', padx=10, pady=5)
+        self.controller_type_box = ttk.Combobox(
+            self.manual_frame, 
+            values=["Software (PC)", "Hardware (Raspberry Pi)"], 
+            font=input_font,
+            state='readonly'
+        )
+        self.controller_type_box.set("Software (PC)")  # Default to software
+        self.controller_type_box.grid(row=2, column=1, columnspan=2, padx=5, sticky='ew')
+
         self.manual_dispatch_button = tk.Button(self.manual_frame, text='DISPATCH', command=self.manual_dispatch, **self.button_style)
-        self.manual_dispatch_button.grid(row=2, column=0, columnspan=4, pady=10, padx=500, sticky='ew')
+        self.manual_dispatch_button.grid(row=3, column=0, columnspan=4, pady=10, padx=500, sticky='ew')
 
         # Maintenance Frame UI
         self.maint_frame.grid_columnconfigure((0,1,2,3),weight=1)
@@ -261,23 +321,69 @@ class CTCUI:
         line = self.manual_line_box.get()
         dest = self.manual_dest_box.get()
         arrival = self.manual_time_box.get()
-        with open(self.os.path.join('ctc', 'ctc_ui_inputs.json'), "r") as f1:
+        
+        # Phase 3: Dispatch train via REST API if available
+        if self.ctc_api:
+            try:
+                # Use CTC API to dispatch train
+                train_name = self.ctc_api.dispatch_train(
+                    line=line,
+                    station=dest,
+                    arrival_time=arrival
+                )
+                if train_name:
+                    print(f"[CTC] ✓ Train '{train_name}' dispatched via REST API")
+                else:
+                    print(f"[CTC] ✗ Train dispatch via API failed, falling back to file I/O")
+                    # Fall through to file I/O below
+            except Exception as e:
+                print(f"[CTC] API dispatch error: {e}, falling back to file I/O")
+                # Fall through to file I/O below
+        
+        # Legacy file I/O (fallback or when API not available)
+        import os
+        ctc_dir = os.path.dirname(os.path.abspath(__file__))
+        input_file = os.path.join(ctc_dir, 'ctc_ui_inputs.json')
+        with open(input_file, "r") as f1:
             data1 = self.json.load(f1)
         data1["Train"] = train
         data1["Line"] = line
         data1["Station"] = dest
         data1["Arrival Time"] = arrival
-        with open(self.os.path.join('ctc', 'ctc_ui_inputs.json'), "w") as f1:
+        with open(input_file, "w") as f1:
             self.json.dump(data1, f1, indent=4)
         self.update_active_trains_table()
         
-        # Open Train Manager window
-        try:
-            from train_controller.train_manager import TrainManagerUI
-            if not hasattr(self, 'train_manager_window') or not self.train_manager_window.winfo_exists():
-                self.train_manager_window = TrainManagerUI()
-        except Exception as e:
-            print(f"Failed to open Train Manager: {e}")
+        # Dispatch train controller with user-selected type
+        if hasattr(self, 'train_manager') and self.train_manager:
+            try:
+                from train_controller.train_manager import dispatch_train_from_ctc
+                
+                # Get user's controller type selection
+                selected_type = self.controller_type_box.get()
+                if selected_type == "Hardware (Raspberry Pi)":
+                    controller_type = "hardware_remote"
+                else:  # "Software (PC)"
+                    controller_type = "software"
+                
+                # Dispatch train with user-selected controller type
+                train_id, actual_controller_type = dispatch_train_from_ctc(
+                    train_manager=self.train_manager,
+                    server_url=None,  # Will auto-detect server IP for remote hardware
+                    controller_type=controller_type  # Pass user's selection
+                )
+                
+                if train_id:
+                    print(f"[CTC] ✓ Successfully dispatched Train {train_id} with {actual_controller_type} controller")
+                else:
+                    print("[CTC] ✗ Train dispatch failed")
+                    
+            except Exception as e:
+                print(f"[CTC] Failed to dispatch train controller: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[CTC] Warning: TrainManager not initialized - cannot dispatch train controller")
         
         # Instead of launching a subprocess, call the in-process dispatch function
         try:

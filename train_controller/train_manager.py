@@ -29,6 +29,13 @@ sys.path.append(train_model_dir)
 # Import required classes
 from api.train_controller_api import train_controller_api
 
+# Phase 3: REST API support
+try:
+    import requests
+except ImportError:
+    requests = None
+    print("[Train Manager] Warning: requests library not available, using file I/O only")
+
 
 class TrainPair:
     """Represents a paired TrainModel and train_controller instance with UIs.
@@ -78,14 +85,18 @@ class TrainManager:
         state_file: Path to the shared train_states.json file.
     """
     
-    def __init__(self, state_file: str = None):
+    def __init__(self, state_file: str = None, server_url: str = None):
         """Initialize the TrainManager.
         
         Args:
             state_file: Path to train_states.json. If None, uses default location.
+            server_url: Optional REST API server URL (e.g. "http://localhost:5000").
+                       If provided, Train Manager will use REST API for state management.
+                       If None, uses direct file I/O (legacy mode).
         """
         self.trains = {}  # Dictionary of train_id -> TrainPair
         self.next_train_id = 1
+        self.server_url = server_url  # Phase 3: REST API integration
         
         # Set state file path
         if state_file is None:
@@ -99,6 +110,12 @@ class TrainManager:
         self.train_data_file = os.path.join(train_model_dir_actual, "train_data.json")
         # IMPORTANT: seed trains from the Train_Model folder's track-to-train file
         self.track_model_file = os.path.join(train_model_dir_actual, "track_model_Train_Model.json")
+        
+        # Phase 3: Print mode
+        if self.server_url:
+            print(f"[Train Manager] Using REST API: {self.server_url}")
+        else:
+            print(f"[Train Manager] Using file-based I/O (legacy mode)")
         
         # Ensure state file exists
         self._initialize_state_file()
@@ -153,14 +170,20 @@ class TrainManager:
         
         # Import appropriate controller based on hardware flag
         if use_hardware:
-            from ui.train_controller_hw_ui import train_controller, train_controller_ui
-            if is_remote:
-                print(f"Using HARDWARE controller for train {self.next_train_id} (REMOTE - Raspberry Pi)")
-            else:
-                print(f"Using HARDWARE controller for train {self.next_train_id} (LOCAL)")
+            try:
+                from ui.train_controller_hw_ui import train_controller, train_controller_ui
+                if is_remote:
+                    print(f"[TrainManager] Using HARDWARE controller for train {self.next_train_id} (REMOTE - Raspberry Pi)")
+                else:
+                    print(f"[TrainManager] Using HARDWARE controller for train {self.next_train_id} (LOCAL - will open on PC)")
+            except Exception as e:
+                print(f"[TrainManager] ERROR importing hardware UI: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
         else:
             from ui.train_controller_sw_ui import train_controller, train_controller_ui
-            print(f"Using SOFTWARE controller for train {self.next_train_id}")
+            print(f"[TrainManager] Using SOFTWARE controller for train {self.next_train_id}")
         
         # Get train ID
         train_id = self.next_train_id
@@ -226,7 +249,12 @@ class TrainManager:
             
             # Create Train Controller UI if not remote
             if not is_remote:
-                controller_ui = train_controller_ui(train_id=train_id)
+                # For software controllers, use server mode if server_url is provided
+                # For hardware controllers (local), also use server mode if available
+                if server_url:
+                    controller_ui = train_controller_ui(train_id=train_id, server_url=server_url)
+                else:
+                    controller_ui = train_controller_ui(train_id=train_id)
                 # Position controller UI to the right of model UI
                 controller_ui.geometry(f"600x800+{x_offset + 1460}+{y_offset}")
                 # Ensure the window is visible and brought to front
@@ -262,19 +290,25 @@ class TrainManager:
         return train_id
     
     def _initialize_train_state(self, train_id: int):
-        """Initialize state for a train in the JSON file.
-        
+        """Initialize state for a train (via REST API or file).
+
         Args:
             train_id: ID of the train to initialize.
         """
-        # Read current state file
-        with open(self.state_file, 'r') as f:
-            try:
-                all_states = json.load(f)
-            except json.JSONDecodeError:
-                all_states = {}
-        
         train_key = f"train_{train_id}"
+
+        # Check if train already exists and has kp/ki set - if so, skip initialization
+        # This prevents overwriting user-set PID values
+        try:
+            existing_state = self.get_train_state(train_id)
+            if existing_state and 'outputs' in existing_state:
+                kp_val = existing_state['outputs'].get('kp')
+                ki_val = existing_state['outputs'].get('ki')
+                if kp_val is not None or ki_val is not None:
+                    print(f"[Train Manager] Train {train_id} already exists with kp={kp_val}, ki={ki_val} - skipping initialization")
+                    return
+        except Exception as e:
+            print(f"[Train Manager] Error checking existing train {train_id}: {e}")
 
         # Seed from Train Model/track_model_Train_Model.json (multi-train keyed)
         track = self._safe_read_json(self.track_model_file)
@@ -297,7 +331,7 @@ class TrainManager:
         station_side = beacon.get("side_door", "") or ""
 
         # Default state for new train (matches track inputs)
-        all_states[train_key] = {
+        initial_state = {
             "train_id": train_id,
             "commanded_speed": commanded_speed,
             "commanded_authority": commanded_authority,
@@ -328,9 +362,33 @@ class TrainManager:
             "current_station": next_stop
         }
         
-        # Write back to file
+        # Phase 3: Use REST API if available, otherwise file I/O
+        if self.server_url and requests:
+            try:
+                # Use REST API to initialize train state
+                endpoint = f"{self.server_url}/api/train/{train_id}/state"
+                response = requests.post(endpoint, json=initial_state, timeout=5)
+                if response.status_code == 200:
+                    print(f"[Train Manager] Train {train_id} state initialized via REST API")
+                    return
+                else:
+                    print(f"[Train Manager] REST API init failed ({response.status_code}), falling back to file I/O")
+            except Exception as e:
+                print(f"[Train Manager] REST API error: {e}, falling back to file I/O")
+        
+        # Legacy file I/O (fallback or when API not available)
+        with open(self.state_file, 'r') as f:
+            try:
+                all_states = json.load(f)
+            except json.JSONDecodeError:
+                all_states = {}
+        
+        all_states[train_key] = initial_state
+        
+        # Write back to file with sorted keys to maintain consistent order (train_1, train_2, etc.)
+        sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
         with open(self.state_file, 'w') as f:
-            json.dump(all_states, f, indent=4)
+            json.dump(sorted_states, f, indent=4)
 
     # --- NEW: helpers to sync train_data.json with track model inputs ---
     def _safe_read_json(self, path: str) -> dict:
@@ -483,8 +541,10 @@ class TrainManager:
         train_key = f"train_{train_id}"
         if train_key in all_states:
             del all_states[train_key]
+        # Write back with sorted keys to maintain consistent order
+        sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
         with open(self.state_file, 'w') as f:
-            json.dump(all_states, f, indent=4)
+            json.dump(sorted_states, f, indent=4)
 
         # Remove matching entry from Train Model/train_data.json
         try:
@@ -544,9 +604,10 @@ class TrainManager:
         if train_key in all_states:
             all_states[train_key].update(state_updates)
         
-        # Write back
+        # Write back with sorted keys to maintain consistent order
+        sorted_states = {k: all_states[k] for k in sorted(all_states.keys())}
         with open(self.state_file, 'w') as f:
-            json.dump(all_states, f, indent=4)
+            json.dump(sorted_states, f, indent=4)
         
         return True
     
@@ -809,10 +870,22 @@ class TrainManagerUI(tk.Tk):
             controller_type = self.controller_type_var.get()
             
             if controller_type == "software":
-                train_id = self.manager.add_train(create_uis=True, use_hardware=False, is_remote=False)
+                # Get server IP for software controller (use server mode)
+                import socket
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    server_ip = s.getsockname()[0]
+                    s.close()
+                except:
+                    server_ip = "localhost"
+                
+                server_url = f"http://{server_ip}:5000"
+                
+                train_id = self.manager.add_train(create_uis=True, use_hardware=False, is_remote=False, server_url=server_url)
                 self.update_train_list()
-                self.update_status(f"Train {train_id} added with SOFTWARE controller")
-                print(f"Train {train_id} created with SOFTWARE controller")
+                self.update_status(f"Train {train_id} added with SOFTWARE controller (using server)")
+                print(f"Train {train_id} created with SOFTWARE controller (server: {server_url})")
                 
             elif controller_type == "hardware_remote":
                 # Get server IP for remote mode
@@ -833,6 +906,7 @@ class TrainManagerUI(tk.Tk):
                 print(f"Train {train_id} created - REMOTE hardware controller")
                 
                 # Show instructions popup
+                import tkinter.messagebox
                 msg = f"""Train {train_id} Model created on this server!
 
 Hardware Controller must run on Raspberry Pi.
@@ -848,11 +922,21 @@ python train_controller_hw_ui.py --train-id {train_id} --server {server_url}
 The hardware controller will connect to this server
 and control Train {train_id}."""
                 
-                tk.messagebox.showinfo(f"Train {train_id} - Remote Hardware Setup", msg)
+                tkinter.messagebox.showinfo(f"Train {train_id} - Remote Hardware Setup", msg)
+            
+            else:
+                # Unknown controller type
+                import tkinter.messagebox
+                print(f"[ERROR] Unknown controller_type: '{controller_type}'")
+                self.update_status(f"ERROR: Unknown controller type '{controller_type}'")
+                tkinter.messagebox.showerror("Error", f"Unknown controller type: '{controller_type}'")
+                return
                 
         except Exception as e:
             self.update_status(f"Error adding train: {str(e)}")
             print(f"Error adding train: {e}")
+            import traceback
+            traceback.print_exc()
     
     def remove_selected_train(self):
         """Remove the selected train from the list."""
@@ -1176,17 +1260,13 @@ and control Train {self.train_id}."""
         self.destroy()
 
 
-def dispatch_train_from_ctc(train_manager=None, server_url=None):
+def dispatch_train_from_ctc(train_manager=None, server_url=None, controller_type=None):
     """Helper function to dispatch a train from CTC without UI.
-    
-    First train dispatched will be Hardware controller (Raspberry Pi).
-    All subsequent trains will be Software controllers.
-    
-    This function is called from the CTC UI when "Dispatch Train" is pressed.
     
     Args:
         train_manager: Optional existing TrainManager instance (creates new if None)
         server_url: Server URL for remote mode (e.g., http://192.168.1.100:5000)
+        controller_type: "software" or "hardware_remote" (if None, auto-selects based on train count)
         
     Returns:
         tuple: (train_id, controller_type) where controller_type is "hardware_remote" or "software"
@@ -1195,21 +1275,28 @@ def dispatch_train_from_ctc(train_manager=None, server_url=None):
     if train_manager is None:
         train_manager = TrainManager()
     
-    # Determine controller type based on how many trains exist
-    existing_train_count = train_manager.get_train_count()
-    
-    if existing_train_count == 0:
-        # First train: Hardware controller (Raspberry Pi)
-        controller_type = "hardware_remote"
-        is_remote = True
-        use_hardware = True  # Use hardware controller
-        print("[CTC Dispatch] Dispatching FIRST train with Hardware Controller (Raspberry Pi)")
+    # Determine controller type
+    if controller_type is None:
+        # Auto mode: Determine based on how many trains exist (legacy behavior)
+        existing_train_count = train_manager.get_train_count()
+        
+        if existing_train_count == 0:
+            controller_type = "hardware_remote"
+            print("[CTC Dispatch] Auto-selecting Hardware Controller for first train (REMOTE - Raspberry Pi)")
+        else:
+            controller_type = "software"
+            print(f"[CTC Dispatch] Auto-selecting Software Controller for train #{existing_train_count + 1}")
     else:
-        # Subsequent trains: Software controller
-        controller_type = "software"
+        # Use user-specified controller type
+        print(f"[CTC Dispatch] Using user-selected controller type: {controller_type}")
+    
+    # Set flags based on controller type
+    if controller_type == "hardware_remote":
+        is_remote = True  # Run on Raspberry Pi (remote mode)
+        use_hardware = True  # Use hardware controller UI
+    else:  # software
         is_remote = False
         use_hardware = False
-        print(f"[CTC Dispatch] Dispatching train #{existing_train_count + 1} with Software Controller")
     
     try:
         # Add train with appropriate controller type

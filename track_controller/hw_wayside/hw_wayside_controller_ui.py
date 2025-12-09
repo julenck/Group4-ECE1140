@@ -8,9 +8,15 @@ from __future__ import annotations
 from datetime import time
 import time
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import Optional
+
+# CRITICAL: Add hw_wayside directory to path BEFORE importing local modules
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
 
 from hw_display import HW_Display
 from hw_wayside_controller import HW_Wayside_Controller

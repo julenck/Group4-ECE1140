@@ -53,7 +53,8 @@ class train_controller:
         self.lcd_rw = 0x02
         self.lcd_enable = 0x04
         self.validators = [vital_control_first_check(), vital_control_second_check()] # instantiate validators
-        self._accumulated_error = 0  # PI controller accumulated error
+        self._accumulated_error = 0.0  # PI controller accumulated error
+        self._last_update_time = time.time()  # Track last update time for PI control
         self._last_beacon_for_announcement = ""  # Track last beacon for auto-announcements
 
     def init_hardware(self):
@@ -87,8 +88,8 @@ class train_controller:
         # build a vital_train_controls candidate from current state + changes
         state = self.api.get_state().copy()
         candidate = vital_train_controls(
-            kp = changes.get('kp', state.get('kp', 0.0)),
-            ki = changes.get('ki', state.get('ki', 0.0)),
+            kp = changes.get('kp', state.get('kp') or 0.0),
+            ki = changes.get('ki', state.get('ki') or 0.0),
             train_velocity = changes.get('train_velocity', state.get('train_velocity', 0.0)),
             driver_velocity = changes.get('driver_velocity', state.get('driver_velocity', 0.0)),
             emergency_brake = changes.get('emergency_brake', state.get('emergency_brake', False)),
@@ -117,10 +118,11 @@ class train_controller:
         - Zero power when error is zero
         """
         # Get current values
-        train_velocity = state['train_velocity']
-        driver_velocity = state['driver_velocity']
-        kp = state['kp']
-        ki = state['ki']
+        train_velocity = state.get('train_velocity', 0.0)
+        driver_velocity = state.get('driver_velocity', 0.0)
+        # Handle None values for kp/ki (server sets them to None by default)
+        kp = state.get('kp') or 5000.0
+        ki = state.get('ki') or 500.0
         
         # Calculate speed error
         velocity_error = driver_velocity - train_velocity
@@ -215,10 +217,10 @@ class train_controller:
         Args:
             state: Current train state dictionary.
         """
-        train_velocity = state['train_velocity']
-        driver_velocity = state['driver_velocity']
-        current_service_brake = state['service_brake']
-        emergency_brake = state['emergency_brake']
+        train_velocity = state.get('train_velocity', 0.0)
+        driver_velocity = state.get('driver_velocity', 0.0)
+        current_service_brake = state.get('service_brake', False)
+        emergency_brake = state.get('emergency_brake', False)
         
         # Don't manage service brake if emergency brake is active
         if emergency_brake:
@@ -228,7 +230,7 @@ class train_controller:
         speed_difference = train_velocity - driver_velocity
         
         # Thresholds for engaging/releasing service brake
-        ENGAGE_THRESHOLD = 2.0   # Engage brake if going 2+ mph over target
+        ENGAGE_THRESHOLD = 0.5   # Engage brake if going 2+ mph over target
         RELEASE_THRESHOLD = 0.5  # Release brake when within 0.5 mph of target
         
         # Decide whether to engage or release service brake
@@ -274,11 +276,14 @@ class train_controller:
             updates = {}
             
             # Auto-set driver velocity to commanded speed
-            if state['driver_velocity'] != state['commanded_speed']:
-                updates['driver_velocity'] = state['commanded_speed']
+            driver_vel = state.get('driver_velocity', 0.0)
+            cmd_speed = state.get('commanded_speed', 0.0)
+            if driver_vel != cmd_speed:
+                updates['driver_velocity'] = cmd_speed
             
             # Auto-regulate temperature to 70°F
-            if state['set_temperature'] != 70.0:
+            set_temp = state.get('set_temperature', 70.0)
+            if set_temp != 70.0:
                 updates['set_temperature'] = 70.0
             
             # Apply updates if any
@@ -289,63 +294,92 @@ class train_controller:
             print(f"apply_automatic_controls error: {e}")
 
     def calculate_power_command(self, state: dict) -> float:
-        """Calculate power command using PI controller (same logic as SW controller)."""
-        driver_velocity = state.get('driver_velocity', 0.0)
-        current_velocity = state.get('train_velocity', 0.0)
-        kp = state.get('kp', 5000.0)
-        ki = state.get('ki', 500.0)
-        
-        error = driver_velocity - current_velocity
-        self._accumulated_error += error * 0.5  # dt = 0.5 seconds
-        
-        # Anti-windup: limit accumulated error
-        max_accumulated = 100.0
-        self._accumulated_error = max(-max_accumulated, min(max_accumulated, self._accumulated_error))
-        
-        power = kp * error + ki * self._accumulated_error
-        
-        # Clamp power to valid range
-        max_power = 120000.0  # 120 kW max
-        power = max(0, min(max_power, power))
-        
+        """Calculate power command using vital_train_controls.
+
+        Args:
+            state: Current train state dictionary.
+
+        Returns:
+            Power command in Watts (0-120000). Returns 0 if kp/ki not set or velocity exceeds speed limit.
+        """
+        # If kp or ki are not set, train cannot move
+        if 'kp' not in state or 'ki' not in state or state['kp'] is None or state['ki'] is None:
+            return 0.0
+
+        # Create a vital_train_controls instance with current state
+        controls = vital_train_controls(
+            kp=state['kp'],
+            ki=state['ki'],
+            train_velocity=state['train_velocity'],
+            driver_velocity=state['driver_velocity'],
+            emergency_brake=state['emergency_brake'],
+            service_brake=state['service_brake'],
+            power_command=state['power_command'],
+            commanded_authority=state['commanded_authority'],
+            speed_limit=state['speed_limit']
+        )
+
+        # Calculate power using vital_train_controls method
+        power, new_error, new_time = controls.calculate_power_command(
+            self._accumulated_error,
+            self._last_update_time
+        )
+
+        # Update internal tracking variables
+        self._accumulated_error = new_error
+        self._last_update_time = new_time
+
         return power
 
     def detect_and_respond_to_failures(self, state: dict):
         """Detect failures based on Train Model behavior and activate Train Controller failure flags.
-        
+
         Logic:
         - Engine Failure: Only detected when power is applied but train doesn't accelerate
         - Signal Failure: Detected when beacon_read_blocked flag is set
         - Brake Failure: Only detected when service brake is pressed but train doesn't slow
-        
+
         When detected, Train Controller activates corresponding train_controller_* flag and engages emergency brake.
+        When Train Model failure is resolved and emergency brake is released, Train Controller clears its failure flag.
         """
         updates = {}
-        
+
         # Detect engine failure: Only when trying to apply power but train doesn't respond
         if state.get('train_model_engine_failure', False):
             # Detect if power command is significant (> 1000W) - driver is trying to accelerate
             power_applied = state.get('power_command', 0.0) > 1000.0
-            
+
             if power_applied:
                 if not state.get('train_controller_engine_failure', False):
                     print("[Train Controller] ENGINE FAILURE DETECTED - Power applied but train not responding! Engaging emergency brake")
                     updates['train_controller_engine_failure'] = True
-        
+        # Clear engine failure flag if train model failure is resolved and emergency brake was released
+        elif state.get('train_controller_engine_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] ENGINE FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_engine_failure'] = False
+
         # Detect signal pickup failure: Only when Train Model blocks a beacon read
         if state.get('beacon_read_blocked', False):
             if not state.get('train_controller_signal_failure', False):
                 print("[Train Controller] SIGNAL PICKUP FAILURE DETECTED - Failed to read beacon! Engaging emergency brake")
                 updates['train_controller_signal_failure'] = True
                 updates['beacon_read_blocked'] = False  # Clear the flag after detecting
-        
+        # Clear signal failure flag if emergency brake was released (signal failure is momentary)
+        elif state.get('train_controller_signal_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] SIGNAL FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_signal_failure'] = False
+
         # Detect brake failure: Only detectable when service brake is pressed
         if state.get('train_model_brake_failure', False) and state.get('service_brake', False):
             if not state.get('train_controller_brake_failure', False):
                 print("[Train Controller] BRAKE FAILURE DETECTED - Service brake not responding! Engaging emergency brake")
                 updates['train_controller_brake_failure'] = True
                 updates['emergency_brake'] = True  # Engage emergency brake immediately
-        
+        # Clear brake failure flag if train model failure is resolved and emergency brake was released
+        elif state.get('train_controller_brake_failure', False) and not state.get('train_model_brake_failure', False) and not state.get('emergency_brake', False):
+            print("[Train Controller] BRAKE FAILURE RESOLVED - Clearing failure flag")
+            updates['train_controller_brake_failure'] = False
+
         # Apply updates if any failures were detected/cleared
         if updates:
             self.api.update_state(updates)
@@ -392,6 +426,8 @@ class train_controller_ui(tk.Tk):
         tree_default_font = (font_style, 11)
         heading_font = (font_style, 15, "bold")
         tree_heading_font = (font_style, 13, "bold")
+        speed_display_font = (font_style, 40, "bold")  # Large font for speed displays
+        speed_label_font = (font_style, 14, "bold")    # Font for speed labels
 
         style = ttk.Style(self)
         style.configure("TLabelframe.Label", font=heading_font)
@@ -430,33 +466,55 @@ class train_controller_ui(tk.Tk):
             "seven_segment": 0x70
         }
 
-        #main frame which shows important train information panel
+        #main frame which shows speed displays and information panel
         main_frame = ttk.Frame(self)
         main_frame.pack(fill="both", expand=True, padx=10, pady=6)
 
+        # Speed control panel on the left (static size)
+        speed_frame = ttk.LabelFrame(main_frame, text="Speed Control")
+        speed_frame.pack(side="left", fill="y", padx=(0,10))
+        speed_frame.pack_propagate(False)  # Prevent frame from resizing based on contents
+        speed_frame.configure(width=320, height=400)  # Fixed size to accommodate larger numbers
+
+        # Current speed display section (top half)
+        current_speed_frame = ttk.Frame(speed_frame)
+        current_speed_frame.pack(fill="x", pady=(30,15), padx=10)
+
+        ttk.Label(current_speed_frame, text="Current Speed", font=speed_label_font).pack()
+        self.current_speed_label = ttk.Label(current_speed_frame, text="0.0 MPH", font=speed_display_font)
+        self.current_speed_label.pack(pady=(8,0))
+
+        # Driver set speed display section (bottom half)
+        driver_speed_frame = ttk.Frame(speed_frame)
+        driver_speed_frame.pack(fill="x", pady=(15,30), padx=10)
+
+        ttk.Label(driver_speed_frame, text="Driver Set Speed", font=speed_label_font).pack()
+        self.driver_speed_label = ttk.Label(driver_speed_frame, text="0.0 MPH", font=speed_display_font)
+        self.driver_speed_label.pack(pady=(8,0))
+
+        # Information panel frame on the right
         info_panel_frame = ttk.LabelFrame(main_frame, text="Train Information Panel", padding=(8,8))
-        info_panel_frame.pack(fill="both", expand=True, padx=(0,8))
+        info_panel_frame.pack(side="right", fill="both", expand=True)
 
         columns = ("parameter", "value", "unit")
         self.info_treeview = ttk.Treeview(info_panel_frame, columns=columns, show="headings")
         self.info_treeview.heading("parameter", text="Parameter")
         self.info_treeview.heading("value", text="Value")
         self.info_treeview.heading("unit", text="Unit")
-        self.info_treeview.column("parameter", anchor="w", width=320)
-        self.info_treeview.column("value", anchor="center", width=120)
-        self.info_treeview.column("unit", anchor="center", width=80)
+        self.info_treeview.column("parameter", anchor="w", width=200)
+        self.info_treeview.column("value", anchor="center", width=180)
+        self.info_treeview.column("unit", anchor="center", width=70)
         self.info_treeview.pack(fill="both", expand=True)
 
         self.important_parameters = [
             ("Commanded Speed", "", "mph"),
             ("Commanded Authority", "", "yards"),
             ("Speed Limit", "", "mph"),
-            ("Current Speed", "", "mph"),
-            ("Driver Set Speed", "", "mph"),  # Add driver_velocity display
             ("Power Availability", "", "W"),
             ("Cabin Temperature", "", "F°"),
             ("Set Temperature", "", "F°"),  # Add set_temperature display
             ("Station Side", "", "Left/Right"),
+            ("Current Station", "", "Station"),
             ("Next Station", "", "Station"),
             ("Announcement", "", ""),  # Add announcement row
             ("Failure(s)", "", "Type(s)"),
@@ -493,12 +551,19 @@ class train_controller_ui(tk.Tk):
         engineering_frame.pack(side="right", fill="y", ipadx=6)
 
         ttk.Label(engineering_frame, text="Kp:").grid(row=0, column=0, sticky="w", pady=(2,6))
-        self.kp_var = tk.StringVar(value="0.0")
+        # Initialize with current kp value from API state (not hardcoded 0.0)
+        current_state = self.api.get_state()
+        current_kp = current_state.get('kp')
+        kp_display = str(current_kp) if current_kp is not None else "0.0"
+        self.kp_var = tk.StringVar(value=kp_display)
         self.kp_entry = ttk.Entry(engineering_frame, textvariable=self.kp_var, width=20)
         self.kp_entry.grid(row=0, column=1, pady=(2,6))
 
         ttk.Label(engineering_frame, text="Ki:").grid(row=1, column=0, sticky="w", pady=(2,6))
-        self.ki_var = tk.StringVar(value="0.0")
+        # Initialize with current ki value from API state (not hardcoded 0.0)
+        current_ki = current_state.get('ki')
+        ki_display = str(current_ki) if current_ki is not None else "0.0"
+        self.ki_var = tk.StringVar(value=ki_display)
         self.ki_entry = ttk.Entry(engineering_frame, textvariable=self.ki_var, width=20)
         self.ki_entry.grid(row=1, column=1, pady=(2,6))
 
@@ -529,9 +594,12 @@ class train_controller_ui(tk.Tk):
 
     def periodic_update(self):
         try:
-            # Only read from train_data.json in local mode (not when using remote server)
+            # Read inputs from train_data.json (local) or from REST API (remote)
+            # In remote mode, the server syncs train_data.json changes to the API
             if not self.server_url:
+                # Local mode: read directly from train_data.json
                 self.api.update_from_train_data()
+            # Remote mode: API client automatically fetches from server via get_state()
             
             state = self.api.get_state()
             
@@ -546,12 +614,15 @@ class train_controller_ui(tk.Tk):
             
             if not manual_mode:  # Automatic mode
                 # Auto-set driver velocity to commanded speed
-                if state['driver_velocity'] != state['commanded_speed']:
-                    self.api.update_state({'driver_velocity': state['commanded_speed']})
+                driver_vel = state.get('driver_velocity', 0.0)
+                cmd_speed = state.get('commanded_speed', 0.0)
+                if driver_vel != cmd_speed:
+                    self.api.update_state({'driver_velocity': cmd_speed})
                     state = self.api.get_state()
                 
                 # Auto-regulate temperature to 70°F
-                if state['set_temperature'] != 70.0:
+                set_temp = state.get('set_temperature', 70.0)
+                if set_temp != 70.0:
                     self.api.update_state({'set_temperature': 70.0})
                     state = self.api.get_state()
                 
@@ -571,7 +642,9 @@ class train_controller_ui(tk.Tk):
                     self.controller._last_beacon_for_announcement = current_station
             
             # Auto-release emergency brake when velocity reaches 0
-            if state['emergency_brake'] and state['train_velocity'] == 0.0:
+            emergency_brake = state.get('emergency_brake', False)
+            train_velocity = state.get('train_velocity', 0.0)
+            if emergency_brake and train_velocity == 0.0:
                 print("[Train Controller] Train stopped - Releasing emergency brake")
                 self.controller.set_emergency_brake(False)
                 state = self.api.get_state()
@@ -581,7 +654,8 @@ class train_controller_ui(tk.Tk):
                               state.get('train_controller_signal_failure', False) or 
                               state.get('train_controller_brake_failure', False))
             
-            if critical_failure and not state['emergency_brake']:
+            emergency_brake_active = state.get('emergency_brake', False)
+            if critical_failure and not emergency_brake_active:
                 # Automatically engage emergency brake on critical failure
                 self.controller.set_emergency_brake(True)
                 state = self.api.get_state()
@@ -603,19 +677,19 @@ class train_controller_ui(tk.Tk):
                     print(f"ADC read/update error: {e}")
             
             # Recalculate power command based on current state
-            if (not state['emergency_brake'] and 
-                state['service_brake'] == 0 and 
+            if (not state['emergency_brake'] and
+                not state['service_brake'] and
                 not critical_failure):
                 power = self.controller.calculate_power_command(state)
-                if power != state['power_command']:
-                    self.controller.vital_control_check_and_update({'power_command': power})
+                print(f"[DEBUG POWER] train_vel={state['train_velocity']:.2f}, driver_vel={state['driver_velocity']:.2f}, calculated_power={power:.2f}")
+                # Always update power command even if same to ensure it's written
+                self.controller.vital_control_check_and_update({'power_command': power})
             else:
                 # Reset accumulated error when brakes are active
                 self.controller._accumulated_error = 0
-                # No power when brakes are active or failures present
+                # Set power to 0 when brakes are active or failures present
                 self.controller.vital_control_check_and_update({
-                    'power_command': 0,
-                    'driver_velocity': 0
+                    'power_command': 0
                 })
             # try:
             # # Recalculate power command based on current state
@@ -632,6 +706,10 @@ class train_controller_ui(tk.Tk):
             # Reload state one final time before display to ensure all updates are reflected
             state = self.api.get_state()
 
+            # Update speed displays
+            self.current_speed_label.config(text=f"{state.get('train_velocity', 0.0):.1f} MPH")
+            self.driver_speed_label.config(text=f"{state.get('driver_velocity', 0.0):.1f} MPH")
+
             # Update important parameters in the treeview
             children = self.info_treeview.get_children()
             for iid in children:
@@ -639,21 +717,19 @@ class train_controller_ui(tk.Tk):
                 if param == "Commanded Speed":
                     self.info_treeview.set(iid, "value", f"{state.get('commanded_speed', 0):.1f}")
                 elif param == "Commanded Authority":
-                    self.info_treeview.set(iid, "value", f"{state['commanded_authority']:.1f}")
+                    self.info_treeview.set(iid, "value", f"{state.get('commanded_authority', 0.0):.1f}")
                 elif param == "Speed Limit":
-                    self.info_treeview.set(iid, "value", f"{state['speed_limit']:.1f}")
-                elif param == "Current Speed":
-                    self.info_treeview.set(iid, "value", f"{state['train_velocity']:.1f}")
-                elif param == "Driver Set Speed":
-                    self.info_treeview.set(iid, "value", f"{state.get('driver_velocity', 0):.1f}")
+                    self.info_treeview.set(iid, "value", f"{state.get('speed_limit', 0.0):.1f}")
                 elif param == "Power Availability":
-                    self.info_treeview.set(iid, "value", f"{state['power_command']:.1f}")
+                    self.info_treeview.set(iid, "value", f"{state.get('power_command', 0.0):.1f}")
                 elif param == "Cabin Temperature":
                     self.info_treeview.set(iid, "value", f"{state.get('train_temperature', 0):.1f}")
                 elif param == "Set Temperature":
                     self.info_treeview.set(iid, "value", f"{state.get('set_temperature', 0):.1f}")
                 elif param == "Station Side":
                     self.info_treeview.set(iid, "value", state.get('station_side', ''))
+                elif param == "Current Station":
+                    self.info_treeview.set(iid, "value", state.get('current_station', ''))
                 elif param == "Next Station":
                     self.info_treeview.set(iid, "value", state.get('next_stop', ''))
                 elif param == "Announcement":
@@ -803,6 +879,63 @@ class vital_train_controls:
         self.power_command = power_command
         self.commanded_authority = commanded_authority
         self.speed_limit = speed_limit
+
+    def calculate_power_command(self, accumulated_error: float, last_update_time: float) -> tuple:
+        """Calculate power command based on speed difference and Kp/Ki values.
+
+        Implements PI control with:
+        - Real-time accumulated error tracking
+        - Anti-windup protection
+        - Power limiting
+        - Zero power when error is zero or negative (train going too fast)
+
+        Args:
+            accumulated_error: Current accumulated error for integral term.
+            last_update_time: Time of last calculation (seconds).
+
+        Returns:
+            Tuple of (power_command, new_accumulated_error, new_update_time).
+        """
+        # Calculate speed error
+        speed_error = self.driver_velocity - self.train_velocity
+
+        # If speed error is zero or negative (train at or above target), return zero power
+        if speed_error <= 0.01:  # Exact match or train too fast
+            return (0.0, 0.0, time.time())  # Reset accumulated error and return 0 power
+
+        # Get current time
+        current_time = time.time()
+
+        # Calculate real time step
+        dt = current_time - last_update_time
+        dt = max(0.001, min(dt, 1.0))  # Limit dt between 1ms and 1s for stability
+
+        # Update accumulated error with anti-windup and scaling
+        new_accumulated_error = accumulated_error + speed_error * dt
+
+        # Anti-windup limits (scaled by ki to prevent excessive integral term)
+        max_integral = 120000 / self.ki if self.ki != 0 else 0
+        new_accumulated_error = max(-max_integral, min(max_integral, new_accumulated_error))
+
+        # Calculate PI control output
+        proportional = self.kp * speed_error
+        integral = self.ki * new_accumulated_error
+
+        # Calculate total power command
+        power = proportional + integral
+
+        # Limit power
+        power = max(0, min(power, 120000))  # 120kW max power
+
+        # Anti-windup: adjust accumulated error when power saturates
+        if power == 120000 and integral > 0:
+            # Back-calculate integral term to match power limit
+            new_accumulated_error = (120000 - proportional) / self.ki if self.ki != 0 else 0
+        elif power == 0 and integral < 0:
+            # Reset integral term when power is zero
+            new_accumulated_error = -proportional / self.ki if self.ki != 0 else 0
+
+        return (power, new_accumulated_error, current_time)
 
 class vital_control_first_check:
     def validate(self, v: vital_train_controls) -> bool:
