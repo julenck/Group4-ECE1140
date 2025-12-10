@@ -1175,6 +1175,14 @@ class HW_Wayside_Controller:
                     # Train has exhausted authority but CTC shows active - check for reactivation
                     new_auth = float(tinfo.get('Suggested Authority', 0) or 0)
                     last_auth = self.last_ctc_authority.get(tname, 0)
+                    destination = str(tinfo.get('Station Destination', '') or '').lower()
+                    
+                    # Check if at destination - stop permanently
+                    if pos in [96, 97] and 'castle shannon' in destination:
+                        # At Castle Shannon destination - keep stopped
+                        state['cmd auth'] = 0.0
+                        state['cmd speed'] = 0.0
+                        continue
                     
                     # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
                     if new_auth > last_auth:
@@ -1195,10 +1203,11 @@ class HW_Wayside_Controller:
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         
-                        # From block 73 to 77: 74(100) + 75(100) + 76(100) + 77(300) = 600m
-                        # From block 77 onward: give similar distance
-                        # Give 550m with buffer to stop within next station block
-                        calculated_auth = 550.0
+                        # Give 1970m authority (2000m - 30m buffer) to cover distance between stations
+                        # Block 73 to 77: ~600m
+                        # Block 77 to 96 (Castle Shannon): ~1900m through many 300m blocks
+                        # 30m buffer ensures train stops at block 73, not overshoots to 74
+                        calculated_auth = 1970.0
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
@@ -1287,12 +1296,10 @@ class HW_Wayside_Controller:
                     # Update state immediately so UI sees decreasing authority
                     state['cmd auth'] = auth
 
-                # Stop when authority exhausted (hardcode: stop at block 73, not 74)
+                # Stop when authority exhausted
                 if auth <= 0:
-                    # Special case: if at block 74 with zero auth, move back to 73
-                    if pos == 74:
-                        state['pos'] = 73
-                        pos = 73
+                    # If near block 73-74 area, reduce final authority to ensure stop at 73
+                    # Don't move train backward - just ensure it stops within block 73
                     auth = 0.0
                     state['cmd auth'] = 0.0
                     state['cmd speed'] = 0.0
@@ -1594,17 +1601,14 @@ class HW_Wayside_Controller:
                             train_direction = self.train_direction.get(tkey, 'forward')
                             block_data = self.block_graph[train_pos]
                             
-                            # Only update beacon if train has MOVED PAST last station block
-                            last_station = self.last_station_block.get(tkey, -1)
-                            if train_pos != last_station:
-                                # Train has moved away from station - update beacon
-                                if train_direction == 'forward' and block_data.get('forward_beacon', {}).get('has_beacon'):
-                                    data[tkey]["Beacon"]["Current Station"] = block_data['forward_beacon']['current_station']
-                                    data[tkey]["Beacon"]["Next Station"] = block_data['forward_beacon']['next_station']
-                                elif train_direction == 'reverse' and block_data.get('reverse_beacon', {}).get('has_beacon'):
-                                    data[tkey]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
-                                    data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
-                            # If still at station block, keep old beacon data (don't update)
+                            # Always update beacon when train moves to new block with beacon data
+                            if train_direction == 'forward' and block_data.get('forward_beacon', {}).get('has_beacon'):
+                                data[tkey]["Beacon"]["Current Station"] = block_data['forward_beacon']['current_station']
+                                data[tkey]["Beacon"]["Next Station"] = block_data['forward_beacon']['next_station']
+                            elif train_direction == 'reverse' and block_data.get('reverse_beacon', {}).get('has_beacon'):
+                                data[tkey]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
+                                data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
+                            # If no beacon at current block, keep existing beacon data (don't clear it)
 
                         # CRITICAL: Update train status back to CTC for real-time position tracking
                         # This allows CTC to display train positions to the dispatcher
