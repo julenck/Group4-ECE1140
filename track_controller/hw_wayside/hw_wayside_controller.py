@@ -1187,57 +1187,32 @@ class HW_Wayside_Controller:
                             # Still dwelling - wait
                             continue
                         
-                        # Dwell complete - calculate proper authority to next station
+                        # Dwell complete - give exact authority to reach next station
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        destination = str(tinfo.get('Station Destination', '') or '')
                         
-                        # Calculate distance to next station based on current position
-                        # Block 73 -> 77: need blocks 73(100m) + 74(100m) + 75(100m) + 76(100m) + 77(300m) = 700m
-                        # Block 77 -> next stations: 77(300m) + more blocks
+                        # Give conservative authority based on position to ensure stops at stations
+                        # Block lengths: 73(100m), 74(100m), 75(100m), 76(100m), 77(300m)
                         if pos == 73:
-                            # At Dormont, going to Mt Lebanon (block 77)
-                            # Give 80% of distance to stop at end of 77, not overshoot to 79
-                            calculated_auth = (100 + 100 + 100 + 100 + 300) * 0.80  # 560m
+                            # Give 450m to reach block 77 (buffer for lag - stops at 73+20m = still in 73)
+                            calculated_auth = 450.0
                         elif pos == 77:
-                            # At Mt Lebanon - check if we should continue
-                            if destination and 'castle shannon' in destination.lower():
-                                # Continue to Castle Shannon (blocks 96-97)
-                                # 77(300) + 78(300) + ... need to calculate full distance
-                                calculated_auth = min(new_auth * 0.85, 800.0)  # Cap at 800m with buffer
-                            else:
-                                # Stay at Mt Lebanon - this is destination
-                                calculated_auth = 0
+                            # Give 450m from block 77 toward next station
+                            calculated_auth = 450.0
                         else:
-                            # Other positions - use reduced CTC authority
-                            calculated_auth = new_auth * 0.85
+                            # Conservative authority for other positions
+                            calculated_auth = 450.0
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
                         self.train_auth_start[tname] = calculated_auth
-                        self.last_ctc_authority[tname] = new_auth
+                        self.last_ctc_authority[tname] = new_auth  # Track CTC value but don't use it
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
                         auth = calculated_auth
                         speed = new_speed
 
-                # Get current CTC values (these may have changed)
-                # CTC sends Suggested Authority in YARDS (not meters)
-                current_sug_auth_yds = float(self.active_trains.get(tname, {}).get('Suggested Authority', auth * 1.09361) or (auth * 1.09361))
-                current_sug_auth = current_sug_auth_yds * 0.9144  # Convert yards to meters
-                current_sug_speed_mph = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed * 2.23694) or (speed * 2.23694))
-                current_sug_speed = current_sug_speed_mph * 0.44704  # Convert mph to m/s
-
-                # Update commanded values if CTC gives different authority/speed
-                initial_auth = self.train_auth_start.get(tname, 0)
-                
-                # Update if CTC authority changed significantly (more than 10m difference)
-                if abs(current_sug_auth - initial_auth) > 10:
-                    print(f"[HW Wayside {self.wayside_id}] CTC update for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m (initial was {initial_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
-                    auth = current_sug_auth
-                    speed = current_sug_speed
-                    state['cmd auth'] = auth
-                    state['cmd speed'] = speed
-                    self.train_auth_start[tname] = current_sug_auth
+                # BLOCK CTC authority updates during travel to prevent mid-journey authority injection
+                # Authority is ONLY set during reactivation after station stops
 
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
