@@ -498,7 +498,7 @@ class HW_Wayside_Controller_UI(ttk.Frame):
             self._last_lcd_tuple = tup
             self._update_lcd_for(block)
 
-    def _update_lcd_for(self, block_id: str | None):
+    def _update_lcd_for(self, block_id: Optional[str]):
         
         global _SHARED_LCD
 
@@ -557,6 +557,6 @@ class HW_Wayside_Controller_UI(ttk.Frame):
                 time.sleep(0.02)
                 _SHARED_LCD.write_line(0, line0)
                 _SHARED_LCD.write_line(1, line1)
-                
+
             except Exception:
                 pass
