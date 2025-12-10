@@ -257,7 +257,6 @@ class HW_Wayside_Controller:
         self.last_seen_position: Dict[str, int] = {}
         self.cumulative_distance: Dict[str, float] = {}
         self.last_ctc_authority: Dict[str, float] = {}  # Track last CTC authority for reactivation detection
-        self.station_arrival_time: Dict[str, float] = {}  # Track when train arrived at station for dwell time
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
         
@@ -1174,21 +1173,6 @@ class HW_Wayside_Controller:
                     
                     # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
                     if new_auth > last_auth:
-                        # Enforce minimum 10-second dwell at stations
-                        import time
-                        current_time = time.time()
-                        stop_time = self.station_arrival_time.get(tname, 0)
-                        
-                        if stop_time == 0:
-                            # Just stopped - record time
-                            self.station_arrival_time[tname] = current_time
-                            continue
-                        elif (current_time - stop_time) < 10.0:
-                            # Still dwelling - wait
-                            continue
-                        
-                        # Dwell complete - reactivate
-                        self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         state['cmd auth'] = new_auth
                         state['cmd speed'] = new_speed
@@ -1223,16 +1207,12 @@ class HW_Wayside_Controller:
                 # Get block speed limit (matching SW controller behavior)
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
 
-                # Speed control with deceleration zone and block speed limit enforcement
+                # Speed control based on remaining authority
                 if auth <= 5:
                     target_speed = 0
-                elif auth < 200:
-                    # Deceleration zone - aggressive slowdown, never exceed block limit
-                    # At 200m: ~14 m/s, at 100m: ~9 m/s, at 50m: ~6.5 m/s
-                    decel_speed = 5.0 + (auth - 5) * 0.05
-                    target_speed = min(speed_limit, decel_speed)
+                elif auth < 50:
+                    target_speed = 5.0  # Slow approach
                 else:
-                    # Normal operation - use block speed limit
                     target_speed = speed_limit
                 
                 # COLLISION PREVENTION: Check for trains ahead and reduce speed if needed
