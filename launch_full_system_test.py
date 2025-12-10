@@ -42,7 +42,7 @@ def setup_all_components():
         print("\n[1/5] 🎛️  Setting up CTC...")
         from ctc.ctc_ui_temp import CTCUI
         components['ctc'] = CTCUI()
-        components['ctc'].title("CTC Dispatcher")
+        components['ctc'].root.title("CTC Dispatcher")
         print("✅ CTC ready")
     except Exception as e:
         print(f"❌ CTC failed: {e}")
