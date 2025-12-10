@@ -897,7 +897,8 @@ class HW_Wayside_Controller:
         else:
             current_block_length = 100.0
         distance_needed = cumulative + current_block_length
-        return traveled > distance_needed
+        # Changed from > to >= to move exactly when distance is reached, not after overshooting
+        return traveled >= distance_needed
 
     def get_next_block(self, current_block: int, block_idx: int, train_id: str):
         # mark old block unoccupied in our local view
@@ -1205,18 +1206,30 @@ class HW_Wayside_Controller:
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         
-                        # Authority must reach END of station block (trains stop at block START currently)
-                        # From 73->77 END: 74(100) + 75(100) + 76(100) + 77(300) = 600m, but stops at 74 so add 50m buffer = 650m
-                        # From 77->88 END: 78(300) + 79(300) + 80(300) + 81(300) + 82(300) + 83(300) + 84(300) + 85(300) + 86(100) + 87(86.6) + 88(100) = 2786m + 300m buffer = 3100m
-                        # From 88->96 END: 89(75) + 90(75) + 91(75) + 92(75) + 93(75) + 94(75) + 95(75) + 96(75) = 600m + 50m buffer = 650m
-                        if pos == 73:
-                            calculated_auth = 650.0  # Reaches end of block 77
-                        elif pos == 77:
-                            calculated_auth = 3100.0  # Reaches end of block 88 (stopped at 86, needs 300m more)
-                        elif pos == 88:
-                            calculated_auth = 650.0  # Reaches end of block 96
+                        # CRITICAL: Check which station we just LEFT, not current position
+                        # Train might be at 73 or 74 after stopping near Dormont
+                        # Train might be at 77 or 78 after stopping near Mt Lebanon  
+                        # Train might be at 88 or 89 after stopping near Poplar
+                        
+                        # Determine which station segment we're on based on position
+                        if pos <= 76:
+                            # Left Dormont (73) heading to Mt Lebanon (77)
+                            # Need to reach END of 77: from current pos to 77 end
+                            # Blocks 73-76 are 100m each, block 77 is 300m
+                            # Worst case from 74: 75(100) + 76(100) + 77(300) = 500m + buffer
+                            calculated_auth = 550.0
+                        elif pos <= 87:
+                            # Left Mt Lebanon (77) heading to Poplar (88)
+                            # Blocks 77-85 are 300m each (N-section), 86(100), 87(86.6), 88(100)
+                            # Worst case from 78: 79-85(7×300=2100) + 86(100) + 87(86.6) + 88(100) = 2386m + buffer
+                            calculated_auth = 2500.0
+                        elif pos <= 97:
+                            # Left Poplar (88) heading to Castle Shannon (96)
+                            # Blocks 88-97 are 75-100m each
+                            # Worst case from 89: 90-96(7×75=525) = 525m + buffer
+                            calculated_auth = 600.0
                         else:
-                            calculated_auth = 650.0  # Default
+                            calculated_auth = 600.0  # Default
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
