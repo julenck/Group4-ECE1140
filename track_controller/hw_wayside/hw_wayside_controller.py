@@ -1109,8 +1109,8 @@ class HW_Wayside_Controller:
                             distance_to_73 = 0.0
                             for b in range(train_pos, 74):  # blocks from current to 73 inclusive
                                 distance_to_73 += self.block_lengths.get(b, 100)
-                            # Limit authority to just reach block 73
-                            auth_to_use = min(float(current_auth), distance_to_73)
+                            # Subtract 20m to compensate for system lag
+                            auth_to_use = min(float(current_auth), distance_to_73 - 20.0)
                             print(f"[HW Wayside {self.wayside_id}] Handoff at block {train_pos}: limiting authority to {auth_to_use:.0f}m to stop at station 73")
                         elif train_pos in [73, 77, 88, 96]:
                             # Already at a station - reduce authority to stop at END of this block
