@@ -257,6 +257,7 @@ class HW_Wayside_Controller:
         self.last_seen_position: Dict[str, int] = {}
         self.cumulative_distance: Dict[str, float] = {}
         self.last_ctc_authority: Dict[str, float] = {}  # Track last CTC authority for reactivation detection
+        self.station_arrival_time: Dict[str, float] = {}  # Track when train stopped for 10-second dwell
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
         
@@ -1173,13 +1174,29 @@ class HW_Wayside_Controller:
                     
                     # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
                     if new_auth > last_auth:
+                        # Enforce 10-second dwell at stations
+                        import time
+                        current_time = time.time()
+                        stop_time = self.station_arrival_time.get(tname, 0)
+                        
+                        if stop_time == 0:
+                            # Just stopped - record time
+                            self.station_arrival_time[tname] = current_time
+                            continue
+                        elif (current_time - stop_time) < 10.0:
+                            # Still dwelling - wait
+                            continue
+                        
+                        # Dwell complete - reactivate with 10% authority reduction to stop at end of station block
+                        self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        state['cmd auth'] = new_auth
+                        adjusted_auth = new_auth * 0.90  # 10% reduction to stop at block 73, not 74
+                        state['cmd auth'] = adjusted_auth
                         state['cmd speed'] = new_speed
-                        self.train_auth_start[tname] = new_auth
+                        self.train_auth_start[tname] = adjusted_auth
                         self.last_ctc_authority[tname] = new_auth
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
-                        auth = new_auth
+                        auth = adjusted_auth
                         speed = new_speed
 
                 # Get current CTC values (these may have changed)
