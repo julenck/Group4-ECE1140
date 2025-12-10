@@ -1173,7 +1173,8 @@ class HW_Wayside_Controller:
                     continue
                 elif is_active == 1 and state.get('cmd auth', 0) == 0:
                     # Train has exhausted authority but CTC shows active - check for reactivation
-                    new_auth = float(tinfo.get('Suggested Authority', 0) or 0)
+                    new_auth_yds = float(tinfo.get('Suggested Authority', 0) or 0)  # CTC sends in YARDS
+                    new_auth = new_auth_yds * 0.9144  # Convert to meters for comparison
                     last_auth = self.last_ctc_authority.get(tname, 0)
                     destination = str(tinfo.get('Station Destination', '') or '').lower()
                     
@@ -1184,8 +1185,9 @@ class HW_Wayside_Controller:
                         state['cmd speed'] = 0.0
                         continue
                     
-                    # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
-                    if new_auth > last_auth:
+                    # IGNORE CTC authority - use station-specific calculated authority instead
+                    # CTC's authority is often wrong or stale
+                    if True:  # Always reactivate after dwell, ignoring CTC authority value
                         # Enforce 10-second dwell at stations
                         import time
                         current_time = time.time()
