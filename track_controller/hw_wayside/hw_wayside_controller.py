@@ -1101,8 +1101,8 @@ class HW_Wayside_Controller:
                             stored_auth_start_m = sug_auth_m  # Use current CTC value as fallback
                         auth_to_use = float(current_auth)
                         speed_to_use = float(current_speed)
-                        # Subtract 30m from handoff authority to compensate for 1-second delay overshoot
-                        auth_to_use = max(0, auth_to_use - 30.0)
+                        # Subtract 20m from handoff authority to compensate for 1-second delay overshoot
+                        auth_to_use = max(0, auth_to_use - 20.0)
                         print(f"[HW Wayside {self.wayside_id}] Handoff authority adjusted: {current_auth:.0f}m -> {auth_to_use:.0f}m (compensating for lag)")
                     else:
                         auth_to_use = float(sug_auth_m)  # meters
@@ -1199,28 +1199,29 @@ class HW_Wayside_Controller:
                             # Still dwelling - wait
                             continue
                         
-                        # Dwell complete - give exact authority to reach NEXT station only
+                        # Dwell complete - give exact authority to reach NEXT station
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         
-                        # Calculate authority based on current position:
-                        # Block 73 -> 77 (Mt Lebanon): 600m - 50m buffer = 550m
-                        # Block 77 -> 88 (Poplar): 2786m - 100m buffer = 2700m
-                        # Block 88 -> 96 (Castle Shannon): 600m - 50m buffer = 550m
+                        # Calculate authority - REDUCE by 30m to account for lag overshoot
+                        # Block 73 -> 77: 74(100) + 75(100) + 76(100) + 77(300) = 600m - 30m lag = 570m
+                        # Block 77 -> 88: 78(300) + 79(300) + 80(300) + 81(300) + 82(300) + 83(300) + 84(300) + 85(300) + 86(100) + 87(86.6) + 88(100) = 2786m
+                        # Block 88 -> 96: 89(75) + 90(75) + 91(75) + 92(75) + 93(75) + 94(75) + 95(75) + 96(75) = 600m - 30m lag = 570m
                         if pos == 73:
-                            calculated_auth = 550.0  # To Mt Lebanon
+                            calculated_auth = 570.0  # To block 77, accounting for lag
                         elif pos == 77:
-                            calculated_auth = 2700.0  # To Poplar
+                            calculated_auth = 2750.0  # To block 88 (needs more distance)
                         elif pos == 88:
-                            calculated_auth = 550.0  # To Castle Shannon
+                            calculated_auth = 570.0  # To block 96, accounting for lag
                         else:
-                            calculated_auth = 550.0  # Default conservative
+                            calculated_auth = 570.0  # Default conservative
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
                         self.train_auth_start[tname] = calculated_auth
-                        self.last_ctc_authority[tname] = 0.0  # Reset to 0 so next CTC authority triggers reactivation
-                        self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
+                        self.last_ctc_authority[tname] = 0.0
+                        # CRITICAL: Reset cumulative_distance to 0, not negative
+                        self.cumulative_distance[tname] = 0.0
                         auth = calculated_auth
                         speed = new_speed
                         
