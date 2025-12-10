@@ -1191,14 +1191,12 @@ class HW_Wayside_Controller:
                         # Dwell complete - reactivate
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        # Reduce authority by 20% to prevent overshooting next station
-                        adjusted_auth = new_auth * 0.80
-                        state['cmd auth'] = adjusted_auth
+                        state['cmd auth'] = new_auth
                         state['cmd speed'] = new_speed
-                        self.train_auth_start[tname] = adjusted_auth
+                        self.train_auth_start[tname] = new_auth
                         self.last_ctc_authority[tname] = new_auth
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
-                        auth = adjusted_auth
+                        auth = new_auth
                         speed = new_speed
 
                 # Get current CTC values (these may have changed)
@@ -1209,12 +1207,11 @@ class HW_Wayside_Controller:
                 current_sug_speed = current_sug_speed_mph * 0.44704  # Convert mph to m/s
 
                 # Update commanded values if CTC gives different authority/speed
-                # Allow both increases (new dispatch/reactivation) and updates (CTC adjustments)
+                # Only allow updates when train is stopped (auth=0) to prevent overriding deceleration
                 initial_auth = self.train_auth_start.get(tname, 0)
                 
-                # Update if CTC authority changed significantly (more than 10m difference)
-                # This allows CTC to give new authority while preventing jitter from minor fluctuations
-                if abs(current_sug_auth - initial_auth) > 10:
+                # Only update if train is stopped or authority changed significantly while stopped
+                if auth == 0 and abs(current_sug_auth - initial_auth) > 10:
                     print(f"[HW Wayside {self.wayside_id}] CTC update for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m (initial was {initial_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
                     auth = current_sug_auth
                     speed = current_sug_speed
@@ -1231,9 +1228,10 @@ class HW_Wayside_Controller:
                 # Speed control with deceleration zone to prevent overshooting
                 if auth <= 5:
                     target_speed = 0
-                elif auth < 100:
-                    # Deceleration zone - gradual slowdown as we approach station
-                    target_speed = min(speed_limit, 5.0 + (auth - 5) * 0.15)
+                elif auth < 200:
+                    # Deceleration zone - aggressive slowdown as we approach station
+                    # At 200m: ~14 m/s, at 100m: ~9 m/s, at 50m: ~6.5 m/s
+                    target_speed = min(speed_limit, 5.0 + (auth - 5) * 0.05)
                 else:
                     # Normal operation - use block speed limit
                     target_speed = speed_limit
