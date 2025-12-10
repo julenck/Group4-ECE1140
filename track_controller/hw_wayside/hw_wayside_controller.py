@@ -258,6 +258,7 @@ class HW_Wayside_Controller:
         self.cumulative_distance: Dict[str, float] = {}
         self.last_ctc_authority: Dict[str, float] = {}  # Track last CTC authority for reactivation detection
         self.station_arrival_time: Dict[str, float] = {}  # Track when train stopped for 10-second dwell
+        self.last_station_block: Dict[str, int] = {}  # Track last station position for beacon update
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
         
@@ -1100,6 +1101,9 @@ class HW_Wayside_Controller:
                             stored_auth_start_m = sug_auth_m  # Use current CTC value as fallback
                         auth_to_use = float(current_auth)
                         speed_to_use = float(current_speed)
+                        # Subtract 30m from handoff authority to compensate for 1-second delay overshoot
+                        auth_to_use = max(0, auth_to_use - 30.0)
+                        print(f"[HW Wayside {self.wayside_id}] Handoff authority adjusted: {current_auth:.0f}m -> {auth_to_use:.0f}m (compensating for lag)")
                     else:
                         auth_to_use = float(sug_auth_m)  # meters
                         speed_to_use = float(sug_speed_ms)  # m/s
@@ -1187,29 +1191,25 @@ class HW_Wayside_Controller:
                             # Still dwelling - wait
                             continue
                         
-                        # Dwell complete - give exact authority to reach next station
+                        # Dwell complete - give authority to reach NEXT station
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         
-                        # Give conservative authority based on position to ensure stops at stations
-                        # Block lengths: 73(100m), 74(100m), 75(100m), 76(100m), 77(300m)
-                        if pos == 73:
-                            # Give 450m to reach block 77 (buffer for lag - stops at 73+20m = still in 73)
-                            calculated_auth = 450.0
-                        elif pos == 77:
-                            # Give 450m from block 77 toward next station
-                            calculated_auth = 450.0
-                        else:
-                            # Conservative authority for other positions
-                            calculated_auth = 450.0
+                        # From block 73 to 77: 74(100) + 75(100) + 76(100) + 77(300) = 600m
+                        # From block 77 onward: give similar distance
+                        # Give 550m with buffer to stop within next station block
+                        calculated_auth = 550.0
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
                         self.train_auth_start[tname] = calculated_auth
-                        self.last_ctc_authority[tname] = new_auth  # Track CTC value but don't use it
+                        self.last_ctc_authority[tname] = 0.0  # Reset to 0 so next CTC authority triggers reactivation
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
                         auth = calculated_auth
                         speed = new_speed
+                        
+                        # Record station block when leaving for beacon update
+                        self.last_station_block[tname] = pos
 
                 # BLOCK CTC authority updates during travel to prevent mid-journey authority injection
                 # Authority is ONLY set during reactivation after station stops
@@ -1594,13 +1594,17 @@ class HW_Wayside_Controller:
                             train_direction = self.train_direction.get(tkey, 'forward')
                             block_data = self.block_graph[train_pos]
                             
-                            if train_direction == 'forward' and block_data.get('forward_beacon', {}).get('has_beacon'):
-                                data[tkey]["Beacon"]["Current Station"] = block_data['forward_beacon']['current_station']
-                                data[tkey]["Beacon"]["Next Station"] = block_data['forward_beacon']['next_station']
-                            elif train_direction == 'reverse' and block_data.get('reverse_beacon', {}).get('has_beacon'):
-                                data[tkey]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
-                                data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
-                            # If no beacon at current block, keep existing beacon data (don't clear it)
+                            # Only update beacon if train has MOVED PAST last station block
+                            last_station = self.last_station_block.get(tkey, -1)
+                            if train_pos != last_station:
+                                # Train has moved away from station - update beacon
+                                if train_direction == 'forward' and block_data.get('forward_beacon', {}).get('has_beacon'):
+                                    data[tkey]["Beacon"]["Current Station"] = block_data['forward_beacon']['current_station']
+                                    data[tkey]["Beacon"]["Next Station"] = block_data['forward_beacon']['next_station']
+                                elif train_direction == 'reverse' and block_data.get('reverse_beacon', {}).get('has_beacon'):
+                                    data[tkey]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
+                                    data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
+                            # If still at station block, keep old beacon data (don't update)
 
                         # CRITICAL: Update train status back to CTC for real-time position tracking
                         # This allows CTC to display train positions to the dispatcher
