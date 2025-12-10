@@ -1173,21 +1173,31 @@ class HW_Wayside_Controller:
                     new_auth = float(tinfo.get('Suggested Authority', 0) or 0)
                     last_auth = self.last_ctc_authority.get(tname, 0)
                     
-                    # Only reactivate if authority has SIGNIFICANTLY INCREASED (CTC gave new authority after dwell)
-                    # Require at least 100m increase to avoid false reactivations
-                    if new_auth > (last_auth + 100):
+                    # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
+                    if new_auth > last_auth:
+                        # Enforce minimum 10-second dwell at stations
+                        import time
+                        current_time = time.time()
+                        stop_time = self.station_arrival_time.get(tname, 0)
+                        
+                        if stop_time == 0:
+                            # Just stopped - record time
+                            self.station_arrival_time[tname] = current_time
+                            continue
+                        elif (current_time - stop_time) < 10.0:
+                            # Still dwelling - wait
+                            continue
+                        
+                        # Dwell complete - reactivate
+                        self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         state['cmd auth'] = new_auth
                         state['cmd speed'] = new_speed
-                        # Update tracking for proper distance calculation
                         self.train_auth_start[tname] = new_auth
                         self.last_ctc_authority[tname] = new_auth
-                        # Reset cumulative distance - train is at station (start of block after dwelling)
-                        self.cumulative_distance[tname] = 0.0
+                        self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
                         auth = new_auth
                         speed = new_speed
-                        print(f"[HW Wayside {self.wayside_id}] Train {tname} reactivated at block {pos} with new auth={new_auth:.0f}m")
-                    # else: stay stopped, waiting for CTC to dispatch with more authority
 
                 # Get current CTC values (these may have changed)
                 # CTC sends Suggested Authority in YARDS (not meters)
@@ -1216,21 +1226,15 @@ class HW_Wayside_Controller:
                 # Get block speed limit (matching SW controller behavior)
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
 
-                # Calculate target speed based on authority remaining and block speed limit
-                STOP_THRESHOLD = 5  # Stop completely when authority < 5m
-                DECEL_ZONE = 150  # Start deceleration at 150m
-                
-                if auth <= STOP_THRESHOLD:
+                # Simple speed control based on authority and block speed limit
+                if auth <= 5:
                     target_speed = 0
-                elif auth < DECEL_ZONE:
-                    # Gradual deceleration - maintain reasonable speed until very close
-                    ratio = (auth - STOP_THRESHOLD) / (DECEL_ZONE - STOP_THRESHOLD)
-                    # Decelerate from commanded speed to minimum safe speed (4 m/s)
-                    target_speed = 4.0 + ratio * (speed - 4.0)
-                    target_speed = min(target_speed, speed_limit)
+                elif auth < 50:
+                    # Very close to end - slow down
+                    target_speed = 5.0
                 else:
-                    # Normal operation - use commanded speed from CTC, capped by block speed limit
-                    target_speed = min(speed, speed_limit)
+                    # Normal operation - use block speed limit
+                    target_speed = speed_limit
                 
                 # COLLISION PREVENTION: Check for trains ahead and reduce speed if needed
                 SAFETY_DISTANCE = 400.0  # meters - minimum safe distance between trains
@@ -1287,23 +1291,11 @@ class HW_Wayside_Controller:
                     # Update state immediately so UI sees decreasing authority
                     state['cmd auth'] = auth
 
-                # Check if train should stop (authority exhausted or at station with low authority)
-                at_station = pos in self.station_blocks
-                
-                # Stop if authority exhausted OR at station with insufficient authority
-                should_stop = auth <= 0
-                if at_station and not should_stop:
-                    # At station - stop if authority is low (won't reach next station)
-                    current_block_length = self.block_lengths.get(pos, 100)
-                    if auth < (current_block_length + 200):
-                        should_stop = True
-                        print(f"[HW Wayside {self.wayside_id}] Train {tname} stopping at station block {pos} (auth={auth:.0f}m)")
-                
-                if should_stop:
+                # Stop when authority exhausted
+                if auth <= 0:
                     auth = 0.0
                     state['cmd auth'] = 0.0
                     state['cmd speed'] = 0.0
-                    # Train stays visible with 0 speed/auth waiting for CTC reactivation
                     continue
 
                 # update state
