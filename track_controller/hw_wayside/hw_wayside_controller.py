@@ -1145,17 +1145,19 @@ class HW_Wayside_Controller:
                 current_sug_speed_mph = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed * 2.23694) or (speed * 2.23694))
                 current_sug_speed = current_sug_speed_mph * 0.44704  # Convert mph to m/s
 
-                # Only update commanded values if CTC gives MORE authority than initial auth_start
-                # This prevents overriding handoff authority with stale CTC values
+                # Update commanded values if CTC gives different authority/speed
+                # Allow both increases (new dispatch/reactivation) and updates (CTC adjustments)
                 initial_auth = self.train_auth_start.get(tname, 0)
-                if current_sug_auth > initial_auth:
-                    # CTC gave more authority than initial - this is a new dispatch, update our commanded values
-                    print(f"[HW Wayside {self.wayside_id}] CTC override for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m (initial was {initial_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
+                
+                # Update if CTC authority changed significantly (more than 10m difference)
+                # This allows CTC to give new authority while preventing jitter from minor fluctuations
+                if abs(current_sug_auth - initial_auth) > 10:
+                    print(f"[HW Wayside {self.wayside_id}] CTC update for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m (initial was {initial_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
                     auth = current_sug_auth
                     speed = current_sug_speed
                     state['cmd auth'] = auth
                     state['cmd speed'] = speed
-                    self.train_auth_start[tname] = auth
+                    self.train_auth_start[tname] = current_sug_auth
 
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
