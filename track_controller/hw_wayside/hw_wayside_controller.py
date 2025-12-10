@@ -259,6 +259,8 @@ class HW_Wayside_Controller:
         self.last_ctc_authority: Dict[str, float] = {}  # Track last CTC authority for reactivation detection
         self.station_arrival_time: Dict[str, float] = {}  # Track when train arrived at station for dwell time
         self.minimum_dwell_seconds: float = 15.0  # Minimum dwell time at stations in seconds
+        self.train_destination: Dict[str, str] = {}  # Track destination station for each train
+        self.train_current_station: Dict[str, str] = {}  # Track current station train just left
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
         
@@ -1172,6 +1174,16 @@ class HW_Wayside_Controller:
                     # Train has exhausted authority but CTC shows active - check for reactivation
                     new_auth = float(tinfo.get('Suggested Authority', 0) or 0)
                     last_auth = self.last_ctc_authority.get(tname, 0)
+                    destination = str(tinfo.get('Station Destination', '') or '')
+                    
+                    # Check if train has reached its destination
+                    current_station_name = self.block_stations.get(pos, '')
+                    if destination and current_station_name and destination.lower() in current_station_name.lower():
+                        # At destination - keep train stopped
+                        print(f"[HW Wayside {self.wayside_id}] {tname} reached destination: {destination} at block {pos}")
+                        state['cmd auth'] = 0.0
+                        state['cmd speed'] = 0.0
+                        continue
                     
                     # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
                     if new_auth > last_auth:
@@ -1181,8 +1193,9 @@ class HW_Wayside_Controller:
                         stop_time = self.station_arrival_time.get(tname, 0)
                         
                         if stop_time == 0:
-                            # Just stopped - record time
+                            # Just stopped - record time and update current station for next station display
                             self.station_arrival_time[tname] = current_time
+                            self.train_current_station[tname] = current_station_name
                             continue
                         elif (current_time - stop_time) < 10.0:
                             # Still dwelling - wait
@@ -1191,36 +1204,16 @@ class HW_Wayside_Controller:
                         # Dwell complete - reactivate
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        # Cap authority at 400m (conservative) to ensure stopping within next station
-                        # Station 73->77: blocks 73(100), 74(100), 75(100), 76(100) = 400m to station start
-                        capped_auth = min(new_auth, 400.0)
-                        state['cmd auth'] = capped_auth
+                        state['cmd auth'] = new_auth
                         state['cmd speed'] = new_speed
-                        self.train_auth_start[tname] = capped_auth
+                        self.train_auth_start[tname] = new_auth
                         self.last_ctc_authority[tname] = new_auth
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
-                        auth = capped_auth
+                        auth = new_auth
                         speed = new_speed
 
-                # Get current CTC values (these may have changed)
-                # CTC sends Suggested Authority in YARDS (not meters)
-                current_sug_auth_yds = float(self.active_trains.get(tname, {}).get('Suggested Authority', auth * 1.09361) or (auth * 1.09361))
-                current_sug_auth = current_sug_auth_yds * 0.9144  # Convert yards to meters
-                current_sug_speed_mph = float(self.active_trains.get(tname, {}).get('Suggested Speed', speed * 2.23694) or (speed * 2.23694))
-                current_sug_speed = current_sug_speed_mph * 0.44704  # Convert mph to m/s
-
-                # Update commanded values if CTC gives different authority/speed
-                # Only allow updates when train is stopped (auth=0) to prevent overriding deceleration
-                initial_auth = self.train_auth_start.get(tname, 0)
-                
-                # Only update if train is stopped or authority changed significantly while stopped
-                if auth == 0 and abs(current_sug_auth - initial_auth) > 10:
-                    print(f"[HW Wayside {self.wayside_id}] CTC update for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m (initial was {initial_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
-                    auth = current_sug_auth
-                    speed = current_sug_speed
-                    state['cmd auth'] = auth
-                    state['cmd speed'] = speed
-                    self.train_auth_start[tname] = current_sug_auth
+                # CTC authority/speed updates are now handled only during reactivation
+                # This prevents CTC from overriding wayside deceleration control
 
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
@@ -1598,11 +1591,15 @@ class HW_Wayside_Controller:
                             train_direction = self.train_direction.get(tkey, 'forward')
                             block_data = self.block_graph[train_pos]
                             
+                            # Use tracked current station (updated when train leaves) for accurate display
+                            current_station_left = self.train_current_station.get(tkey, '')
+                            
                             if train_direction == 'forward' and block_data.get('forward_beacon', {}).get('has_beacon'):
-                                data[tkey]["Beacon"]["Current Station"] = block_data['forward_beacon']['current_station']
+                                # If we have a tracked current station, use it; otherwise use beacon data
+                                data[tkey]["Beacon"]["Current Station"] = current_station_left if current_station_left else block_data['forward_beacon']['current_station']
                                 data[tkey]["Beacon"]["Next Station"] = block_data['forward_beacon']['next_station']
                             elif train_direction == 'reverse' and block_data.get('reverse_beacon', {}).get('has_beacon'):
-                                data[tkey]["Beacon"]["Current Station"] = block_data['reverse_beacon']['current_station']
+                                data[tkey]["Beacon"]["Current Station"] = current_station_left if current_station_left else block_data['reverse_beacon']['current_station']
                                 data[tkey]["Beacon"]["Next Station"] = block_data['reverse_beacon']['next_station']
                             # If no beacon at current block, keep existing beacon data (don't clear it)
 
