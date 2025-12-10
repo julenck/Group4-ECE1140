@@ -1172,24 +1172,53 @@ class HW_Wayside_Controller:
                 STOP_THRESHOLD = 5  # Below 5m, stop completely
                 
                 # Check if we're near the END of our authority journey or just started with low authority
-                # If auth is close to auth_start, we just got fresh authority - don't decelerate yet
+                # Use cumulative distance traveled (more accurate than fraction)
                 auth_start_val = self.train_auth_start.get(tname, auth)
-                auth_consumed_fraction = 1.0 - (auth / auth_start_val) if auth_start_val > 0 else 0
+                cumulative_traveled = self.cumulative_distance.get(tname, 0.0)
+                
+                # Only decelerate if we've actually traveled a significant distance (>200m)
+                # This prevents deceleration immediately after station departure with fresh authority
+                should_decelerate = cumulative_traveled > 200.0
                 
                 if auth <= STOP_THRESHOLD:
                     target_speed = 0
                 elif auth < MIN_SPEED_THRESHOLD:
                     # Very low authority - reduce to final minimum
                     target_speed = FINAL_MIN_SPEED
-                elif auth < DECEL_THRESHOLD and auth_consumed_fraction > 0.3:
-                    # Low authority AND we've consumed >30% of journey - apply deceleration
-                    # This prevents premature deceleration right after station departures
+                elif auth < DECEL_THRESHOLD and should_decelerate:
+                    # Low authority AND we've traveled far enough - apply deceleration
                     ratio = (auth - MIN_SPEED_THRESHOLD) / (DECEL_THRESHOLD - MIN_SPEED_THRESHOLD)
                     target_speed = MIN_SPEED + ratio * (speed - MIN_SPEED)
                 else:
-                    # Normal operation - preserve commanded speed (from handoff or CTC), only cap if excessive
-                    # Allow speed to exceed block limit slightly for smooth handoffs
+                    # Normal operation - preserve commanded speed, only cap if excessive
+                    # Use block speed limit as the cap for normal operation
                     target_speed = min(speed, speed_limit * 1.2)
+                
+                # COLLISION PREVENTION: Check for trains ahead and reduce speed if needed
+                SAFETY_DISTANCE = 300.0  # meters - minimum safe distance between trains
+                train_ahead = False
+                for other_train, other_state in self.cmd_trains.items():
+                    if other_train == tname:
+                        continue
+                    other_pos = other_state.get('pos', -1)
+                    # Check if other train is ahead of us in green_order
+                    try:
+                        our_idx = self.train_idx.get(tname, 0)
+                        other_idx = self.train_idx.get(other_train, -1)
+                        if other_idx > our_idx and other_idx - our_idx <= 5:  # Within 5 blocks
+                            # Calculate approximate distance to other train
+                            distance_to_other = 0.0
+                            for i in range(our_idx, min(other_idx, len(self.green_order))):
+                                block_id = self.green_order[i]
+                                distance_to_other += self.block_lengths.get(block_id, 100.0)
+                            
+                            if distance_to_other < SAFETY_DISTANCE:
+                                # Train too close ahead - reduce target speed for safety
+                                target_speed = min(target_speed, 5.0)  # Slow to 5 m/s when too close
+                                train_ahead = True
+                                break
+                    except Exception:
+                        pass
                 
                 # Smoothly adjust commanded speed toward target
                 ACCEL_RATE = 2.0  # m/s per tick acceleration
