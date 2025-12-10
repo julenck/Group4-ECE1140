@@ -80,7 +80,8 @@ class PhysicalSwitch:
         
         if self.last_read_state is None:
             self.last_read_state = current
-            return None
+            # Return current state on first read so it gets initialized
+            return current
         
         if current != self.last_read_state:
             self.last_read_state = current
