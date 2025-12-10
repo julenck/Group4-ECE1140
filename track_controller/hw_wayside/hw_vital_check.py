@@ -6,7 +6,7 @@ Author: Oliver Kettelson-Belinkie, 2025
 """
 
 from __future__ import annotations
-from typing import List, Dict, Any, Optional, Tupley, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 
 
 def yards_to_meters(yards: float) -> float:
