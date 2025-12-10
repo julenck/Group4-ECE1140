@@ -1173,8 +1173,9 @@ class HW_Wayside_Controller:
                     new_auth = float(tinfo.get('Suggested Authority', 0) or 0)
                     last_auth = self.last_ctc_authority.get(tname, 0)
                     
-                    # Only reactivate if authority has INCREASED (CTC gave new authority after dwell)
-                    if new_auth > last_auth:
+                    # Only reactivate if authority has SIGNIFICANTLY INCREASED (CTC gave new authority after dwell)
+                    # Require at least 100m increase to avoid false reactivations
+                    if new_auth > (last_auth + 100):
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         state['cmd auth'] = new_auth
                         state['cmd speed'] = new_speed
@@ -1185,6 +1186,8 @@ class HW_Wayside_Controller:
                         self.cumulative_distance[tname] = 0.0
                         auth = new_auth
                         speed = new_speed
+                        print(f"[HW Wayside {self.wayside_id}] Train {tname} reactivated at block {pos} with new auth={new_auth:.0f}m")
+                    # else: stay stopped, waiting for CTC to dispatch with more authority
 
                 # Get current CTC values (these may have changed)
                 # CTC sends Suggested Authority in YARDS (not meters)
@@ -1214,16 +1217,17 @@ class HW_Wayside_Controller:
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
 
                 # Calculate target speed based on authority remaining and block speed limit
-                # Decelerate smoothly as we approach end of authority
-                STOP_THRESHOLD = 10  # Stop completely when authority < 10m
-                DECEL_ZONE = 100  # Start gentle deceleration in last 100m
+                STOP_THRESHOLD = 5  # Stop completely when authority < 5m
+                DECEL_ZONE = 150  # Start deceleration at 150m
                 
                 if auth <= STOP_THRESHOLD:
                     target_speed = 0
                 elif auth < DECEL_ZONE:
-                    # Gentle deceleration in final approach
+                    # Gradual deceleration - maintain reasonable speed until very close
                     ratio = (auth - STOP_THRESHOLD) / (DECEL_ZONE - STOP_THRESHOLD)
-                    target_speed = max(3.0, speed_limit * ratio)
+                    # Decelerate from commanded speed to minimum safe speed (4 m/s)
+                    target_speed = 4.0 + ratio * (speed - 4.0)
+                    target_speed = min(target_speed, speed_limit)
                 else:
                     # Normal operation - use commanded speed from CTC, capped by block speed limit
                     target_speed = min(speed, speed_limit)
