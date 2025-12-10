@@ -576,7 +576,7 @@ class HW_Wayside_Controller:
         return traveled > distance_needed
 
     def get_next_block(self, current_block: int, block_idx: int, train_id: str):
-        """Get next block based on current block and train direction"""
+        """Get next block based on current block, train direction, and switch state."""
         self.occupied_blocks[current_block] = 0
 
         if current_block not in self.block_graph:
@@ -591,7 +591,45 @@ class HW_Wayside_Controller:
                     return next_block
                 return -1
 
-        # Use block_graph to determine next block based on direction
+        # Check if this block has a switch and use switch_map to determine routing
+        block_key = str(current_block)
+        switch_map_entry = self.switch_map.get(block_key, None)
+        
+        if switch_map_entry:
+            # This block has a switch - check current switch state
+            # Prefer commanded state over track state
+            switch_state = self._cmd_switch_state.get(block_key, 
+                          self._switch_state.get(block_key, '0'))
+            
+            # Normalize switch state to '0' or '1'
+            if isinstance(switch_state, str):
+                if switch_state.upper().startswith('L') or switch_state == '0':
+                    switch_pos = '0'
+                elif switch_state.upper().startswith('R') or switch_state == '1':
+                    switch_pos = '1'
+                else:
+                    # Try to parse as block number and map back to position
+                    try:
+                        target_block = int(switch_state)
+                        if switch_map_entry.get('0') == target_block:
+                            switch_pos = '0'
+                        elif switch_map_entry.get('1') == target_block:
+                            switch_pos = '1'
+                        else:
+                            switch_pos = '0'  # Default to forward
+                    except (ValueError, TypeError):
+                        switch_pos = '0'
+            else:
+                switch_pos = str(switch_state) if switch_state in ['0', '1'] else '0'
+            
+            # Get next block from switch map
+            next_block = switch_map_entry.get(switch_pos, -1)
+            if next_block and next_block != -1:
+                print(f"[HW Wayside {self.wayside_id}] Train {train_id} at switch block {current_block}: switch={switch_pos} -> block {next_block}")
+                self.occupied_blocks[next_block] = 1
+                return next_block
+        
+        # No switch or switch map failed - use block_graph direction logic
         direction = self.train_direction.get(train_id, 'forward')
         block_info = self.block_graph[current_block]
 
@@ -1247,13 +1285,17 @@ class HW_Wayside_Controller:
                     # Update state immediately so UI sees decreasing authority
                     state['cmd auth'] = auth
 
-                # If authority exhausted, set to 0 but DON'T remove from cmd_trains
-                # Keep train visible at station until CTC reactivates or marks inactive
-                if auth <= 0:
+                # If authority exhausted or train at station with low authority, stop
+                # Check if we're at a station block and should stop
+                at_station = pos in self.station_blocks
+                should_stop = auth <= 0 or (at_station and auth < 50)
+                
+                if should_stop:
                     auth = 0.0
                     state['cmd auth'] = 0.0
                     state['cmd speed'] = 0.0
-                    # Update state but don't mark for removal - let reactivation logic handle it
+                    if at_station:
+                        print(f"[HW Wayside {self.wayside_id}] Train {tname} stopped at station block {pos}")
                     # Train will stay visible in active trains list with 0 speed/auth
                     continue
 

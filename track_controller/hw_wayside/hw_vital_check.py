@@ -73,6 +73,20 @@ class HW_Vital_Check:
             
             if bid in closed:
                 return False, f"Switch block {bid} is closed"
+            
+            # Check blocks BEFORE the switch (trains approaching)
+            try:
+                if block_graph and bid_i is not None:
+                    # Look for blocks that have this switch block as their next
+                    for blk_num, blk_info in block_graph.items():
+                        fwd_next = blk_info.get('forward_next', -1)
+                        rev_next = blk_info.get('reverse_next', -1)
+                        # If this block points TO our switch block, check if it's occupied
+                        if (fwd_next == bid_i or rev_next == bid_i):
+                            if str(blk_num) in occ:
+                                return False, f"Train approaching from block {blk_num}"
+            except Exception:
+                pass
 
             branch_targets = []
 
