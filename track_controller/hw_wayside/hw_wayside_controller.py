@@ -1199,22 +1199,22 @@ class HW_Wayside_Controller:
                             # Still dwelling - wait
                             continue
                         
-                        # Dwell complete - give exact authority to reach NEXT station
+                        # Dwell complete - give exact authority to reach END of NEXT station block
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         
-                        # Calculate authority - REDUCE by 30m to account for lag overshoot
-                        # Block 73 -> 77: 74(100) + 75(100) + 76(100) + 77(300) = 600m - 30m lag = 570m
-                        # Block 77 -> 88: 78(300) + 79(300) + 80(300) + 81(300) + 82(300) + 83(300) + 84(300) + 85(300) + 86(100) + 87(86.6) + 88(100) = 2786m
-                        # Block 88 -> 96: 89(75) + 90(75) + 91(75) + 92(75) + 93(75) + 94(75) + 95(75) + 96(75) = 600m - 30m lag = 570m
+                        # Authority must reach END of station block (trains stop at block START currently)
+                        # From 73->77 END: 74(100) + 75(100) + 76(100) + 77(300) = 600m, but stops at 74 so add 50m buffer = 650m
+                        # From 77->88 END: 78(300) + 79(300) + 80(300) + 81(300) + 82(300) + 83(300) + 84(300) + 85(300) + 86(100) + 87(86.6) + 88(100) = 2786m + 300m buffer = 3100m
+                        # From 88->96 END: 89(75) + 90(75) + 91(75) + 92(75) + 93(75) + 94(75) + 95(75) + 96(75) = 600m + 50m buffer = 650m
                         if pos == 73:
-                            calculated_auth = 570.0  # To block 77, accounting for lag
+                            calculated_auth = 650.0  # Reaches end of block 77
                         elif pos == 77:
-                            calculated_auth = 2750.0  # To block 88 (needs more distance)
+                            calculated_auth = 3100.0  # Reaches end of block 88 (stopped at 86, needs 300m more)
                         elif pos == 88:
-                            calculated_auth = 570.0  # To block 96, accounting for lag
+                            calculated_auth = 650.0  # Reaches end of block 96
                         else:
-                            calculated_auth = 570.0  # Default conservative
+                            calculated_auth = 650.0  # Default
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
