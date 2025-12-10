@@ -6,6 +6,23 @@ from .ctc_main_helper_functions import JSONFileWatcher
 from watchdog.observers import Observer
 from .track.map import route_lookup_via_station, route_lookup_via_id, route_info
 
+# Optional time controller integration
+try:
+    from time_controller import get_time_controller
+except Exception:
+    get_time_controller = None
+
+def get_adjusted_sleep_time(original_seconds: float) -> float:
+    """Get adjusted sleep time based on time controller speed multiplier."""
+    if get_time_controller:
+        try:
+            tc = get_time_controller()
+            if not tc.paused:
+                return original_seconds / tc.speed_multiplier
+        except Exception:
+            pass
+    return original_seconds
+
 def safe_json_read(file_path, max_retries=3, delay=0.1):
     """Safely read JSON with retry logic to handle race conditions."""
     for attempt in range(max_retries):
@@ -342,7 +359,7 @@ def dispatch_train(train, line, station, arrival_time_str,
             # Wait for train to reach station
             print(f"[WAIT] Waiting for train to reach block {next_station_loc}, current train_pos={train_pos}")
             while train_pos is None or train_pos != next_station_loc:
-                time.sleep(0.5)
+                time.sleep(get_adjusted_sleep_time(0.5))
                 print(f"[WAIT] Still waiting... train_pos={train_pos}, target={next_station_loc}")
             print(f"[REACHED] Train has reached block {next_station_loc}")
             
@@ -367,11 +384,11 @@ def dispatch_train(train, line, station, arrival_time_str,
                 if updates and updates["Trains"][train]["Active"] == 0:
                     print(f"[CTC] {train} has stopped at station (Active=0 by track controller)")
                     break
-                time.sleep(0.5)
+                time.sleep(get_adjusted_sleep_time(0.5))
             
             # Wait for dwell time
-            time.sleep(dwell_time_s)
-            time.sleep(0.5)
+            time.sleep(get_adjusted_sleep_time(dwell_time_s))
+            time.sleep(get_adjusted_sleep_time(0.5))
             
             # Keep current station visible while dwelling (Active = 0)
             # When we reactivate the train (set Active = 1), clear the current station

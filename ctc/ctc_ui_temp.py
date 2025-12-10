@@ -2,7 +2,7 @@
 class CTCUI:
     def __init__(self):
         import tkinter as tk, json, os, threading, subprocess, sys
-        from datetime import datetime
+        from datetime import datetime, timedelta
         from tkinter import filedialog, ttk
         from watchdog.observers import Observer
         from watchdog.events import FileSystemEventHandler
@@ -11,6 +11,7 @@ class CTCUI:
         self.ttk = ttk
         self.filedialog = filedialog
         self.datetime = datetime
+        self.timedelta = timedelta
         self.json = json
         self.os = os
         self.threading = threading
@@ -18,6 +19,13 @@ class CTCUI:
         self.sys = sys
         self.Observer = Observer
         self.FileSystemEventHandler = FileSystemEventHandler
+
+        # Optional time controller integration
+        try:
+            from time_controller import get_time_controller
+            self.get_time_controller = get_time_controller
+        except Exception:
+            self.get_time_controller = None
 
         # Use absolute path to project root ctc_data.json so it's consistent across components
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -162,6 +170,15 @@ class CTCUI:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def get_adjusted_update_interval(self, default_ms: int) -> int:
+        """Get adjusted update interval based on time controller speed multiplier."""
+        if self.get_time_controller:
+            try:
+                tc = self.get_time_controller()
+                return tc.get_update_interval_ms()
+            except Exception:
+                pass
+        return default_ms
 
     def setup_ui(self):
         tk = self.tk
@@ -562,13 +579,36 @@ class CTCUI:
                 info.get("Station Destination", ""),
                 info.get("Arrival Time", ""),
             ))
-        self.root.after(1000, self.update_active_trains_table)
+        self.root.after(self.get_adjusted_update_interval(1000), self.update_active_trains_table)
 
     def update_datetime(self):
-        now = self.datetime.now()
-        self.date_label.config(text=now.date())
-        self.time_label.config(text=f"      {now.strftime('%H:%M:%S')}")
-        self.root.after(1000, self.update_datetime)
+        # Use accelerated time if time controller is available
+        if self.get_time_controller:
+            try:
+                tc = self.get_time_controller()
+                # Calculate accelerated time: real_start_time + (real_elapsed * speed_multiplier)
+                if not hasattr(self, '_real_start_time'):
+                    self._real_start_time = self.datetime.now()
+
+                real_elapsed = (self.datetime.now() - self._real_start_time).total_seconds()
+                accelerated_seconds = real_elapsed * tc.speed_multiplier
+                simulated_now = self._real_start_time + self.timedelta(seconds=accelerated_seconds)
+
+                self.date_label.config(text=simulated_now.date())
+                self.time_label.config(text=f"      {simulated_now.strftime('%H:%M:%S')} ({tc.speed_multiplier}x)")
+            except Exception as e:
+                # Fall back to real time if there's an error
+                print(f"Time display error: {e}")
+                now = self.datetime.now()
+                self.date_label.config(text=now.date())
+                self.time_label.config(text=f"      {now.strftime('%H:%M:%S')}")
+        else:
+            # No time controller, use real time
+            now = self.datetime.now()
+            self.date_label.config(text=now.date())
+            self.time_label.config(text=f"      {now.strftime('%H:%M:%S')}")
+
+        self.root.after(self.get_adjusted_update_interval(1000), self.update_datetime)
 
     def update_throughput_labels(self):
         """Update throughput labels from ctc_data.json every 500ms."""
@@ -583,7 +623,7 @@ class CTCUI:
             print(f"Error updating throughput labels: {e}")
         
         # Schedule next update
-        self.root.after(500, self.update_throughput_labels)
+        self.root.after(self.get_adjusted_update_interval(500), self.update_throughput_labels)
 
     def show_frame(self, frame, clicked_button=None):
         frame.tkraise()

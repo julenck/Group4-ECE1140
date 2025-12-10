@@ -1,5 +1,11 @@
 import os, json, time, random
 
+# Optional time controller integration
+try:
+    from time_controller import get_time_controller
+except Exception:
+    get_time_controller = None
+
 # === FIXED ABSOLUTE PATHS (MATCHING TRACK MODEL FIX) ===
 
 # Folder containing Train_Model/
@@ -261,7 +267,8 @@ class TrainModel:
         self.position_yds = 0.0
         self.authority_yds = 0.0
         self.temperature_F = 68.0
-        self.dt = 0.5
+        self.base_dt = 0.5  # Base time step
+        self.dt = self.base_dt  # Effective time step (may be modified by time controller)
 
     def regulate_temperature(self, set_temperature):
         diff = set_temperature - self.temperature_F
@@ -288,6 +295,15 @@ class TrainModel:
         right_door=False,
         driver_velocity=0.0,
     ):
+        # Update effective dt based on time controller
+        self.dt = self.base_dt
+        if get_time_controller:
+            try:
+                tc = get_time_controller()
+                self.dt = tc.get_effective_dt()
+            except Exception:
+                pass  # Fall back to base_dt
+
         if emergency_brake:
             self.acceleration_ftps2 = self.emergency_brake_ftps2
         else:

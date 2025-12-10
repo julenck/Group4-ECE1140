@@ -19,6 +19,11 @@ import json
 import csv
 import datetime
 
+# Optional time controller integration
+try:
+    from time_controller import get_time_controller
+except Exception:
+    get_time_controller = None
 
 plc_module = None
 
@@ -916,7 +921,17 @@ class HW_Wayside_Controller:
     def _schedule_trains_tick(self):
         if not self._trains_running:
             return
-        self._trains_timer = threading.Timer(self._trains_period, self._run_trains_tick)
+
+        # Use time controller if available for speed adjustment
+        actual_period = self._trains_period
+        if get_time_controller:
+            try:
+                tc = get_time_controller()
+                actual_period = tc.get_effective_dt()
+            except Exception:
+                pass  # Fall back to original period
+
+        self._trains_timer = threading.Timer(actual_period, self._run_trains_tick)
         self._trains_timer.daemon = True
         self._trains_timer.start()
 
@@ -1600,7 +1615,17 @@ class HW_Wayside_Controller:
     def _schedule_plc_tick(self):
         if not self._plc_running:
             return
-        self._plc_timer = threading.Timer(self._plc_period_s, self._run_plc_tick)
+
+        # Use time controller if available for speed adjustment
+        actual_period = self._plc_period_s
+        if get_time_controller:
+            try:
+                tc = get_time_controller()
+                actual_period = tc.get_effective_dt()
+            except Exception:
+                pass  # Fall back to original period
+
+        self._plc_timer = threading.Timer(actual_period, self._run_plc_tick)
         self._plc_timer.daemon = True
         self._plc_timer.start()
 

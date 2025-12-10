@@ -12,6 +12,7 @@ sys.path.append(parent_dir)
 import track_controller.New_SW_Code.sw_wayside_controller_ui as wayside_sw
 import ctc.ctc_ui_temp as ctc_ui
 from train_controller.train_manager import TrainManagerUI
+from time_manager_ui import TimeControllerApp
 
 # Import hardware wayside components
 try:
@@ -23,9 +24,14 @@ except ImportError as e:
     print(f"Warning: Hardware wayside not available: {e}")
     HW_WAYSIDE_AVAILABLE = False
 
-def run_ctc_ui(): 
+def run_ctc_ui():
     dispatcher_ui = ctc_ui.CTCUI()
     dispatcher_ui.run()
+
+def run_time_controller_ui():
+    """Run the Time Controller UI (master clock for the system)."""
+    app = TimeControllerApp()
+    app.mainloop()
 
 def run_wayside_sw_ui_1(): 
     vital1 = wayside_sw.sw_vital_check.sw_vital_check()
@@ -98,6 +104,11 @@ def run_wayside_hw_ui_2():
     root.mainloop()
 
 def main():
+    # Start Time Controller UI (master clock) in thread
+    time_controller_thread = threading.Thread(target=run_time_controller_ui)
+    time_controller_thread.daemon = True
+    time_controller_thread.start()
+
     # Start CTC UI in thread
     ctc_thread = threading.Thread(target=run_ctc_ui)
     ctc_thread.daemon = True
@@ -122,6 +133,7 @@ def main():
     root.geometry("350x250")
 
     info_text = ("Distributed System Status:\n\n"
+                "• Time Controller (Master Clock) [PC]\n"
                 "• CTC Dispatcher [PC]\n"
                 "• Wayside Controller 1 [SW] (Blocks 0-73, 144-150) [PC]\n"
                 "• Wayside Controller 2 [HW] (Blocks 70-143) [Raspberry Pi]\n"

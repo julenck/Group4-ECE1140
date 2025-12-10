@@ -6,6 +6,12 @@ import importlib, importlib.util
 
 import os
 
+# Optional time controller integration
+try:
+    from time_controller import get_time_controller
+except Exception:
+    get_time_controller = None
+
 BASE_DIR = os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))
 )  # Track_and_Train
@@ -623,7 +629,16 @@ class TrainModelUI(ttk.Frame):
         self._update_ui(outputs, ctrl, merged_inputs, disembarking)
         if schedule and self.winfo_exists():
             try:
-                self.after(int(self.model.dt * 1000), self.update_loop)
+                # Use time controller for update interval if available
+                update_interval_ms = int(self.model.dt * 1000)
+                if get_time_controller:
+                    try:
+                        tc = get_time_controller()
+                        update_interval_ms = tc.get_update_interval_ms()
+                    except Exception:
+                        pass  # Fall back to model dt
+
+                self.after(update_interval_ms, self.update_loop)
             except tk.TclError:
                 # Widget destroyed, stop scheduling
                 pass

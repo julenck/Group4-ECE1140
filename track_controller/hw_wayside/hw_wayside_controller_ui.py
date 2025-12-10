@@ -397,8 +397,24 @@ class HW_Wayside_Controller_UI(ttk.Frame):
         try:
             if getattr(self, '_now_var', None) is not None:
                 try:
-                    now = time.strftime("%H:%M:%S", time.localtime(time.time()))
-                    self._now_var.set(now)
+                    # Use accelerated time if time controller is available
+                    if get_time_controller:
+                        tc = get_time_controller()
+                        # Calculate accelerated time: real_start_time + (real_elapsed * speed_multiplier)
+                        if not hasattr(self, '_real_start_time'):
+                            from datetime import datetime
+                            self._real_start_time = datetime.now()
+
+                        from datetime import timedelta
+                        real_elapsed = (datetime.now() - self._real_start_time).total_seconds()
+                        accelerated_seconds = real_elapsed * tc.speed_multiplier
+                        simulated_now = self._real_start_time + timedelta(seconds=accelerated_seconds)
+
+                        self._now_var.set(simulated_now.strftime("%H:%M:%S") + f" ({tc.speed_multiplier}x)")
+                    else:
+                        # No time controller, use real time
+                        now = time.strftime("%H:%M:%S", time.localtime(time.time()))
+                        self._now_var.set(now)
                 except Exception:
                     pass
         except Exception:

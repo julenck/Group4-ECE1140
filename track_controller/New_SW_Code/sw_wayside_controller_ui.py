@@ -26,6 +26,12 @@ from PIL import Image, ImageTk
 from track_controller.New_SW_Code import sw_wayside_controller
 from track_controller.New_SW_Code import sw_vital_check
 
+# Optional time controller integration
+try:
+    from time_controller import get_time_controller
+except Exception:
+    get_time_controller = None
+
 class sw_wayside_controller_ui:
     def __init__(self, controller):
         self.root = tk.Tk()
@@ -908,8 +914,17 @@ class sw_wayside_controller_ui:
         # Check if new trains appeared
         if set(train_data.keys()) != set(self.train_data_labels.keys()):
             self.build_input_frame()
-        
-        self.root.after(200, self.update_train_data_labels)
+
+        # Use time controller if available for speed adjustment
+        update_interval = 200
+        if get_time_controller:
+            try:
+                tc = get_time_controller()
+                update_interval = tc.get_update_interval_ms()
+            except Exception:
+                pass  # Fall back to default 200ms
+
+        self.root.after(update_interval, self.update_train_data_labels)
 
     def update_block_labels(self):
         for block_id, labels in self.block_labels.items():
@@ -930,8 +945,17 @@ class sw_wayside_controller_ui:
         if self.selected_block != -1:
             self.update_selected_block_info()
 
-        # Reduced frequency to 1000ms (1 second) to prevent scroll lag
-        self.root.after(1000, self.update_block_labels)
+        # Use time controller if available for speed adjustment
+        update_interval = 1000
+        if get_time_controller:
+            try:
+                tc = get_time_controller()
+                # For block labels, use a slightly longer interval but still scaled
+                update_interval = max(500, tc.get_update_interval_ms() * 5)
+            except Exception:
+                pass  # Fall back to default 1000ms
+
+        self.root.after(update_interval, self.update_block_labels)
 
     def on_block_selected(self, idx: int):
         # If user clicks the same checkbox again, deselect it
