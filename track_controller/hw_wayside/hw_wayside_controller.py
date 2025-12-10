@@ -1206,37 +1206,58 @@ class HW_Wayside_Controller:
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         
-                        # CRITICAL: Check which station we just LEFT, not current position
-                        # Train might be at 73 or 74 after stopping near Dormont
-                        # Train might be at 77 or 78 after stopping near Mt Lebanon  
-                        # Train might be at 88 or 89 after stopping near Poplar
+                        # CRITICAL: Train stopped partway through current block when authority exhausted
+                        # cumulative_distance should be 0 (no blocks completed yet in this new authority grant)
+                        # Authority calculation must include FINISHING current block, then reaching destination
+                        self.cumulative_distance[tname] = 0.0
+                        
+                        current_block_length = float(self.block_lengths.get(pos, 100))
                         
                         # Determine which station segment we're on based on position
                         if pos <= 76:
-                            # Left Dormont (73) heading to Mt Lebanon (77)
-                            # Need to reach END of 77: from current pos to 77 end
-                            # Blocks 73-76 are 100m each, block 77 is 300m
-                            # Worst case from 74: 75(100) + 76(100) + 77(300) = 500m + buffer
-                            calculated_auth = 550.0
+                            # Stopped at block 73, 74, 75, or 76 - heading to Mt Lebanon (77)
+                            # Need: finish current block + all blocks to END of 77
+                            if pos == 73:
+                                needed = 100 + 100 + 100 + 300  # 73 + 74 + 75 + 76 + 77 = 600m
+                            elif pos == 74:
+                                needed = 100 + 100 + 100 + 300  # 74 + 75 + 76 + 77 = 600m
+                            elif pos == 75:
+                                needed = 100 + 100 + 300  # 75 + 76 + 77 = 500m
+                            elif pos == 76:
+                                needed = 100 + 300  # 76 + 77 = 400m
+                            else:
+                                needed = 500.0
+                            calculated_auth = needed
+                            
                         elif pos <= 87:
-                            # Left Mt Lebanon (77) heading to Poplar (88)
-                            # Blocks 77-85 are 300m each (N-section), 86(100), 87(86.6), 88(100)
-                            # Worst case from 78: 79-85(7×300=2100) + 86(100) + 87(86.6) + 88(100) = 2386m + buffer
-                            calculated_auth = 2500.0
+                            # Stopped at blocks 77-87 - heading to Poplar (88)
+                            # N-section blocks are 300m each
+                            if pos == 77:
+                                needed = 300 + 300*8 + 100 + 86.6 + 100  # 77 + (78-85) + 86 + 87 + 88
+                            elif pos == 78:
+                                needed = 300 + 300*7 + 100 + 86.6 + 100  # 78 + (79-85) + 86 + 87 + 88
+                            else:
+                                # Calculate remaining distance dynamically
+                                remaining_300m_blocks = max(0, 85 - pos) + 1  # blocks from pos to 85 inclusive
+                                needed = 300 * remaining_300m_blocks + 100 + 86.6 + 100  # + blocks 86, 87, 88
+                            calculated_auth = needed + 50.0  # Small buffer
+                            
                         elif pos <= 97:
-                            # Left Poplar (88) heading to Castle Shannon (96)
-                            # Blocks 88-97 are 75-100m each
-                            # Worst case from 89: 90-96(7×75=525) = 525m + buffer
-                            calculated_auth = 600.0
+                            # Stopped at blocks 88-97 - heading to Castle Shannon (96)
+                            # These blocks are 75-100m each
+                            if pos == 88:
+                                needed = 100 + 75*8  # 88 + (89-96)
+                            else:
+                                remaining = max(0, 96 - pos) + 1
+                                needed = remaining * 75.0
+                            calculated_auth = needed + 50.0
                         else:
-                            calculated_auth = 600.0  # Default
+                            calculated_auth = 600.0
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
                         self.train_auth_start[tname] = calculated_auth
                         self.last_ctc_authority[tname] = 0.0
-                        # CRITICAL: Reset cumulative_distance to 0, not negative
-                        self.cumulative_distance[tname] = 0.0
                         auth = calculated_auth
                         speed = new_speed
                         
@@ -1319,7 +1340,8 @@ class HW_Wayside_Controller:
                     # Update state immediately so UI sees decreasing authority
                     state['cmd auth'] = auth
 
-                # Track movement: check whether train traveled enough to move to next block
+                # CRITICAL: Check authority exhaustion BEFORE allowing movement
+                # This prevents train from moving to next block then immediately stopping
                 if auth <= 0:
                     auth = 0.0
                     state['cmd auth'] = 0.0
