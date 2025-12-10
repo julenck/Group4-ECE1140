@@ -1199,15 +1199,22 @@ class HW_Wayside_Controller:
                             # Still dwelling - wait
                             continue
                         
-                        # Dwell complete - give authority to reach NEXT station
+                        # Dwell complete - give exact authority to reach NEXT station only
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
                         
-                        # Give 1970m authority (2000m - 30m buffer) to cover distance between stations
-                        # Block 73 to 77: ~600m
-                        # Block 77 to 96 (Castle Shannon): ~1900m through many 300m blocks
-                        # 30m buffer ensures train stops at block 73, not overshoots to 74
-                        calculated_auth = 1970.0
+                        # Calculate authority based on current position:
+                        # Block 73 -> 77 (Mt Lebanon): 600m - 50m buffer = 550m
+                        # Block 77 -> 88 (Poplar): 2786m - 100m buffer = 2700m
+                        # Block 88 -> 96 (Castle Shannon): 600m - 50m buffer = 550m
+                        if pos == 73:
+                            calculated_auth = 550.0  # To Mt Lebanon
+                        elif pos == 77:
+                            calculated_auth = 2700.0  # To Poplar
+                        elif pos == 88:
+                            calculated_auth = 550.0  # To Castle Shannon
+                        else:
+                            calculated_auth = 550.0  # Default conservative
                         
                         state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
@@ -1296,17 +1303,12 @@ class HW_Wayside_Controller:
                     # Update state immediately so UI sees decreasing authority
                     state['cmd auth'] = auth
 
-                # Stop when authority exhausted
+                # Track movement: check whether train traveled enough to move to next block
                 if auth <= 0:
-                    # If near block 73-74 area, reduce final authority to ensure stop at 73
-                    # Don't move train backward - just ensure it stops within block 73
                     auth = 0.0
                     state['cmd auth'] = 0.0
                     state['cmd speed'] = 0.0
                     continue
-
-                # update state
-                state['cmd auth'] = auth
 
                 # Track movement: check whether train traveled enough to move to next block
                 sug_auth = self.train_auth_start.get(tname, 0.0)
