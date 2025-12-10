@@ -1191,12 +1191,14 @@ class HW_Wayside_Controller:
                         # Dwell complete - reactivate
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        state['cmd auth'] = new_auth
+                        # Reduce authority by 20% to prevent overshooting next station
+                        adjusted_auth = new_auth * 0.80
+                        state['cmd auth'] = adjusted_auth
                         state['cmd speed'] = new_speed
-                        self.train_auth_start[tname] = new_auth
+                        self.train_auth_start[tname] = adjusted_auth
                         self.last_ctc_authority[tname] = new_auth
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
-                        auth = new_auth
+                        auth = adjusted_auth
                         speed = new_speed
 
                 # Get current CTC values (these may have changed)
@@ -1226,12 +1228,12 @@ class HW_Wayside_Controller:
                 # Get block speed limit (matching SW controller behavior)
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
 
-                # Simple speed control based on authority and block speed limit
+                # Speed control with deceleration zone to prevent overshooting
                 if auth <= 5:
                     target_speed = 0
-                elif auth < 50:
-                    # Very close to end - slow down
-                    target_speed = 5.0
+                elif auth < 100:
+                    # Deceleration zone - gradual slowdown as we approach station
+                    target_speed = min(speed_limit, 5.0 + (auth - 5) * 0.15)
                 else:
                     # Normal operation - use block speed limit
                     target_speed = speed_limit
