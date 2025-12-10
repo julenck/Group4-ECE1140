@@ -1191,12 +1191,15 @@ class HW_Wayside_Controller:
                         # Dwell complete - reactivate
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        state['cmd auth'] = new_auth
+                        # Cap authority at 400m (conservative) to ensure stopping within next station
+                        # Station 73->77: blocks 73(100), 74(100), 75(100), 76(100) = 400m to station start
+                        capped_auth = min(new_auth, 400.0)
+                        state['cmd auth'] = capped_auth
                         state['cmd speed'] = new_speed
-                        self.train_auth_start[tname] = new_auth
+                        self.train_auth_start[tname] = capped_auth
                         self.last_ctc_authority[tname] = new_auth
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
-                        auth = new_auth
+                        auth = capped_auth
                         speed = new_speed
 
                 # Get current CTC values (these may have changed)
@@ -1225,13 +1228,14 @@ class HW_Wayside_Controller:
                 # Get block speed limit (matching SW controller behavior)
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
 
-                # Speed control with deceleration zone to prevent overshooting
+                # Speed control with deceleration zone and block speed limit enforcement
                 if auth <= 5:
                     target_speed = 0
                 elif auth < 200:
-                    # Deceleration zone - aggressive slowdown as we approach station
+                    # Deceleration zone - aggressive slowdown, never exceed block limit
                     # At 200m: ~14 m/s, at 100m: ~9 m/s, at 50m: ~6.5 m/s
-                    target_speed = min(speed_limit, 5.0 + (auth - 5) * 0.05)
+                    decel_speed = 5.0 + (auth - 5) * 0.05
+                    target_speed = min(speed_limit, decel_speed)
                 else:
                     # Normal operation - use block speed limit
                     target_speed = speed_limit
