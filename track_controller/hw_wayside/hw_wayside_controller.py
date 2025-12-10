@@ -1187,16 +1187,37 @@ class HW_Wayside_Controller:
                             # Still dwelling - wait
                             continue
                         
-                        # Dwell complete - reactivate with 10% authority reduction to stop at end of station block
+                        # Dwell complete - calculate proper authority to next station
                         self.station_arrival_time[tname] = 0
                         new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        adjusted_auth = new_auth * 0.90  # 10% reduction to stop at block 73, not 74
-                        state['cmd auth'] = adjusted_auth
+                        destination = str(tinfo.get('Station Destination', '') or '')
+                        
+                        # Calculate distance to next station based on current position
+                        # Block 73 -> 77: need blocks 73(100m) + 74(100m) + 75(100m) + 76(100m) + 77(300m) = 700m
+                        # Block 77 -> next stations: 77(300m) + more blocks
+                        if pos == 73:
+                            # At Dormont, going to Mt Lebanon (block 77)
+                            # Give 80% of distance to stop at end of 77, not overshoot to 79
+                            calculated_auth = (100 + 100 + 100 + 100 + 300) * 0.80  # 560m
+                        elif pos == 77:
+                            # At Mt Lebanon - check if we should continue
+                            if destination and 'castle shannon' in destination.lower():
+                                # Continue to Castle Shannon (blocks 96-97)
+                                # 77(300) + 78(300) + ... need to calculate full distance
+                                calculated_auth = min(new_auth * 0.85, 800.0)  # Cap at 800m with buffer
+                            else:
+                                # Stay at Mt Lebanon - this is destination
+                                calculated_auth = 0
+                        else:
+                            # Other positions - use reduced CTC authority
+                            calculated_auth = new_auth * 0.85
+                        
+                        state['cmd auth'] = calculated_auth
                         state['cmd speed'] = new_speed
-                        self.train_auth_start[tname] = adjusted_auth
+                        self.train_auth_start[tname] = calculated_auth
                         self.last_ctc_authority[tname] = new_auth
                         self.cumulative_distance[tname] = -float(self.block_lengths.get(pos, 100))
-                        auth = adjusted_auth
+                        auth = calculated_auth
                         speed = new_speed
 
                 # Get current CTC values (these may have changed)
@@ -1224,11 +1245,15 @@ class HW_Wayside_Controller:
                 # Get block speed limit (matching SW controller behavior)
                 speed_limit = self.block_speed_limits.get(pos, 19.44)  # Default ~43 mph in m/s
 
-                # Speed control based on remaining authority
+                # Speed control with deceleration zone to prevent overshooting
                 if auth <= 5:
                     target_speed = 0
                 elif auth < 50:
-                    target_speed = 5.0  # Slow approach
+                    target_speed = 5.0  # Very slow final approach
+                elif auth < 150:
+                    # Deceleration zone - slow down as approaching station
+                    # At 150m: 15 m/s (~33mph), at 100m: 10 m/s (~22mph), at 50m: 5 m/s
+                    target_speed = min(speed_limit, auth * 0.10)
                 else:
                     target_speed = speed_limit
                 
@@ -1287,8 +1312,12 @@ class HW_Wayside_Controller:
                     # Update state immediately so UI sees decreasing authority
                     state['cmd auth'] = auth
 
-                # Stop when authority exhausted
+                # Stop when authority exhausted (hardcode: stop at block 73, not 74)
                 if auth <= 0:
+                    # Special case: if at block 74 with zero auth, move back to 73
+                    if pos == 74:
+                        state['pos'] = 73
+                        pos = 73
                     auth = 0.0
                     state['cmd auth'] = 0.0
                     state['cmd speed'] = 0.0
