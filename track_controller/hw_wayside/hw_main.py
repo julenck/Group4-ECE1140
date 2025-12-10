@@ -96,26 +96,32 @@ def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
     if not _physical_switch.present():
         return
     
+    # Check for state change
     new_state = _physical_switch.check_for_change()
 
     if not new_state:
         return
     
     if not controller.maintenance_active:
-        print("[HW Main] Physical switch ignored - maintenance mode not active")
+        print(f"[HW Main] Physical switch changed to {new_state} - maintenance mode not active")
         return
     
     selected = controller.get_selected_block()
 
-    if not selected or not controller.has_switch(selected):
-        print(f"[HW Main] Physical switch ignored - no valid block selected (selected={selected})")
+    if not selected:
+        print(f"[HW Main] Physical switch changed to {new_state} - no block selected")
+        return
+        
+    if not controller.has_switch(selected):
+        print(f"[HW Main] Physical switch changed to {new_state} - block {selected} has no switch")
         return
     
+    print(f"[HW Main] Physical switch changed to {new_state}, applying to block {selected}...")
     success, reason = controller.request_switch_change(selected, new_state)
     if success:
-        print(f"[HW Main] Physical switch applied to block {selected}: state={new_state}")
+        print(f"[HW Main] ✓ Physical switch applied to block {selected}: state={new_state}")
     else:
-        print(f"[HW Main] Physical switch rejected for block {selected}: {reason}")
+        print(f"[HW Main] ✗ Physical switch rejected for block {selected}: {reason}")
 
 
 # Module-level constants and paths (Matching SW behavior)

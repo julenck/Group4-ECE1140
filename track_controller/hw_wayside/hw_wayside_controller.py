@@ -118,6 +118,10 @@ class HW_Wayside_Controller:
         self._switch_state: Dict[str, str] = {}  # "Left"/"Right"
         self._light_state: Dict[str, str] = {}   # "RED"/...
         self._gate_state: Dict[str, str] = {}    # "UP"/"DOWN"
+        
+        # Initialize all switches to position 0 (forward/left) on startup
+        for switch_block in _BLOCKS_WITH_SWITCHES:
+            self._switch_state[str(switch_block)] = '0'
 
         # Commanded (PLC) states that override track states when present
         self._cmd_switch_state: Dict[str, str] = {}
@@ -1174,34 +1178,39 @@ class HW_Wayside_Controller:
                         # Check if train is at a station and enforce minimum dwell time
                         import time
                         at_station = pos in self.station_blocks
+                        can_depart = True
+                        
                         if at_station:
                             arrival_time = self.station_arrival_time.get(tname, 0)
                             if arrival_time == 0:
                                 # First time stopping - record arrival time
                                 self.station_arrival_time[tname] = time.time()
                                 print(f"[HW Wayside {self.wayside_id}] Train {tname} arrived at station block {pos}, dwelling...")
-                                continue  # Don't reactivate yet
+                                can_depart = False
                             else:
                                 # Check if minimum dwell time has elapsed
                                 elapsed = time.time() - arrival_time
                                 if elapsed < self.minimum_dwell_seconds:
-                                    # Still dwelling - don't reactivate
-                                    continue
+                                    # Still dwelling - don't reactivate yet
+                                    can_depart = False
                                 else:
-                                    # Dwell complete - clear arrival time and proceed with reactivation
+                                    # Dwell complete - clear arrival time and allow departure
                                     print(f"[HW Wayside {self.wayside_id}] Train {tname} dwell complete ({elapsed:.1f}s), departing station block {pos}")
                                     self.station_arrival_time[tname] = 0
+                                    can_depart = True
                         
-                        new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
-                        state['cmd auth'] = new_auth
-                        state['cmd speed'] = new_speed
-                        # Update tracking for proper distance calculation
-                        self.train_auth_start[tname] = new_auth
-                        self.last_ctc_authority[tname] = new_auth
-                        # Reset cumulative distance - train is at station (start of block after dwelling)
-                        self.cumulative_distance[tname] = 0.0
-                        auth = new_auth
-                        speed = new_speed
+                        if can_depart:
+                            new_speed = float(tinfo.get('Suggested Speed', 0) or 0) * 0.44704  # mph to m/s
+                            state['cmd auth'] = new_auth
+                            state['cmd speed'] = new_speed
+                            # Update tracking for proper distance calculation
+                            self.train_auth_start[tname] = new_auth
+                            self.last_ctc_authority[tname] = new_auth
+                            # Reset cumulative distance - train is at station (start of block after dwelling)
+                            self.cumulative_distance[tname] = 0.0
+                            auth = new_auth
+                            speed = new_speed
+                        # else: keep train visible with auth=0, speed=0 during dwell
 
                 # Get current CTC values (these may have changed)
                 # CTC sends Suggested Authority in YARDS (not meters)
