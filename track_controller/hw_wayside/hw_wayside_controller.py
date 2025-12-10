@@ -1089,11 +1089,15 @@ class HW_Wayside_Controller:
                         print(f"[HW Wayside {self.wayside_id}] Using stored handoff data for {train}: auth_start={stored_auth_start_m:.0f}m, cumulative_distance={stored_cumulative:.0f}m")
                     else:
                         self.train_auth_start[train] = auth_to_use  # meters
-                        # initialize cumulative distance heuristics
+                        # Initialize cumulative distance heuristics
                         if train_pos == 0:
                             self.cumulative_distance[train] = 0.0
+                        elif train_pos in self.station_blocks:
+                            # At a station: assume train is at START of block (just finished dwelling)
+                            # This gives accurate authority calculation for next station
+                            self.cumulative_distance[train] = 0.0
                         else:
-                            # default assume at end of station block
+                            # Mid-track: assume at end of current block
                             self.cumulative_distance[train] = -float(self.block_lengths.get(train_pos, 100))
 
                     self.last_seen_position[train] = train_pos

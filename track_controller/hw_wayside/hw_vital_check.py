@@ -332,7 +332,9 @@ class HW_Vital_Check:
                 reasons.append(
                     f"Overspeed: {mps_to_mph(cur_mps):.1f} mph > limit {speed_limit_mph:.1f} mph"
                 )
-                actions["speed_override"] = mps_to_mph(limit_mps)
+                # Only override speed if significantly over limit (>10% tolerance)
+                if cur_mps > limit_mps * 1.10:
+                    actions["speed_override"] = mps_to_mph(limit_mps)
 
         if active_plc is not None:
             if not isinstance(active_plc, str) or active_plc.strip() == "":
