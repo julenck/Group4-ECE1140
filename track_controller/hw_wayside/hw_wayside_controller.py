@@ -1100,11 +1100,27 @@ class HW_Wayside_Controller:
                             current_speed = sug_speed_ms
                             stored_cumulative = 0
                             stored_auth_start_m = sug_auth_m  # Use current CTC value as fallback
-                        auth_to_use = float(current_auth)
                         speed_to_use = float(current_speed)
-                        # Subtract 20m from handoff authority to compensate for 1-second delay overshoot
-                        auth_to_use = max(0, auth_to_use - 20.0)
-                        print(f"[HW Wayside {self.wayside_id}] Handoff authority adjusted: {current_auth:.0f}m -> {auth_to_use:.0f}m (compensating for lag)")
+                        
+                        # CRITICAL FIX: Limit authority to prevent overshoot at first station (block 73)
+                        # When handoff occurs at blocks 70-72, train should stop at block 73
+                        if train_pos in [70, 71, 72]:
+                            # Calculate exact distance needed to reach END of block 73
+                            distance_to_73 = 0.0
+                            for b in range(train_pos, 74):  # blocks from current to 73 inclusive
+                                distance_to_73 += self.block_lengths.get(b, 100)
+                            # Limit authority to just reach block 73
+                            auth_to_use = min(float(current_auth), distance_to_73)
+                            print(f"[HW Wayside {self.wayside_id}] Handoff at block {train_pos}: limiting authority to {auth_to_use:.0f}m to stop at station 73")
+                        elif train_pos in [73, 77, 88, 96]:
+                            # Already at a station - reduce authority to stop at END of this block
+                            station_block_length = self.block_lengths.get(train_pos, 100)
+                            auth_to_use = min(float(current_auth), station_block_length)
+                            print(f"[HW Wayside {self.wayside_id}] Handoff at station {train_pos}: limiting authority to {auth_to_use:.0f}m (block length)")
+                        else:
+                            # Normal handoff - use inherited authority with small compensation
+                            auth_to_use = max(0, float(current_auth) - 20.0)
+                            print(f"[HW Wayside {self.wayside_id}] Handoff authority adjusted: {current_auth:.0f}m -> {auth_to_use:.0f}m (compensating for lag)")
                     else:
                         auth_to_use = float(sug_auth_m)  # meters
                         speed_to_use = float(sug_speed_ms)  # m/s
