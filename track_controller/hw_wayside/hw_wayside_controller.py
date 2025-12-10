@@ -258,9 +258,6 @@ class HW_Wayside_Controller:
         self.cumulative_distance: Dict[str, float] = {}
         self.last_ctc_authority: Dict[str, float] = {}  # Track last CTC authority for reactivation detection
         self.station_arrival_time: Dict[str, float] = {}  # Track when train arrived at station for dwell time
-        self.minimum_dwell_seconds: float = 15.0  # Minimum dwell time at stations in seconds
-        self.train_destination: Dict[str, str] = {}  # Track destination station for each train
-        self.train_current_station: Dict[str, str] = {}  # Track current station train just left
         self.file_lock = threading.Lock()
         self.trains_to_handoff = []
         
@@ -1183,11 +1180,8 @@ class HW_Wayside_Controller:
                         stop_time = self.station_arrival_time.get(tname, 0)
                         
                         if stop_time == 0:
-                            # Just stopped - record time and station name for display
+                            # Just stopped - record time
                             self.station_arrival_time[tname] = current_time
-                            current_station_name = self.station_names.get(pos, '')
-                            if current_station_name:
-                                self.train_current_station[tname] = current_station_name
                             continue
                         elif (current_time - stop_time) < 10.0:
                             # Still dwelling - wait
@@ -1212,18 +1206,16 @@ class HW_Wayside_Controller:
                 current_sug_speed = current_sug_speed_mph * 0.44704  # Convert mph to m/s
 
                 # Update commanded values if CTC gives different authority/speed
-                # Cap authority at 500m to prevent excessive authority causing overshooting
                 initial_auth = self.train_auth_start.get(tname, 0)
                 
                 # Update if CTC authority changed significantly (more than 10m difference)
                 if abs(current_sug_auth - initial_auth) > 10:
-                    capped_auth = min(current_sug_auth, 500.0)  # Cap at 500m
-                    print(f"[HW Wayside {self.wayside_id}] CTC update for {tname}: auth {auth:.0f}m -> {capped_auth:.0f}m (CTC gave {current_sug_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
-                    auth = capped_auth
+                    print(f"[HW Wayside {self.wayside_id}] CTC update for {tname}: auth {auth:.0f}m -> {current_sug_auth:.0f}m (initial was {initial_auth:.0f}m), speed {speed:.2f} -> {current_sug_speed:.2f} m/s")
+                    auth = current_sug_auth
                     speed = current_sug_speed
                     state['cmd auth'] = auth
                     state['cmd speed'] = speed
-                    self.train_auth_start[tname] = capped_auth
+                    self.train_auth_start[tname] = current_sug_auth
 
                 # Use actual speed from train model if available (m/s), else fall back to cmd speed
                 actual_speed = actual_train_speeds.get(tname, speed)
