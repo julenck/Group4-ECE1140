@@ -102,6 +102,7 @@ DEFAULT_SPECS = {
     "emergency_brake_ftps2": -8.86,
     "capacity": 222,
     "crew_count": 2,
+    "passengers_onboard": 53
 }
 
 

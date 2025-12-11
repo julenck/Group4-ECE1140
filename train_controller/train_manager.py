@@ -201,7 +201,8 @@ class TrainManager:
                 "service_brake_ftps2": -3.94,
                 "emergency_brake_ftps2": -8.86,
                 "capacity": 222,
-                "crew_count": 2
+                "crew_count": 2,
+                "passengers_onboard": 53
             }
         
         # Create TrainModel instance
