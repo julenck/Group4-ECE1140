@@ -1369,11 +1369,11 @@ class HW_Wayside_Controller:
                 idx = self.train_idx.get(tname, 0)
                 should_move = self.traveled_enough(sug_auth, auth, idx, tname)
 
-                # CRITICAL: Don't move if authority is too low (prevents overshoot)
-                # If we have less than 50m authority, don't enter next block
-                if should_move and auth < 50:
+                # CRITICAL: Don't move past a station if authority is too low (prevents overshoot at stations)
+                # Only apply at station blocks: 73, 77, 88, 96
+                if should_move and pos in [73, 77, 88, 96] and auth < 50:
                     should_move = False
-                    # Set authority to 0 to stop the train
+                    # Set authority to 0 to stop the train at the station
                     auth = 0.0
                     state['cmd auth'] = 0.0
                     state['cmd speed'] = 0.0
