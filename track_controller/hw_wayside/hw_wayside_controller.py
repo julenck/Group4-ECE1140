@@ -1,15 +1,17 @@
-#HW Wayside_Controller
+"""
+HW Wayside Controller to control wayside elements.
 
+Author: Oliver Kettelson-Belinkie, 2025
+"""
 from __future__ import annotations
 import os
 import sys
 
-# CRITICAL: Add hw_wayside directory to path BEFORE importing local modules
+# Ensure current directory is in sys.path
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 if _current_dir not in sys.path:
     sys.path.insert(0, _current_dir)
 
-# Now we can import local modules
 from typing import Dict, Any, List, Optional, Tuple
 import threading
 import time
@@ -35,7 +37,6 @@ _BLOCKS_WITH_GATES = [19, 108]
 
 def _encode_light_bits(name: str | None) -> Tuple[int, int]:
     """
-    Map human-friendly light name -> two-bit PLC code.
       00: SUPERGREEN
       01: GREEN
       10: YELLOW
@@ -61,26 +62,19 @@ def _encode_light_bits(name: str | None) -> Tuple[int, int]:
 class HW_Wayside_Controller:
 
     def __init__(self, wayside_id: str, block_ids: List[str], server_url: Optional[str] = None, timeout: float = 5.0):
-        """Initialize hardware wayside controller.
         
-        Args:
-            wayside_id: Wayside controller ID (e.g., "A", "B", "1", "2")
-            block_ids: List of block IDs controlled by this wayside
-            server_url: If provided, uses REST API client to connect to remote server.
-                       If None, uses local file-based I/O (default).
-                       Example: "http://192.168.1.100:5000" or "http://localhost:5000"
-            timeout: Network timeout in seconds for remote API (default: 5.0).
-        """
         self.wayside_id = wayside_id
         self.block_ids = [str(b) for b in (block_ids or [])]
         self._lock = threading.Lock()
         
-        # Initialize API client if server_url is provided (similar to HW train controller)
+        # Initialize API client if server_url is provided 
         self.server_url = server_url
         self.wayside_api = None
+
         if server_url:
             try:
                 import sys
+                
                 # Add track_controller/api to path
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 api_dir = os.path.join(os.path.dirname(current_dir), "api")
@@ -104,22 +98,22 @@ class HW_Wayside_Controller:
         self._speed_mph = 0.0
         self._authority_yds = 0
         self._ctc_authority_yds: int = 0
-        self._last_auth_ts: Optional[float] = None  # for local authority decay
+        self._last_auth_ts: Optional[float] = None  # for local authority decay w/ no track model
         self._last_auth_m: Optional[float] = None  
         self._dist_in_block_m: float = 0.0
         self._closed: set[str] = set()
 
-        # Occupancy sources and the merged view used everywhere
-        self._occ_ctc: set[str] = set()    # from CTC (if provided)
+        # Occupancy sources
+        self._occ_ctc: set[str] = set()    # from CTC feed
         self._occ_track: set[str] = set()  # from Track snapshot arrays
         self._occupied: set[str] = set()   # MERGED VIEW (this is the only one used by UI)
 
-        # Outputs/state for UI (strings coming from track model / PLC)
+        # Outputs/state for UI
         self._switch_state: Dict[str, str] = {}  # "Left"/"Right"
         self._light_state: Dict[str, str] = {}   # "RED"/...
         self._gate_state: Dict[str, str] = {}    # "UP"/"DOWN"
         
-        # Initialize all switches to position 0 (forward/left) on startup
+        # Initialize all switches to position 0 on startup
         for switch_block in _BLOCKS_WITH_SWITCHES:
             self._switch_state[str(switch_block)] = '0'
 
@@ -128,13 +122,10 @@ class HW_Wayside_Controller:
         self._cmd_light_state: Dict[str, str] = {}
         self._cmd_gate_state: Dict[str, str] = {}
 
-        # Failures: tuple of three booleans per block (f1, f2, f3)
+        # Failures:
         self._failures: Dict[str, Tuple[bool, bool, bool]] = {}
 
-        # ------------------------------------------------------------------
-        # Train tracking 
-        # ------------------------------------------------------------------
-
+        # Green order path for HW Wayside B (XandLdown)
         self.green_order: List[int] = [
             0,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,
             85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,85,84,83,82,81,80,79,
@@ -190,35 +181,35 @@ class HW_Wayside_Controller:
         self._running = False
         self._thread: Optional[threading.Thread] = None
 
-        # Multi-train state (parity with SW controller)
+        # Multi-train state
         self.active_trains: Dict[str, Dict[str, Any]] = {}
         self.cmd_trains: Dict[str, Dict[str, Any]] = {}  # {"Train 1": {"cmd auth": yards, "cmd speed": mph, "pos": int}}
 
-        # SW-compatible train tracking (add these missing structures)
+        # SW-compatible train tracking for handoff
         self.train_auth_start: Dict[str, int] = {}  # Starting authority for each train
         self.cumulative_distance: Dict[str, float] = {}  # Track actual distance traveled since last reset
         self.train_direction: Dict[str, str] = {}  # Track direction for each train ('forward' or 'reverse')
         self.last_seen_position: Dict[str, int] = {}  # Track last known position for handoff detection
         self.train_idx: Dict[str, int] = {}  # Track index in green_order for each train
         
-        # Use absolute paths based on project root (same approach as SW controller)
+        # SW logic adapted for handfoff
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(current_dir))  # hw_wayside -> track_controller -> project root
+        project_root = os.path.dirname(os.path.dirname(current_dir))  
         self.train_comm_file = os.path.join(project_root, "track_controller", "New_SW_Code", "wayside_to_train.json")
         self.ctc_comm_file = os.path.join(project_root, "ctc_track_controller.json")
         
         self._trains_running = False
         self._trains_timer: Optional[threading.Timer] = None
 
-        # Track topology and distances
+        # Track graph and switch map
         self.block_graph: Dict[int, Dict[str, Any]] = {}
         self.block_distances: Dict[int, float] = {}
         self.block_lengths: Dict[int, float] = {}
         self.station_blocks: set = set()
         self.block_speed_limits: Dict[int, float] = {}  # Speed limits in m/s per block
-        self.station_names: Dict[int, str] = {}  # Block -> Station name mapping
+        self.station_names: Dict[int, str] = {}         # Block -> Station name mapping
 
-        self.direction_transitions = [
+        self.direction_transitions = [      
 
             (100, 85, 'reverse'),
             (77, 101, 'forward'),
@@ -243,7 +234,7 @@ class HW_Wayside_Controller:
         except Exception:
             self.switch_map = {}
 
-        # Build switch_map and gate approach lists automatically from `block_graph`
+        # Build switch_map and gate approach lists automatically
         try:
             self._build_switch_and_gate_maps()
         except Exception:
@@ -270,18 +261,15 @@ class HW_Wayside_Controller:
             self.managed_blocks = set()
         
         # Extend visible_blocks for handoff overlap (can see trains slightly outside managed range)
-        # HW Wayside B (XandLdown): managed 70-143, visible 67-146
-        # This allows tracking trains a few blocks before/after handoff boundaries
         if self.managed_blocks:
             min_block = min(self.managed_blocks)
             max_block = max(self.managed_blocks)
-            # Extend visibility by 3 blocks on each side (similar to SW Wayside 1's overlap)
+            # Extend visibility by 3 blocks on each side (similar to SW Wayside overlap)
             self.visible_blocks = set(range(max(0, min_block - 3), min(152, max_block + 4)))
         else:
             self.visible_blocks = set(self.managed_blocks)
 
-    # -------------------------- helpers --------------------------
-
+    # Occupied blocks merging
     def _recompute_occupied(self) -> None:
         """Merge CTC occupancy, Track occupancy, and the simulated train block."""
         occ = set(self._occ_ctc) | set(self._occ_track)
@@ -289,8 +277,7 @@ class HW_Wayside_Controller:
             occ.add(self._train_block)
         self._occupied = occ
 
-    # -------------------------- lifecycle ------------------------
-
+    # Background loop
     def start(self, period_s: float = 0.1):
         if self._running:
             return
@@ -305,8 +292,7 @@ class HW_Wayside_Controller:
     def stop(self):
         self._running = False
 
-    # ------------------ inputs from feed (CTC) -------------------
-
+    # Feed update
     def update_from_feed(
         self,
         *, speed_mph: float, authority_yards: int, emergency: bool,
@@ -316,7 +302,7 @@ class HW_Wayside_Controller:
         with self._lock:
             self._speed_mph = float(speed_mph)
 
-            # --- CHANGED: treat CTC authority separately from our decayed authority ---
+            # Treat CTC authority separately from our decayed authority
             try:
                 new_auth = int(authority_yards)
             except (TypeError, ValueError):
@@ -341,6 +327,7 @@ class HW_Wayside_Controller:
 
             if occupied_blocks is not None:
                 self._occ_ctc = {str(b) for b in occupied_blocks}
+
             if closed_blocks is not None:
                 self._closed = {str(b) for b in closed_blocks}
 
@@ -348,44 +335,42 @@ class HW_Wayside_Controller:
                 self._init_train_position()
 
             self._recompute_occupied()
-            # keep active_trains up-to-date when feed carries Trains (best-effort)
+
             try:
                 raw_trains = {}
-                # If incoming occupied_blocks came from CTC and included a full Trains section
-                # the caller may have passed a dict in occupied_blocks; guard for that.
-                # We don't rely on this, but if available, capture it.
+            
                 if isinstance(occupied_blocks, dict):
                     raw_trains = occupied_blocks.get('Trains', {}) or {}
+
                 if raw_trains:
                     self.active_trains = raw_trains
+                    
             except Exception:
                 pass
 
-    # ---------------- local authority countdown -----------------
+    # Local authority countdown
 
     def tick_authority_decay(self) -> None:
-        """Optionally reduce authority in yards based on current speed (mph)."""
+        
         now = time.time()
+
         with self._lock:
             if self._last_auth_ts is None:
                 self._last_auth_ts = now
                 return
+            
             dt = now - self._last_auth_ts
             self._last_auth_ts = now
 
             if self._authority_yds > 0 and self._speed_mph > 0 and dt > 0:
+
                 # mph -> yards/sec = mph * 1760 / 3600
                 yards_per_sec = self._speed_mph * (1760.0 / 3600.0)
                 dec = yards_per_sec * dt
                 self._authority_yds = max(0, int(self._authority_yds - dec))
 
-    # ------------- apply track-model snapshot arrays ------------
-
     def apply_track_snapshot(self, snapshot: Dict[str, Any], *, limit_blocks: List[str]) -> None:
-        """
-        Map arrays from the track model JSON to this controller's block states.
-        Only updates blocks in 'limit_blocks' (Wayside B partition).
-        """
+       
         if not isinstance(snapshot, dict):
             return
 
@@ -398,7 +383,8 @@ class HW_Wayside_Controller:
         limit_set = set(str(b) for b in (limit_blocks or []))
 
         with self._lock:
-            # Occupancy from track model
+
+            # Occupancy from track model - old now
             if isinstance(occ, list):
                 self._occ_track = {str(i) for i, v in enumerate(occ) if v and str(i) in limit_set}
 
@@ -411,13 +397,17 @@ class HW_Wayside_Controller:
 
             # Lights (PLC-like two-bit per block; we still map them to names)
             if isinstance(lt, list):
+
                 # lt is 24 entries (12 lights × 2 bits)
                 for idx, block in enumerate(_BLOCKS_WITH_LIGHTS):
+
                     if idx * 2 + 1 >= len(lt):
                         break
+
                     b0 = int(lt[2 * idx])
                     b1 = int(lt[2 * idx + 1])
                     code = f"{b0}{b1}"
+
                     if code == "00":
                         name = "SUPERGREEN"
                     elif code == "01":
@@ -426,24 +416,31 @@ class HW_Wayside_Controller:
                         name = "YELLOW"
                     else:
                         name = "RED"
+
                     bid = str(block)
+
                     if bid in limit_set:
                         self._light_state[bid] = name
 
             # Gates (0/1 -> DOWN/UP)
             if isinstance(gt, list):
                 for i, v in enumerate(gt):
+
                     if i >= len(_BLOCKS_WITH_GATES):
                         break
+
                     bid = str(_BLOCKS_WITH_GATES[i])
+
                     if bid in limit_set:
                         self._gate_state[bid] = _GATE_NAMES.get(int(v), str(v))
 
-            # Failures (flat array of len = 3*blocks)
+            # Failures
             if isinstance(fl, list) and len(fl) >= 3:
                 count = len(fl) // 3
+
                 for i in range(count):
                     bid = str(i)
+
                     if bid in limit_set:
                         f1 = bool(fl[3*i + 0]); f2 = bool(fl[3*i + 1]); f3 = bool(fl[3*i + 2])
                         self._failures[bid] = (f1, f2, f3)
@@ -453,13 +450,8 @@ class HW_Wayside_Controller:
 
             self._recompute_occupied()
 
-    # ---------------- Train progress (SW parity) -----------------
-
     def _init_train_position(self) -> None:
-        """
-        Choose an initial train position based on occupied blocks in this wayside,
-        projected onto the global green_order sequence.
-        """
+        
         occ_in_partition: List[int] = []
         part = set(self.block_ids)
 
@@ -470,7 +462,6 @@ class HW_Wayside_Controller:
             if b in part:
                 occ_in_partition.append(int(b))
 
-        # If nothing is occupied, do NOT assume a train exists
         if not occ_in_partition:
             return
 
@@ -479,13 +470,16 @@ class HW_Wayside_Controller:
             occ_in_partition.sort(key=lambda bb: self.green_order.index(bb))
             candidate = occ_in_partition[0]
             idx = self.green_order.index(candidate)
+
         except ValueError:
             return  # safety: if any block isn't in green_order
 
         self._train_idx = idx
         self._train_block = str(candidate)
+
         # Load distance to end-of-block
         self._remaining_m = float(self.block_eob_m[idx]) if idx < len(self.block_eob_m) else None
+        
         if self._auth_start_m is None:
             self._auth_start_m = self._authority_yds * _YARD_TO_M
 
