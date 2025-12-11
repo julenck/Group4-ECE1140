@@ -1224,7 +1224,7 @@ class HW_Wayside_Controller:
                     new_auth_yds = float(tinfo.get('Suggested Authority', 0) or 0)  # CTC sends in YARDS
                     new_auth = new_auth_yds * 0.9144  # Convert to meters for comparison
                     last_auth = self.last_ctc_authority.get(tname, 0)
-                    destination = str(tinfo.get('Station Destination', '') or '').lower()
+                    destination = str(tinfo.get('Station Destination', '') or '').lower().strip()
                     
                     # Check if at final destination - stop permanently
                     # All station blocks: 73, 77, 88, 96, 105, 114, 123, 132, 141
@@ -1241,11 +1241,23 @@ class HW_Wayside_Controller:
                     }
                     current_station = station_names.get(pos, '').lower()
                     
-                    if current_station and current_station in destination:
-                        # At final destination - keep stopped
+                    # CRITICAL: Check if at final destination BEFORE checking dwell time
+                    # Match destination with current station name
+                    is_at_destination = False
+                    if destination and current_station:
+                        # Normalize both for comparison (remove periods, extra spaces)
+                        dest_normalized = destination.replace('.', '').replace('  ', ' ').strip()
+                        station_normalized = current_station.replace('.', '').replace('  ', ' ').strip()
+                        # Check if station name is in destination OR if they match
+                        is_at_destination = (station_normalized in dest_normalized) or (dest_normalized in station_normalized)
+                        print(f"[HW Wayside {self.wayside_id}] Train {tname} at block {pos} ({current_station}): destination='{destination}', normalized match={is_at_destination}")
+                    
+                    if is_at_destination:
+                        # At final destination - keep stopped, clear dwell timer
                         state['cmd auth'] = 0.0
                         state['cmd speed'] = 0.0
-                        print(f"[HW Wayside {self.wayside_id}] Train {tname} arrived at final destination: {current_station}")
+                        self.station_arrival_time[tname] = 0  # Clear dwell timer so it doesn't reactivate
+                        print(f"[HW Wayside {self.wayside_id}] ✓ Train {tname} FINAL DESTINATION: {current_station} (staying stopped)")
                         continue
                     
                     # IGNORE CTC authority - use station-specific calculated authority instead
@@ -1307,12 +1319,31 @@ class HW_Wayside_Controller:
                         elif pos <= 97:
                             # Stopped at blocks 88-97 - heading to Castle Shannon (96)
                             # These blocks are 75-100m each
-                            if pos == 88:
+                            if pos == 96:
+                                # Already at Castle Shannon - this is the end of the basic route
+                                # Don't give any more authority unless destination says to continue
+                                print(f"[HW Wayside {self.wayside_id}] Train {tname} at Castle Shannon (96) - checking if should continue or stop")
+                                if not destination or 'castle' in destination or 'shannon' in destination:
+                                    # Final destination or no destination set - STOP HERE
+                                    state['cmd auth'] = 0.0
+                                    state['cmd speed'] = 0.0
+                                    self.station_arrival_time[tname] = 0
+                                    print(f"[HW Wayside {self.wayside_id}] ✓ Train {tname} STOPPED at Castle Shannon (final destination)")
+                                    continue
+                                else:
+                                    # Destination is further - calculate route beyond 96
+                                    calculated_auth = 600.0  # Give authority for extended route
+                            elif pos == 88:
                                 needed = 100 + 75*8  # 88 + (89-96)
-                            else:
-                                remaining = max(0, 96 - pos) + 1
+                            elif pos < 96:
+                                remaining = 96 - pos
                                 needed = remaining * 75.0
-                            calculated_auth = needed + 50.0
+                            else:
+                                # pos is 97 - shouldn't happen in normal flow
+                                needed = 75.0
+                            
+                            if pos != 96:  # Only calculate if not already handled above
+                                calculated_auth = needed + 50.0
                         else:
                             calculated_auth = 600.0
                         
@@ -1643,12 +1674,16 @@ class HW_Wayside_Controller:
                             cmd_auth_yds = cmd_auth_m * 1.09361
                             
                             # Get beacon data
-                            # CRITICAL FIX: Don't update beacon while train is AT a station block
-                            # Only update beacon when train moves to the block AFTER the station
+                            # CRITICAL FIX: Update beacon behavior for station blocks
+                            # - When train is MOVING (auth > 0) through a station: DON'T update (prevents premature "Next Station")
+                            # - When train is STOPPED (auth = 0) at a station: DO update (shows correct final state)
                             station_blocks = [73, 77, 88, 96, 105, 114, 123, 132, 141]
                             current_station = ""
                             next_station = ""
-                            if train_pos in self.block_graph and train_pos not in station_blocks:
+                            is_stopped_at_station = (train_pos in station_blocks and cmd_auth_m <= 0.01)
+                            should_update_beacon = (train_pos not in station_blocks) or is_stopped_at_station
+                            
+                            if train_pos in self.block_graph and should_update_beacon:
                                 train_direction = self.train_direction.get(tkey, 'forward')
                                 block_data = self.block_graph[train_pos]
                                 
@@ -1713,11 +1748,15 @@ class HW_Wayside_Controller:
                         data[tkey]["Train Auth Start"] = self.train_auth_start.get(tkey, cmd_auth_m)
 
                         # Populate beacon data based on train position and direction (matching SW behavior)
-                        # CRITICAL FIX: Don't update beacon while train is AT a station block
-                        # Only update beacon when train moves to the block AFTER the station
-                        # This prevents "Next Station" from updating prematurely (e.g., on entering block 73 instead of after leaving)
+                        # CRITICAL FIX: Update beacon behavior for station blocks
+                        # - When train is MOVING (auth > 0) through a station: DON'T update (prevents premature "Next Station")
+                        # - When train is STOPPED (auth = 0) at a station: DO update (shows correct final state)
+                        # - When train is at non-station blocks: Always update
                         station_blocks = [73, 77, 88, 96, 105, 114, 123, 132, 141]
-                        if train_pos in self.block_graph and train_pos not in station_blocks:
+                        is_stopped_at_station = (train_pos in station_blocks and cmd_auth_m <= 0.01)
+                        should_update_beacon = (train_pos not in station_blocks) or is_stopped_at_station
+                        
+                        if train_pos in self.block_graph and should_update_beacon:
                             train_direction = self.train_direction.get(tkey, 'forward')
                             block_data = self.block_graph[train_pos]
                             
