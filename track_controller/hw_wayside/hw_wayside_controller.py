@@ -1102,17 +1102,48 @@ class HW_Wayside_Controller:
                             stored_auth_start_m = sug_auth_m  # Use current CTC value as fallback
                         speed_to_use = float(current_speed)
                         
-                        # CRITICAL FIX: Limit authority to prevent overshoot at first station (block 73)
-                        # When handoff occurs at blocks 70-72, train should stop at block 73
-                        if train_pos in [70, 71, 72]:
-                            # Calculate exact distance needed to reach END of block 73
-                            distance_to_73 = 0.0
-                            for b in range(train_pos, 74):  # blocks from current to 73 inclusive
-                                distance_to_73 += self.block_lengths.get(b, 100)
+                        # CRITICAL FIX: Limit authority to prevent overshoot at ALL stations
+                        # Define station blocks and their approach ranges (both directions)
+                        # Format: (approach_blocks, station_block)
+                        station_approaches = [
+                            # Forward direction (blocks 70->143)
+                            ([70, 71, 72], 73),      # -> Dormont
+                            ([74, 75, 76], 77),      # -> Mt Lebanon
+                            ([78, 79, 80, 81, 82, 83, 84, 85, 86, 87], 88),  # -> Poplar
+                            ([89, 90, 91, 92, 93, 94, 95], 96),  # -> Castle Shannon
+                            ([102, 103, 104], 105),  # -> Dormont (reverse loop)
+                            ([106, 107, 108, 109, 110, 111, 112, 113], 114),  # -> Glenbury
+                            ([115, 116, 117, 118, 119, 120, 121, 122], 123),  # -> Overbrook
+                            ([124, 125, 126, 127, 128, 129, 130, 131], 132),  # -> Inglewood
+                            ([133, 134, 135, 136, 137, 138, 139, 140], 141),  # -> Central
+                            # Reverse direction (blocks 143->70) - trains coming back
+                            ([142, 143], 141),       # <- Central (from end)
+                            ([138, 139, 140], 132),  # <- Inglewood
+                            ([128, 129, 130, 131], 123),  # <- Overbrook  
+                            ([120, 121, 122], 114),  # <- Glenbury
+                            ([111, 112, 113], 105),  # <- Dormont
+                            ([97, 98, 99, 100], 96), # <- Castle Shannon (if reversing)
+                        ]
+                        
+                        # All station blocks in HW range
+                        all_stations = [73, 77, 88, 96, 105, 114, 123, 132, 141]
+                        
+                        # Check if approaching a station
+                        approaching_station = None
+                        for approach_blocks, station in station_approaches:
+                            if train_pos in approach_blocks:
+                                approaching_station = station
+                                break
+                        
+                        if approaching_station:
+                            # Calculate distance to END of station block
+                            distance_to_station = 0.0
+                            for b in range(train_pos, approaching_station + 1):
+                                distance_to_station += self.block_lengths.get(b, 100)
                             # Subtract 20m to compensate for system lag
-                            auth_to_use = min(float(current_auth), distance_to_73 - 20.0)
-                            print(f"[HW Wayside {self.wayside_id}] Handoff at block {train_pos}: limiting authority to {auth_to_use:.0f}m to stop at station 73")
-                        elif train_pos in [73, 77, 88, 96]:
+                            auth_to_use = min(float(current_auth), distance_to_station - 20.0)
+                            print(f"[HW Wayside {self.wayside_id}] Handoff at block {train_pos}: limiting authority to {auth_to_use:.0f}m to stop at station {approaching_station}")
+                        elif train_pos in all_stations:
                             # Already at a station - reduce authority to stop at END of this block
                             station_block_length = self.block_lengths.get(train_pos, 100)
                             auth_to_use = min(float(current_auth), station_block_length)
@@ -1195,11 +1226,26 @@ class HW_Wayside_Controller:
                     last_auth = self.last_ctc_authority.get(tname, 0)
                     destination = str(tinfo.get('Station Destination', '') or '').lower()
                     
-                    # Check if at destination - stop permanently
-                    if pos in [96, 97] and 'castle shannon' in destination:
-                        # At Castle Shannon destination - keep stopped
+                    # Check if at final destination - stop permanently
+                    # All station blocks: 73, 77, 88, 96, 105, 114, 123, 132, 141
+                    station_names = {
+                        73: 'dormont',
+                        77: 'mt. lebanon',
+                        88: 'poplar',
+                        96: 'castle shannon',
+                        105: 'dormont1',
+                        114: 'glenbury1',
+                        123: 'overbrook',
+                        132: 'inglewood',
+                        141: 'central'
+                    }
+                    current_station = station_names.get(pos, '').lower()
+                    
+                    if current_station and current_station in destination:
+                        # At final destination - keep stopped
                         state['cmd auth'] = 0.0
                         state['cmd speed'] = 0.0
+                        print(f"[HW Wayside {self.wayside_id}] Train {tname} arrived at final destination: {current_station}")
                         continue
                     
                     # IGNORE CTC authority - use station-specific calculated authority instead
@@ -1369,9 +1415,10 @@ class HW_Wayside_Controller:
                 idx = self.train_idx.get(tname, 0)
                 should_move = self.traveled_enough(sug_auth, auth, idx, tname)
 
-                # CRITICAL: Don't move past a station if authority is too low (prevents overshoot at stations)
-                # Only apply at station blocks: 73, 77, 88, 96
-                if should_move and pos in [73, 77, 88, 96] and auth < 50:
+                # CRITICAL: Don't move past ANY station if authority is too low (prevents overshoot)
+                # All station blocks in HW range: 73, 77, 88, 96, 105, 114, 123, 132, 141
+                station_blocks = [73, 77, 88, 96, 105, 114, 123, 132, 141]
+                if should_move and pos in station_blocks and auth < 50:
                     should_move = False
                     # Set authority to 0 to stop the train at the station
                     auth = 0.0
@@ -1596,9 +1643,12 @@ class HW_Wayside_Controller:
                             cmd_auth_yds = cmd_auth_m * 1.09361
                             
                             # Get beacon data
+                            # CRITICAL FIX: Don't update beacon while train is AT a station block
+                            # Only update beacon when train moves to the block AFTER the station
+                            station_blocks = [73, 77, 88, 96, 105, 114, 123, 132, 141]
                             current_station = ""
                             next_station = ""
-                            if train_pos in self.block_graph:
+                            if train_pos in self.block_graph and train_pos not in station_blocks:
                                 train_direction = self.train_direction.get(tkey, 'forward')
                                 block_data = self.block_graph[train_pos]
                                 
@@ -1663,7 +1713,11 @@ class HW_Wayside_Controller:
                         data[tkey]["Train Auth Start"] = self.train_auth_start.get(tkey, cmd_auth_m)
 
                         # Populate beacon data based on train position and direction (matching SW behavior)
-                        if train_pos in self.block_graph:
+                        # CRITICAL FIX: Don't update beacon while train is AT a station block
+                        # Only update beacon when train moves to the block AFTER the station
+                        # This prevents "Next Station" from updating prematurely (e.g., on entering block 73 instead of after leaving)
+                        station_blocks = [73, 77, 88, 96, 105, 114, 123, 132, 141]
+                        if train_pos in self.block_graph and train_pos not in station_blocks:
                             train_direction = self.train_direction.get(tkey, 'forward')
                             block_data = self.block_graph[train_pos]
                             
