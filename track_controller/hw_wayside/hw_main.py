@@ -1,6 +1,9 @@
-# hw_main.py
-# Main entry point for the Wayside Controller HW module.
-# Oliver Kettelson-Belinkie, 2025
+"""
+Handles HW wayside controller initialization, GPIO switch control,
+JSON I/O for CTC/track communication, and periodic polling loop.
+
+Author: Oliver Kettelson-Belinkie, 2025
+"""
 
 from __future__ import annotations
 import os
@@ -12,8 +15,9 @@ from typing import List, Dict
 import json
 import tempfile
 
-# CRITICAL: Add hw_wayside directory to path BEFORE importing local modules
+# Ensure we're in project root
 _current_dir = os.path.dirname(os.path.abspath(__file__))
+
 if _current_dir not in sys.path:
     sys.path.insert(0, _current_dir)
 
@@ -21,52 +25,63 @@ from hw_wayside_controller import HW_Wayside_Controller
 from hw_display import HW_Display
 from hw_wayside_controller_ui import HW_Wayside_Controller_UI
 
-# ---------------------------------------------------------------------
-# GPIO Setup for Physical Switch Control (fails soft like LCD)
-# ---------------------------------------------------------------------
-GPIO_SWITCH_PIN = 17  # BCM pin number
+GPIO_SWITCH_PIN = 17  # Physical switch GPIO pin
 
-# Try to import lgpio (like LCD imports smbus2)
+# Try to import lgpio for GPIO handling
 try:
     import lgpio
+
 except Exception:
     lgpio = None  # type: ignore
 
 class PhysicalSwitch:
-    """Simple GPIO switch handler - fails soft on non-Pi like LCD does."""
+    """
+    GPIO switch handler for Raspberry Pi hardware switches.
+
+    Fail-safes on non-Pi systems
+    """
+
     def __init__(self, pin: int = GPIO_SWITCH_PIN):
+       
         self.pin = pin
         self.chip = None
         self.last_read_state = None
+
         if lgpio:
             try:
                 self.chip = lgpio.gpiochip_open(4)
                 lgpio.gpio_claim_input(self.chip, self.pin, lgpio.SET_PULL_UP)
+
             except Exception:
                 self.chip = None
     
-    def present(self) -> bool:
+    def present(self) -> bool:      # Check if switch hardware is present
+        
         return self.chip is not None
-    
-    def read_state(self) -> str:
-        """Read switch state. Returns '0' or '1' to match UI format."""
+
+    def read_state(self) -> str:        # Read current switch state ('0' or '1')
+      
         if not self.chip:
             return None
+        
         try:
             state = lgpio.gpio_read(self.chip, self.pin)
             return "1" if state == 1 else "0"
+        
         except Exception:
             return None
     
-    def check_for_change(self) -> str:
-        """Check if physical switch changed. Returns new state only if changed, else None."""
+    def check_for_change(self) -> str:          # Check for state change since last read
+        
         current = self.read_state()
+
         if current is None:
             return None
         
         if self.last_read_state is None:
             self.last_read_state = current
-            return None
+            # Return current state on first read so it gets initialized
+            return current
         
         if current != self.last_read_state:
             self.last_read_state = current
@@ -74,56 +89,58 @@ class PhysicalSwitch:
         
         return None
 
-# Global switch instance (like LCD)
 _physical_switch = PhysicalSwitch()
 
 def apply_physical_switch(controller: HW_Wayside_Controller) -> None:
-    """Apply physical switch ONLY when it changes position."""
+    """Apply physical switch state to selected block."""
     if not _physical_switch.present():
         return
     
+    # Check for state change
     new_state = _physical_switch.check_for_change()
+
     if not new_state:
         return
     
     if not controller.maintenance_active:
+        print(f"[HW Main] Physical switch changed to {new_state} - maintenance mode not active")
         return
     
     selected = controller.get_selected_block()
-    if not selected or not controller.has_switch(selected):
+
+    if not selected:
+        print(f"[HW Main] Physical switch changed to {new_state} - no block selected")
+        return
+        
+    if not controller.has_switch(selected):
+        print(f"[HW Main] Physical switch changed to {new_state} - block {selected} has no switch")
         return
     
-    controller.request_switch_change(selected, new_state)
+    print(f"[HW Main] Physical switch changed to {new_state}, applying to block {selected}...")
+    success, reason = controller.request_switch_change(selected, new_state)
+    if success:
+        print(f"[HW Main] ✓ Physical switch applied to block {selected}: state={new_state}")
+    else:
+        print(f"[HW Main] ✗ Physical switch rejected for block {selected}: {reason}")
 
-# ---------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------
 
-# Use absolute paths based on project root (matching SW controller exactly)
+# Module-level constants and paths (Matching SW behavior)
 _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(_CURRENT_DIR))  # hw_wayside -> track_controller -> project root
 
-CTC_IN_FILE    = os.path.join(_PROJECT_ROOT, "ctc_track_controller.json")      # CTC (shared with SW wayside)
-CTC_OUT_FILE   = os.path.join(_PROJECT_ROOT, "hw_wayside_to_ctc.json")         # CTC feedback (optional)
+# hw_wayside -> track_controller -> project root
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(_CURRENT_DIR))
+
+# CTC (shared with SW wayside)
+CTC_IN_FILE = os.path.join(_PROJECT_ROOT, "ctc_track_controller.json")
+CTC_OUT_FILE   = os.path.join(_PROJECT_ROOT, "hw_wayside_to_ctc.json")         # CTC feedback 
 TRACK_COMM_FILE = os.path.join(_PROJECT_ROOT, "track_controller", "New_SW_Code", "track_to_wayside.json")  # Shared state between controllers
 
 POLL_MS = 500
-ENABLE_LOCAL_AUTH_DECAY = True  # locally decrement authority based on speed 
+ENABLE_LOCAL_AUTH_DECAY = True  # Locally decrement authority based on speed
 
-
-# ------------------------------------------------------------------------------------
-# JSON I/O
-# ------------------------------------------------------------------------------------
 
 def _read_ctc_json() -> dict:
-
-    """
-    Safely read incoming CTC feed from ctc_track_controller.json and adapt it
-    into the flat shape our HW controller expects:
-      - speed_mph / authority_yards : taken from the first Active train
-      - occupied_blocks             : all Active train positions
-      - closed_blocks               : from Block Closure
-    """
+    
     defaults = {
         "speed_mph": 0.0,
         "authority_yards": 0,
@@ -138,6 +155,7 @@ def _read_ctc_json() -> dict:
     try:
         with open(CTC_IN_FILE, "r", encoding="utf-8") as f:
             raw = json.load(f) or {}
+
     except Exception as e:
         print(f"[WARN] JSON read failed: {e}")
         return defaults
@@ -149,10 +167,12 @@ def _read_ctc_json() -> dict:
     auth = 0
 
     for tid, tinfo in trains.items():
-        # Active flag: may be int, str, or empty
+
+        # Active flag
         active_val = tinfo.get("Active", 0)
         try:
             active = int(active_val) == 1
+
         except (TypeError, ValueError):
             active = False
 
@@ -163,6 +183,7 @@ def _read_ctc_json() -> dict:
         pos_val = tinfo.get("Train Position", "")
         try:
             pos_int = int(pos_val)
+
         except (TypeError, ValueError):
             pos_int = None
 
@@ -172,16 +193,20 @@ def _read_ctc_json() -> dict:
         # Take speed/auth from the *first* active train
         if speed == 0.0 and auth == 0:
             s_val = tinfo.get("Suggested Speed", 0) or 0
-            # Handle your typo "Suggestd Authority" as well
+
+            # Handle typo "Suggestd Authority" as well
             a_val = (tinfo.get("Suggested Authority")
                      or tinfo.get("Suggestd Authority")
                      or 0)
             try:
                 speed = float(s_val)
+
             except (TypeError, ValueError):
                 speed = 0.0
+
             try:
                 auth = int(a_val)
+
             except (TypeError, ValueError):
                 auth = 0
 
@@ -193,37 +218,39 @@ def _read_ctc_json() -> dict:
     return defaults
 
 
-def _safe_read_track_json() -> dict:
-    """Read the shared track state file (matching SW behavior)."""
+def _safe_read_track_json() -> dict:        # Matching SW behavior
+   
     if not os.path.exists(TRACK_COMM_FILE):
         return {}
+    
     try:
         with open(TRACK_COMM_FILE, "r", encoding="utf-8") as f:
             return json.load(f) or {}
+        
     except Exception as e:
         print(f"[WARN] Track file read failed: {e}")
         return {}
 
-def _atomic_write_track_json(patch: dict) -> None:
-    """
-    Update track state file with HW controller's outputs (matching SW behavior).
-    Reads current state, updates HW's portion, writes atomically.
-    """
+def _atomic_write_track_json(patch: dict) -> None:      # Write to track communication JSON file
+   
     try:
         base = _safe_read_track_json()
         base.update(patch or {})
         d = os.path.dirname(TRACK_COMM_FILE) or "."
+
         with tempfile.NamedTemporaryFile("w", delete=False, dir=d, encoding="utf-8") as tmp:
             json.dump(base, tmp, indent=2)
             tmp.flush()
             os.fsync(tmp.fileno())
             tmp_path = tmp.name
+
         os.replace(tmp_path, TRACK_COMM_FILE)
+
     except Exception as e:
         print(f"[WARN] Track file write failed: {e}")
 
-def _make_vital_in(raw: dict) -> dict:
-    
+def _make_vital_in(raw: dict) -> dict:      # Create vital input dict from raw CTC data
+   
     return {
         "speed_mph": float(raw.get("speed_mph", 0)),
         "authority_yards": int(raw.get("authority_yards", 0)),
@@ -232,7 +259,7 @@ def _make_vital_in(raw: dict) -> dict:
         "closed_blocks": list(raw.get("closed_blocks", [])),
     }
 
-def _write_ctc_occupancy(occupancy: List[int]) -> None:
+def _write_ctc_occupancy(occupancy: List[int]) -> None:     # Write occupancy array back to CTC JSON
     
     try:
         base: Dict = {}
@@ -249,48 +276,40 @@ def _write_ctc_occupancy(occupancy: List[int]) -> None:
     except Exception as e:
         print(f"[WARN] CTC occupancy write failed: {e}")
 
-# ------------------------------------------------------------------------------------
-# Real block discovery 
-# ------------------------------------------------------------------------------------
 
 def _discover_block_count() -> int:
-    """Return block count - fixed at 152 since no track model."""
+
     return 152
 
 def _discover_blocks_B() -> List[str]:
-    """Return block IDs for Wayside B (XandLdown).
-    
-    Block ranges for command authority (managed_blocks):
+    """
+    Block allocation:
     - SW Wayside 1 (XandLup): 0-69, 144-150
     - HW Wayside B (XandLdown): 70-143
-    
-    These are the MANAGED blocks (what we write commands for).
-    visible_blocks can extend further for handoff tracking.
     """
     n = _discover_block_count()
 
     def clamp_range(start: int, end_excl: int) -> List[int]:
-
+       
         start = max(0, start)
         end_excl = min(n, end_excl)
         return list(range(start, end_excl))
 
-    # Managed blocks: 70-143 (no overlap with SW1's 144-150)
-    down = clamp_range(70, 144)  # 70..143
+    # Managed blocks: 70-143 
+    down = clamp_range(70, 144) 
     return [str(i) for i in down]
 
-# ------------------------------------------------------------------------------------
-# Poll loop driving wayside B
-# ------------------------------------------------------------------------------------
 
 def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW_Wayside_Controller_UI], blocks_by_ws: List[List[str]]):
-
-    """Read CTC feed, run vital/PLC per wayside, refresh UIs (matching SW behavior)."""
+    """
+    Reads CTC feed, runs vital checks and PLC logic per wayside,
+    updates UIs, and writes outputs (matching SW behavior).
+    """
 
     raw = _read_ctc_json()
     vital_in = _make_vital_in(raw)
 
-    # Read shared track state (like SW does)
+    # Read shared track state
     track_snapshot = _safe_read_track_json()
 
     merged_status = {"waysides": {}}
@@ -302,18 +321,20 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
         if ENABLE_LOCAL_AUTH_DECAY:
             controller.tick_authority_decay()
 
-        # Apply track snapshot (like SW does, even if mostly empty)
+        # Apply track snapshot
         controller.apply_track_snapshot(track_snapshot, limit_blocks=blocks)
 
         controller.tick_train_progress()
         
-        # Poll physical switch BEFORE building commanded arrays and updating UI
+        # Poll physical switch
         try:
             apply_physical_switch(controller)
+
         except Exception:
             pass
 
         status = controller.assess_safety(blocks, vital_in)
+
         # identify this controller in output
         ws_id = getattr(controller, "wayside_id", "X")
         merged_status["waysides"][ws_id] = status
@@ -333,23 +354,22 @@ def _poll_json_loop(root, controllers: List[HW_Wayside_Controller], uis: List[HW
 
         occ = controller.build_occupancy_array(n_total)
         combined_occ = [max(a, b) for a, b in zip(combined_occ, occ)]
+
     _write_ctc_occupancy(combined_occ)
 
     # Let each controller optionally write wayside->train outputs
     for controller in controllers:
         try:
             controller.write_wayside_to_train()
+
         except Exception:
             pass
 
     root.after(POLL_MS, _poll_json_loop, root, controllers, uis, blocks_by_ws)
 
 
-# ------------------------------------------------------------------------------------
-# Main
-# ------------------------------------------------------------------------------------
-
 def main() -> None:
+    
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Hardware Wayside Controller")
     parser.add_argument("--server", type=str, help="Server URL for API mode (e.g., http://localhost:5000)")
@@ -363,19 +383,28 @@ def main() -> None:
     root.title("Green Line Wayside Controller B (HW)")
     root.geometry("900x750")
 
-    ws_b_ctrl = HW_Wayside_Controller("B", blocks_B, server_url=args.server, timeout=args.timeout)
-    # Attempt to load and start a default PLC for this wayside (non-fatal)
+    ws_b_ctrl = HW_Wayside_Controller(
+        "B", blocks_B, server_url=args.server, timeout=args.timeout
+    )
+    # Load and start a default PLC
     try:
-        plc_path = os.path.join(os.path.dirname(__file__), "Green_Line_PLC_XandLdown.py")
+        plc_path = os.path.join(
+            os.path.dirname(__file__), "Green_Line_PLC_XandLdown.py"
+        )
         ws_b_ctrl.load_plc(plc_path)
         ws_b_ctrl.start_plc()
+
     except Exception:
         pass
 
-    ws_b_ui = HW_Wayside_Controller_UI(root, ws_b_ctrl, title="Green Line Wayside Controller B (HW)")
+    ws_b_ui = HW_Wayside_Controller_UI(
+        root, ws_b_ctrl, title="Green Line Wayside Controller B (HW)"
+    )
+
     ws_b_ui.pack(fill="both", expand=True)
     ws_b_ui.update_display(emergency=False, speed_mph=0.0, authority_yards=0)
-    # Start multi-train processing loop (background)
+
+    # Start multi-train processing loop
     try:
         ws_b_ctrl.start_trains(period_s=1.0)
     except Exception:
